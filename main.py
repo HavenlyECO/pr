@@ -8,6 +8,7 @@ import sqlite3
 from datetime import datetime
 from difflib import SequenceMatcher
 import random
+import math
 
 try:
     from rapidfuzz import fuzz as rapidfuzz_fuzz
@@ -253,6 +254,32 @@ def get_recent_player_stats(player_name: str, stat: str, games: int = 100):
         save_player_performance(player_name, stat, new_logs)
         stats = load_player_performance(player_name, stat, games)
     return stats
+
+
+def load_player_game_logs(player_name: str, stat: str, games: int = 100):
+    """Return a list of (date, value) tuples for the player's recent games."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT game_date, value FROM player_performance WHERE player=? AND stat=? ORDER BY game_date DESC LIMIT ?",
+        (player_name, stat, games),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    if len(rows) >= games:
+        return rows
+    new_logs = fetch_player_game_logs_api(player_name, stat, games)
+    if new_logs:
+        save_player_performance(player_name, stat, new_logs)
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT game_date, value FROM player_performance WHERE player=? AND stat=? ORDER BY game_date DESC LIMIT ?",
+            (player_name, stat, games),
+        )
+        rows = cur.fetchall()
+        conn.close()
+    return rows
 
 
 def _fuzzy_ratio(a: str, b: str) -> float:
@@ -659,6 +686,7 @@ def find_ev_props(ud_props, cons_props, games=100):
             "over_odds": over_price,
             "under_odds": under_price,
             "book": ", ".join(books) if books else "consensus",
+            "game": u.get("game"),
             "historical_over_prob": true_over_prob,
             "implied_over_prob": imp_over,
             "implied_under_prob": imp_under,
@@ -775,6 +803,59 @@ def _get_stat_on_date(player: str, stat: str, game_date: str):
     return None
 
 
+def _pearson_corr(a, b):
+    """Return Pearson correlation coefficient for two sequences."""
+    n = len(a)
+    if n < 2:
+        return 0.0
+    mean_a = sum(a) / n
+    mean_b = sum(b) / n
+    num = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b))
+    den_a = math.sqrt(sum((x - mean_a) ** 2 for x in a))
+    den_b = math.sqrt(sum((y - mean_b) ** 2 for y in b))
+    if den_a == 0 or den_b == 0:
+        return 0.0
+    return num / (den_a * den_b)
+
+
+def same_game_parlay_correlation(leg_a, leg_b, games: int = 50):
+    """Return correlation between two prop outcomes from the same game."""
+    stat_a = _normalize_stat_name(leg_a["stat"])
+    stat_b = _normalize_stat_name(leg_b["stat"])
+    logs_a = load_player_game_logs(leg_a["player"], stat_a, games * 2)
+    logs_b = load_player_game_logs(leg_b["player"], stat_b, games * 2)
+    dict_a = {d: v for d, v in logs_a}
+    dict_b = {d: v for d, v in logs_b}
+    common = [d for d in dict_a if d in dict_b]
+    if len(common) < 10:
+        return 0.0
+    hits_a = []
+    hits_b = []
+    for d in common[:games]:
+        va = dict_a[d]
+        vb = dict_b[d]
+        ha = va > leg_a["line"] if leg_a["side"] == "over" else va < leg_a["line"]
+        hb = vb > leg_b["line"] if leg_b["side"] == "over" else vb < leg_b["line"]
+        hits_a.append(1 if ha else 0)
+        hits_b.append(1 if hb else 0)
+    return _pearson_corr(hits_a, hits_b)
+
+
+CORRELATION_WEIGHT = 0.25
+
+
+def apply_same_game_correlation(legs, base_prob):
+    """Adjust parlay probability using same-game correlations."""
+    prob = base_prob
+    for i in range(len(legs)):
+        for j in range(i + 1, len(legs)):
+            g1 = legs[i].get("game")
+            if g1 and g1 == legs[j].get("game"):
+                corr = same_game_parlay_correlation(legs[i], legs[j])
+                prob *= 1 + corr * CORRELATION_WEIGHT
+    return max(0.0, min(prob, 1.0))
+
+
 def backtest_line_history():
     """Run a simple backtest across stored line history."""
     init_db()
@@ -809,8 +890,13 @@ def backtest_line_history():
     print(f"Avg result minus line: {avg_diff:.2f}")
 
 
-def generate_parlays(ev_props, min_legs=2, max_legs=5):
-    """Generate parlays and calculate expected value for each."""
+def generate_parlays(ev_props, min_legs=2, max_legs=5, use_corr=True):
+    """Generate parlays and calculate expected value for each.
+
+    When ``use_corr`` is True, same-game correlations between legs are
+    measured using historical game logs and applied to adjust the joint
+    probability of the parlay.
+    """
     from itertools import combinations
 
     edges = []
@@ -823,6 +909,8 @@ def generate_parlays(ev_props, min_legs=2, max_legs=5):
             "stat": p["stat"],
             "side": side,
             "prob": prob,
+            "game": p.get("game"),
+            "line": p["line"],
         })
 
     parlays = []
@@ -836,6 +924,8 @@ def generate_parlays(ev_props, min_legs=2, max_legs=5):
             for leg in combo:
                 prob *= leg["prob"]
                 legs_desc.append(f"{leg['player']} {leg['stat']} {leg['side']}")
+            if use_corr:
+                prob = apply_same_game_correlation(combo, prob)
             ev = prob * payout - 1
             parlays.append({
                 "legs": legs_desc,
