@@ -55,6 +55,16 @@ print(f"TELEGRAM_CHAT_ID: {repr(os.getenv('TELEGRAM_CHAT_ID'))}")
 
 OFFLINE = False
 
+
+def _telegram_configured() -> bool:
+    token = TELEGRAM_BOT_TOKEN
+    chat = TELEGRAM_CHAT_ID
+    if not token or not chat:
+        return False
+    if token.startswith("your_") or chat.startswith("your_"):
+        return False
+    return True
+
 OFFLINE_UNDERDOG_PROPS = [
     {
         "player": "John Doe",
@@ -796,7 +806,7 @@ def cluster_player_probabilities(
 def _notify_error(message: str):
     """Print and send an error notification via Telegram if configured."""
     print(message)
-    if not OFFLINE and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    if not OFFLINE and _telegram_configured():
         try:
             send_telegram_message(f"[ERROR] {message}")
         except Exception as exc:
@@ -857,8 +867,9 @@ def fetch_underdog_props() -> list:
     params = {"sport": "mlb", "platform": "web"}
     query_params = urllib.parse.urlencode(params)
     url = f"{UNDERDOG_GQL_URL}?{query_params}"
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        data = _fetch_json_with_retry(url)
+        data = _fetch_json_with_retry(url, headers=headers)
         return _parse_underdog_data(data)
     except Exception as exc:
         _notify_error(f"Underdog fetch failed: {exc}")
@@ -877,10 +888,14 @@ def fetch_consensus_props():
         "bookmakers": ",".join(BOOKMAKER_KEYS),
     }
     query_params = urllib.parse.urlencode(params)
-    with urllib.request.urlopen(f"{url}?{query_params}") as resp:
-        if resp.status != 200:
-            raise RuntimeError(f"TheOdds API error: {resp.status}")
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(f"{url}?{query_params}") as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"TheOdds API error: {resp.status}")
+            return json.loads(resp.read().decode())
+    except Exception as exc:
+        _notify_error(f"Consensus fetch failed: {exc}")
+        return []
 
 
 def filter_dead_props(props, lineup_players, injured_players):
@@ -1282,7 +1297,7 @@ def generate_parlays(ev_props, min_legs=2, max_legs=5, use_corr=True):
 
 # --------------- TELEGRAM ALERT -----------------
 def send_telegram_message(message):
-    if OFFLINE or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    if OFFLINE or not _telegram_configured():
         print(f"[Telegram] {message}")
         return True
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -1299,7 +1314,7 @@ def send_telegram_message(message):
 
 def send_telegram_photo(image_path):
     """Send an image to the configured Telegram chat."""
-    if OFFLINE or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+    if OFFLINE or not _telegram_configured():
         print(f"[Telegram photo] {image_path}")
         return True
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
@@ -1344,6 +1359,8 @@ latest_value_props = []
 
 def get_telegram_updates(offset=None):
     """Fetch new Telegram updates starting from the given offset."""
+    if not _telegram_configured():
+        return []
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
     params = {}
     if offset is not None:
@@ -1362,6 +1379,8 @@ def get_telegram_updates(offset=None):
 def process_telegram_commands():
     """Respond to user commands sent via Telegram."""
     global LAST_UPDATE_ID, MANUAL_CONFIRMED_PLAYERS, SCRATCHED_PLAYERS
+    if OFFLINE or not _telegram_configured():
+        return
     updates = get_telegram_updates(LAST_UPDATE_ID + 1 if LAST_UPDATE_ID else None)
     for upd in updates:
         LAST_UPDATE_ID = upd.get("update_id", LAST_UPDATE_ID)
