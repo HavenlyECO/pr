@@ -5,6 +5,12 @@ import time
 import os
 import re
 import sqlite3
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 from datetime import datetime
 from difflib import SequenceMatcher
 import random
