@@ -93,6 +93,18 @@ BALLPARK_FACTORS = {"COL": 1.2, "NYY": 1.1, "BOS": 1.05}
 WEATHER_FACTORS = {"COL": 1.05, "NYY": 1.0, "BOS": 0.98}
 UMPIRE_FACTORS = {"COL": 1.02, "NYY": 1.0, "BOS": 1.01}
 
+# Example linear regression weights for predicting raw stat values
+# Order of features: [recent_avg, ballpark, weather, umpire]
+STAT_VALUE_WEIGHTS = {
+    "hits": [0.9, 0.05, 0.03, 0.02],
+    "strikeouts": [0.95, 0.03, 0.02, 0.0],
+    "total bases": [0.85, 0.1, 0.03, 0.02],
+}
+# Bias terms for the stat prediction model
+STAT_VALUE_BIAS = {"hits": 0.0, "strikeouts": 0.0, "total bases": 0.0}
+DEFAULT_STAT_WEIGHTS = [1.0, 0.1, 0.05, 0.05]
+
+
 
 
 def init_db():
@@ -389,6 +401,20 @@ def predict_over_probability_ml(
     features = [avg_stat - line, ballpark - 1.0, weather - 1.0, umpire - 1.0]
     z = ML_BIAS + sum(w * f for w, f in zip(ML_WEIGHTS, features))
     return 1 / (1 + math.exp(-z))
+
+
+def predict_stat_value_ml(player_name: str, stat: str, game: str | None = None):
+    """Predict the raw stat value using a simple linear regression model."""
+    stats = get_recent_player_stats(player_name, stat, 30)
+    if not stats:
+        return None
+    avg_stat = sum(stats) / len(stats)
+    ballpark, weather, umpire = get_environment_factors(game)
+    key = _normalize_stat_name(stat)
+    weights = STAT_VALUE_WEIGHTS.get(key, DEFAULT_STAT_WEIGHTS)
+    bias = STAT_VALUE_BIAS.get(key, 0.0)
+    features = [avg_stat, ballpark, weather, umpire]
+    return bias + sum(w * f for w, f in zip(weights, features))
 
 
 def fetch_player_over_probability(
@@ -1167,6 +1193,12 @@ if __name__ == "__main__":
         default=1000,
         help="Number of Monte Carlo simulations for risk analysis",
     )
+    parser.add_argument(
+        "--predict-stat",
+        nargs=3,
+        metavar=("PLAYER", "STAT", "GAME"),
+        help="Predict a player's stat value for a matchup and exit",
+    )
     args = parser.parse_args()
 
     if args.plot:
@@ -1212,6 +1244,14 @@ if __name__ == "__main__":
         print(
             f"Avg Final Bankroll: {avg_final:.2f} | Avg Max Drawdown: {avg_dd*100:.1f}%"
         )
+    elif args.predict_stat:
+        player, stat, game = args.predict_stat
+        init_db()
+        value = predict_stat_value_ml(player, stat, game)
+        if value is None:
+            print("Insufficient data to make prediction")
+        else:
+            print(f"Predicted {stat} for {player} vs {game}: {value:.2f}")
     elif args.backtest:
         backtest_line_history()
     else:
