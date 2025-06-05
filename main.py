@@ -24,7 +24,18 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
-EDGE_THRESHOLD = 0.7 # minimum difference to alert (tune for MLB stat, e.g. 0.5-1)
+# Base threshold used when a stat-specific value is not provided
+DEFAULT_EDGE_THRESHOLD = 0.7  # minimum difference to alert
+
+# Optional per-stat thresholds allowing edges to vary by market type. These
+# values can be tuned based on historical volatility for each stat.
+EDGE_THRESHOLD_BY_STAT = {
+    "strikeouts": 0.5,  # often lower variance
+    "total bases": 1.5,  # typically higher variance
+}
+
+# Backwards compatible constant name (used by find_value_props signature)
+EDGE_THRESHOLD = DEFAULT_EDGE_THRESHOLD
 PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
 
 # Bookmaker keys to use for consensus lines
@@ -361,6 +372,7 @@ def aggregate_market_with_odds(cons_props, market_keys, player_name):
 
 # --------------- FIND VALUE PROPS -----------------
 def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
+    """Return props where the line difference exceeds the stat threshold."""
     value_props = []
     for u in ud_props:
         market_keys = get_market_keys(u["stat"])
@@ -370,7 +382,11 @@ def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
         if consensus_line is not None:
             try:
                 diff = float(u["line"]) - float(consensus_line)
-                if abs(diff) >= threshold:
+                # Determine edge threshold for this stat type
+                stat_threshold = EDGE_THRESHOLD_BY_STAT.get(
+                    _normalize_stat_name(u["stat"]), threshold
+                )
+                if abs(diff) >= stat_threshold:
                     value_props.append({
                         "player": u["player"],
                         "stat": u["stat"],
