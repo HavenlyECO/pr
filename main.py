@@ -90,8 +90,6 @@ OFFLINE_CONSENSUS_PROPS = [
     }
 ]
 
-OFFLINE_LINEUP_PLAYERS = {"John Doe", "Jane Smith"}
-OFFLINE_INJURED_PLAYERS = set()
 
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
@@ -115,13 +113,6 @@ PLAYER_MATCH_THRESHOLD = 70  # fuzzy name match ratio threshold
 # Bookmaker keys to use for consensus lines
 BOOKMAKER_KEYS = ["draftkings", "fanduel", "pointsbetus", "betmgm"]
 
-# Rotowire endpoints for lineup and injury data
-ROTOWIRE_LINEUPS_URL = (
-    "https://www.rotowire.com/dfs/services/mlb-lineups.php?format=json"
-)
-ROTOWIRE_INJURIES_URL = (
-    "https://www.rotowire.com/dfs/services/mlb-injuries.php?format=json"
-)
 
 # Map normalized Underdog stat types to TheOdds API market keys.
 # Additional stats can be added here as needed.
@@ -141,7 +132,7 @@ STAT_KEY_MAP = {
 ALL_MARKETS = ",".join(sorted({m for v in STAT_KEY_MAP.values() for m in v}))
 
 # Sets for managing lineup confirmations and scratches
-LINEUP_PLAYERS = set()  # updated each cycle from Rotowire
+LINEUP_PLAYERS = set()  # auto-confirmed starters
 MANUAL_CONFIRMED_PLAYERS = set()  # confirmed via Telegram
 SCRATCHED_PLAYERS = set()  # scratched pitchers via Telegram
 
@@ -882,50 +873,6 @@ def fetch_consensus_props():
             raise RuntimeError(f"TheOdds API error: {resp.status}")
         return json.loads(resp.read().decode())
 
-# --------------- ROTOWIRE DATA -----------------
-def fetch_rotowire_lineup_players():
-    """Return a set of player names expected to start today."""
-    if OFFLINE:
-        return OFFLINE_LINEUP_PLAYERS
-    try:
-        with urllib.request.urlopen(ROTOWIRE_LINEUPS_URL) as resp:
-            data = json.loads(resp.read().decode())
-    except Exception as exc:
-        print("Rotowire lineup fetch error:", exc)
-        return set()
-
-    players = set()
-    for game in data.get("games", []):
-        for side in ("away", "home"):
-            lineup = game.get(side, {}).get("lineup", [])
-            for p in lineup:
-                name = p.get("player") or p.get("name")
-                if name:
-                    players.add(name.strip())
-    return players
-
-
-def fetch_rotowire_injured_players():
-    """Return a set of players listed as out."""
-    if OFFLINE:
-        return OFFLINE_INJURED_PLAYERS
-    try:
-        with urllib.request.urlopen(ROTOWIRE_INJURIES_URL) as resp:
-            data = json.loads(resp.read().decode())
-    except Exception as exc:
-        print("Rotowire injury fetch error:", exc)
-        return set()
-
-    players = set()
-    for team in data.get("teams", []):
-        for p in team.get("players", []):
-            status = p.get("status", "").lower()
-            if "out" in status or "dl" in status or "il" in status:
-                name = p.get("name") or p.get("player")
-                if name:
-                    players.add(name.strip())
-    return players
-
 
 def filter_dead_props(props, lineup_players, injured_players):
     """Remove props for players not starting or injured."""
@@ -1599,19 +1546,6 @@ def main_loop(track_only: bool = False):
             underdog_props = fetch_underdog_props()
             print(f"Fetched {len(underdog_props)} props.")
             save_line_history(underdog_props)
-            print("Fetching Rotowire injuries and lineups...")
-            lineup_players = fetch_rotowire_lineup_players()
-            injured_players = fetch_rotowire_injured_players()
-            global LINEUP_PLAYERS
-            LINEUP_PLAYERS = {_normalize_name(p) for p in lineup_players}
-            before = len(underdog_props)
-            underdog_props = filter_dead_props(
-                underdog_props, lineup_players, injured_players
-            )
-            if len(underdog_props) != before:
-                print(
-                    f"Filtered to {len(underdog_props)} props after injury/lineup check."
-                )
             print("Fetching consensus props...")
             consensus_props = fetch_consensus_props()
             print(f"Fetched consensus for {len(consensus_props)} games.")
