@@ -94,7 +94,13 @@ USE_ML_MODEL = os.getenv("USE_ML_MODEL", "0") == "1"
 USE_SEQ_MODEL = os.getenv("USE_SEQ_MODEL", "0") == "1"
 
 # Example logistic regression weights for advanced model
-ML_WEIGHTS = [1.5, 0.5, 0.3, 0.2]  # [stat_diff, ballpark, weather, umpire]
+ML_WEIGHTS = [
+    1.5,
+    0.5,
+    0.3,
+    0.2,
+    0.4,
+]  # [stat_diff, ballpark, weather, umpire, matchup]
 ML_BIAS = 0.0
 
 # Simplified environment factors by home team abbreviation
@@ -102,16 +108,23 @@ BALLPARK_FACTORS = {"COL": 1.2, "NYY": 1.1, "BOS": 1.05}
 WEATHER_FACTORS = {"COL": 1.05, "NYY": 1.0, "BOS": 0.98}
 UMPIRE_FACTORS = {"COL": 1.02, "NYY": 1.0, "BOS": 1.01}
 
+# Opponent strength adjustments by team (1.0 = average)
+TEAM_PITCHING_RATINGS = {"NYY": 1.05, "BOS": 0.95}
+TEAM_HITTING_RATINGS = {"NYY": 1.1, "BOS": 1.0}
+
+# Minimal mapping of player to team for matchup lookup
+PLAYER_TEAM_MAP = {"Aaron Judge": "NYY", "Gerrit Cole": "NYY"}
+
 # Example linear regression weights for predicting raw stat values
-# Order of features: [recent_avg, ballpark, weather, umpire]
+# Order of features: [recent_avg, ballpark, weather, umpire, matchup]
 STAT_VALUE_WEIGHTS = {
-    "hits": [0.9, 0.05, 0.03, 0.02],
-    "strikeouts": [0.95, 0.03, 0.02, 0.0],
-    "total bases": [0.85, 0.1, 0.03, 0.02],
+    "hits": [0.85, 0.05, 0.03, 0.02, 0.05],
+    "strikeouts": [0.9, 0.03, 0.02, 0.0, 0.05],
+    "total bases": [0.8, 0.1, 0.03, 0.02, 0.05],
 }
 # Bias terms for the stat prediction model
 STAT_VALUE_BIAS = {"hits": 0.0, "strikeouts": 0.0, "total bases": 0.0}
-DEFAULT_STAT_WEIGHTS = [1.0, 0.1, 0.05, 0.05]
+DEFAULT_STAT_WEIGHTS = [1.0, 0.1, 0.05, 0.05, 0.05]
 
 
 
@@ -398,6 +411,31 @@ def get_environment_factors(game: str | None):
     )
 
 
+def get_matchup_factor(player_name: str, stat: str, game: str | None) -> float:
+    """Return matchup factor based on opposing team strength."""
+    if not game:
+        return 1.0
+    try:
+        away, home = [p.strip() for p in game.split("@", 1)]
+    except Exception:
+        return 1.0
+    team = PLAYER_TEAM_MAP.get(player_name)
+    if not team:
+        return 1.0
+    if team == away:
+        opp = home
+    elif team == home:
+        opp = away
+    else:
+        return 1.0
+
+    norm = _normalize_stat_name(stat)
+    pitching_stats = {"strikeouts", "outs", "earned runs", "hits allowed"}
+    if norm in pitching_stats or "pitch" in norm:
+        return TEAM_HITTING_RATINGS.get(opp, 1.0)
+    return TEAM_PITCHING_RATINGS.get(opp, 1.0)
+
+
 def predict_over_probability_ml(
     player_name: str, stat: str, line: float, game: str | None = None
 ):
@@ -407,7 +445,14 @@ def predict_over_probability_ml(
         return None
     avg_stat = sum(stats) / len(stats)
     ballpark, weather, umpire = get_environment_factors(game)
-    features = [avg_stat - line, ballpark - 1.0, weather - 1.0, umpire - 1.0]
+    matchup = get_matchup_factor(player_name, stat, game)
+    features = [
+        avg_stat - line,
+        ballpark - 1.0,
+        weather - 1.0,
+        umpire - 1.0,
+        matchup - 1.0,
+    ]
     z = ML_BIAS + sum(w * f for w, f in zip(ML_WEIGHTS, features))
     return 1 / (1 + math.exp(-z))
 
@@ -474,10 +519,11 @@ def predict_stat_value_ml(player_name: str, stat: str, game: str | None = None):
 
     avg_stat = sum(stats) / len(stats)
     ballpark, weather, umpire = get_environment_factors(game)
+    matchup = get_matchup_factor(player_name, stat, game)
     key = _normalize_stat_name(stat)
     weights = STAT_VALUE_WEIGHTS.get(key, DEFAULT_STAT_WEIGHTS)
     bias = STAT_VALUE_BIAS.get(key, 0.0)
-    features = [avg_stat, ballpark, weather, umpire]
+    features = [avg_stat, ballpark, weather, umpire, matchup]
     return bias + sum(w * f for w, f in zip(weights, features))
 
 
