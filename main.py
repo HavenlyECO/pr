@@ -44,6 +44,55 @@ print(f"THE_ODDS_API_KEY: {repr(os.getenv('THE_ODDS_API_KEY'))}")
 print(f"TELEGRAM_BOT_TOKEN: {repr(os.getenv('TELEGRAM_BOT_TOKEN'))}")
 print(f"TELEGRAM_CHAT_ID: {repr(os.getenv('TELEGRAM_CHAT_ID'))}")
 
+OFFLINE = False
+
+OFFLINE_UNDERDOG_PROPS = [
+    {
+        "player": "John Doe",
+        "stat": "hits",
+        "line": 1.5,
+        "game": "NYM @ ATL",
+        "id": "offline-1",
+    },
+    {
+        "player": "Jane Smith",
+        "stat": "strikeouts",
+        "line": 4.5,
+        "game": "LAD @ SFG",
+        "id": "offline-2",
+    },
+]
+
+OFFLINE_CONSENSUS_PROPS = [
+    {
+        "bookmakers": [
+            {
+                "key": "draftkings",
+                "title": "DraftKings",
+                "markets": [
+                    {
+                        "key": "player_hits",
+                        "outcomes": [
+                            {"name": "John Doe over", "point": 3.0, "price": -110},
+                            {"name": "John Doe under", "point": 3.0, "price": -110},
+                        ],
+                    },
+                    {
+                        "key": "player_strikeouts",
+                        "outcomes": [
+                            {"name": "Jane Smith over", "point": 6.0, "price": -110},
+                            {"name": "Jane Smith under", "point": 6.0, "price": -110},
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
+]
+
+OFFLINE_LINEUP_PLAYERS = {"John Doe", "Jane Smith"}
+OFFLINE_INJURED_PLAYERS = set()
+
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
 # Retry configuration for network requests
@@ -61,7 +110,7 @@ EDGE_THRESHOLD_BY_STAT = {
 
 # Backwards compatible constant name (used by find_value_props signature)
 EDGE_THRESHOLD = DEFAULT_EDGE_THRESHOLD
-PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
+PLAYER_MATCH_THRESHOLD = 70  # fuzzy name match ratio threshold
 
 # Bookmaker keys to use for consensus lines
 BOOKMAKER_KEYS = ["draftkings", "fanduel", "pointsbetus", "betmgm"]
@@ -611,6 +660,8 @@ def fetch_player_over_probability(
     Uses a machine learning model when enabled, otherwise falls back to simple
     historical frequency.
     """
+    if OFFLINE:
+        return 0.5
 
     if USE_ML_MODEL:
         prob = predict_over_probability_ml(player_name, stat, line, game)
@@ -745,7 +796,7 @@ def cluster_player_probabilities(
 def _notify_error(message: str):
     """Print and send an error notification via Telegram if configured."""
     print(message)
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    if not OFFLINE and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
             send_telegram_message(f"[ERROR] {message}")
         except Exception as exc:
@@ -770,6 +821,8 @@ def _parse_underdog_data(data):
 
 def _fetch_json_with_retry(url: str, headers: dict | None = None) -> dict:
     """Fetch JSON from a URL with retry logic."""
+    if OFFLINE:
+        return {}
     last_exc = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -799,6 +852,8 @@ def scrape_underdog_props() -> list:
 
 
 def fetch_underdog_props() -> list:
+    if OFFLINE:
+        return OFFLINE_UNDERDOG_PROPS
     params = {"sport": "mlb", "platform": "web"}
     query_params = urllib.parse.urlencode(params)
     url = f"{UNDERDOG_GQL_URL}?{query_params}"
@@ -811,6 +866,8 @@ def fetch_underdog_props() -> list:
 
 # --------------- FETCH CONSENSUS MLB PROPS -----------------
 def fetch_consensus_props():
+    if OFFLINE:
+        return OFFLINE_CONSENSUS_PROPS
     url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds"
     params = {
         "apiKey": THE_ODDS_API_KEY,
@@ -828,6 +885,8 @@ def fetch_consensus_props():
 # --------------- ROTOWIRE DATA -----------------
 def fetch_rotowire_lineup_players():
     """Return a set of player names expected to start today."""
+    if OFFLINE:
+        return OFFLINE_LINEUP_PLAYERS
     try:
         with urllib.request.urlopen(ROTOWIRE_LINEUPS_URL) as resp:
             data = json.loads(resp.read().decode())
@@ -848,6 +907,8 @@ def fetch_rotowire_lineup_players():
 
 def fetch_rotowire_injured_players():
     """Return a set of players listed as out."""
+    if OFFLINE:
+        return OFFLINE_INJURED_PLAYERS
     try:
         with urllib.request.urlopen(ROTOWIRE_INJURIES_URL) as resp:
             data = json.loads(resp.read().decode())
@@ -1265,6 +1326,9 @@ def generate_parlays(ev_props, min_legs=2, max_legs=5, use_corr=True):
 
 # --------------- TELEGRAM ALERT -----------------
 def send_telegram_message(message):
+    if OFFLINE or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(f"[Telegram] {message}")
+        return True
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     data = urllib.parse.urlencode(payload).encode()
@@ -1279,6 +1343,9 @@ def send_telegram_message(message):
 
 def send_telegram_photo(image_path):
     """Send an image to the configured Telegram chat."""
+    if OFFLINE or not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(f"[Telegram photo] {image_path}")
+        return True
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
     boundary = "----telegramphoto"
     with open(image_path, "rb") as img:
@@ -1516,12 +1583,14 @@ def process_telegram_commands():
 # --------------- MAIN LOOP -----------------
 def main_loop(track_only: bool = False):
     """Continuous loop fetching props and optionally alerting Telegram."""
-    if not track_only and not (
+    if not OFFLINE and not track_only and not (
         THE_ODDS_API_KEY and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
     ):
         raise RuntimeError(
             "API keys and Telegram credentials must be set via environment variables"
         )
+    if OFFLINE:
+        print("[OFFLINE MODE] Using bundled sample data.")
     global latest_value_props
     init_db()
     while True:
@@ -1621,7 +1690,15 @@ if __name__ == "__main__":
         metavar="STAT",
         help="Cluster players for a stat and print over probabilities",
     )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Run with bundled sample data instead of network calls",
+    )
     args = parser.parse_args()
+
+    if args.offline:
+        OFFLINE = True
 
     if args.plot:
         init_db()
