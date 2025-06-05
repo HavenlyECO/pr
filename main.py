@@ -610,6 +610,73 @@ def simulate_drawdown(ev_props, bankroll=1000.0, fraction=1.0, sims=1000):
     return avg_final, avg_dd
 
 
+def _get_stat_on_date(player: str, stat: str, game_date: str):
+    """Return stat value for a player on a specific date.
+
+    If the value is not already cached in the DB it will attempt to fetch
+    logs from the MLB Stats API and store them for future use.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT value FROM player_performance WHERE player=? AND stat=? AND game_date=?",
+        (player, stat, game_date),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return row[0]
+
+    logs = fetch_player_game_logs_api(player, stat, games=200, season=game_date[:4])
+    if logs:
+        save_player_performance(player, stat, logs)
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT value FROM player_performance WHERE player=? AND stat=? AND game_date=?",
+            (player, stat, game_date),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            return row[0]
+    return None
+
+
+def backtest_line_history():
+    """Run a simple backtest across stored line history."""
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT line_id, player, stat, line, ts FROM line_history")
+    rows = cur.fetchall()
+    conn.close()
+
+    results = []
+    for line_id, player, stat, line, ts in rows:
+        game_date = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+        stat_norm = _normalize_stat_name(stat)
+        value = _get_stat_on_date(player, stat_norm, game_date)
+        if value is None:
+            continue
+        outcome = "over" if value > line else "under"
+        diff = value - line
+        results.append((outcome, diff))
+
+    if not results:
+        print("No historical data available for backtest.")
+        return
+
+    over_hits = sum(1 for o, _ in results if o == "over")
+    under_hits = len(results) - over_hits
+    avg_diff = sum(d for _, d in results) / len(results)
+
+    print(f"Backtested {len(results)} props")
+    print(f"Over win rate: {over_hits/len(results):.3f}")
+    print(f"Under win rate: {under_hits/len(results):.3f}")
+    print(f"Avg result minus line: {avg_diff:.2f}")
+
+
 def generate_parlays(ev_props, min_legs=2, max_legs=5):
     """Generate parlays and calculate expected value for each."""
     from itertools import combinations
@@ -839,6 +906,11 @@ if __name__ == "__main__":
         help="Simulate bankroll growth with Kelly staking and report drawdown",
     )
     parser.add_argument(
+        "--backtest",
+        action="store_true",
+        help="Run historical backtest using stored line data",
+    )
+    parser.add_argument(
         "--bankroll",
         type=float,
         default=1000.0,
@@ -901,5 +973,7 @@ if __name__ == "__main__":
         print(
             f"Avg Final Bankroll: {avg_final:.2f} | Avg Max Drawdown: {avg_dd*100:.1f}%"
         )
+    elif args.backtest:
+        backtest_line_history()
     else:
         main_loop(track_only=args.track_only)
