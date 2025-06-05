@@ -41,6 +41,14 @@ PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
 # Bookmaker keys to use for consensus lines
 BOOKMAKER_KEYS = ["draftkings", "fanduel", "pointsbetus", "betmgm"]
 
+# Rotowire endpoints for lineup and injury data
+ROTOWIRE_LINEUPS_URL = (
+    "https://www.rotowire.com/dfs/services/mlb-lineups.php?format=json"
+)
+ROTOWIRE_INJURIES_URL = (
+    "https://www.rotowire.com/dfs/services/mlb-injuries.php?format=json"
+)
+
 # Map normalized Underdog stat types to TheOdds API market keys.
 # Additional stats can be added here as needed.
 STAT_KEY_MAP = {
@@ -305,6 +313,63 @@ def fetch_consensus_props():
         if resp.status != 200:
             raise RuntimeError(f"TheOdds API error: {resp.status}")
         return json.loads(resp.read().decode())
+
+# --------------- ROTOWIRE DATA -----------------
+def fetch_rotowire_lineup_players():
+    """Return a set of player names expected to start today."""
+    try:
+        with urllib.request.urlopen(ROTOWIRE_LINEUPS_URL) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as exc:
+        print("Rotowire lineup fetch error:", exc)
+        return set()
+
+    players = set()
+    for game in data.get("games", []):
+        for side in ("away", "home"):
+            lineup = game.get(side, {}).get("lineup", [])
+            for p in lineup:
+                name = p.get("player") or p.get("name")
+                if name:
+                    players.add(name.strip())
+    return players
+
+
+def fetch_rotowire_injured_players():
+    """Return a set of players listed as out."""
+    try:
+        with urllib.request.urlopen(ROTOWIRE_INJURIES_URL) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as exc:
+        print("Rotowire injury fetch error:", exc)
+        return set()
+
+    players = set()
+    for team in data.get("teams", []):
+        for p in team.get("players", []):
+            status = p.get("status", "").lower()
+            if "out" in status or "dl" in status or "il" in status:
+                name = p.get("name") or p.get("player")
+                if name:
+                    players.add(name.strip())
+    return players
+
+
+def filter_dead_props(props, lineup_players, injured_players):
+    """Remove props for players not starting or injured."""
+    if not lineup_players and not injured_players:
+        return props
+    norm_lineup = {_normalize_name(p) for p in lineup_players}
+    norm_injured = {_normalize_name(p) for p in injured_players}
+    filtered = []
+    for p in props:
+        norm = _normalize_name(p.get("player", ""))
+        if norm in norm_injured:
+            continue
+        if norm_lineup and norm not in norm_lineup:
+            continue
+        filtered.append(p)
+    return filtered
 
 # --------------- CONSENSUS AGGREGATION -----------------
 def aggregate_consensus_line(cons_props, market_keys, player_name):
@@ -590,6 +655,17 @@ def main_loop(track_only: bool = False):
             underdog_props = fetch_underdog_props()
             print(f"Fetched {len(underdog_props)} props.")
             save_line_history(underdog_props)
+            print("Fetching Rotowire injuries and lineups...")
+            lineup_players = fetch_rotowire_lineup_players()
+            injured_players = fetch_rotowire_injured_players()
+            before = len(underdog_props)
+            underdog_props = filter_dead_props(
+                underdog_props, lineup_players, injured_players
+            )
+            if len(underdog_props) != before:
+                print(
+                    f"Filtered to {len(underdog_props)} props after injury/lineup check."
+                )
             print("Fetching consensus props...")
             consensus_props = fetch_consensus_props()
             print(f"Fetched consensus for {len(consensus_props)} games.")
