@@ -459,6 +459,70 @@ def alert_value_props(value_props):
         )
         send_telegram_message(msg)
 
+# --------------- TELEGRAM INTERACTIVITY -----------------
+LAST_UPDATE_ID = None
+latest_value_props = []
+
+
+def get_telegram_updates(offset=None):
+    """Fetch new Telegram updates starting from the given offset."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    params = {}
+    if offset is not None:
+        params["offset"] = offset
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("result", [])
+    except Exception as e:
+        print("Telegram update error:", e)
+        return []
+
+
+def process_telegram_commands():
+    """Respond to user commands sent via Telegram."""
+    global LAST_UPDATE_ID
+    updates = get_telegram_updates(LAST_UPDATE_ID + 1 if LAST_UPDATE_ID else None)
+    for upd in updates:
+        LAST_UPDATE_ID = upd.get("update_id", LAST_UPDATE_ID)
+        msg = upd.get("message", {})
+        text = msg.get("text", "").strip()
+        if not text:
+            continue
+        if text.startswith("/snapshot"):
+            if latest_value_props:
+                lines = [
+                    f"{p['player']} {p['stat']} {p['underdog_line']} vs {p['consensus_line']} ({p['diff']:+.2f})"
+                    for p in latest_value_props
+                ]
+                send_telegram_message("Current value props:\n" + "\n".join(lines))
+            else:
+                send_telegram_message("No value props found yet.")
+        elif text.startswith("/history"):
+            parts = text.split(maxsplit=1)
+            if len(parts) != 2:
+                send_telegram_message("Usage: /history LINE_ID")
+                continue
+            line_id = parts[1]
+            rows = get_line_history(line_id)
+            if rows:
+                rows = rows[-5:]
+                msgs = [
+                    f"{datetime.fromtimestamp(ts).strftime('%m-%d %H:%M')}: {line}"
+                    for ts, line in rows
+                ]
+                send_telegram_message("\n".join(msgs))
+            else:
+                send_telegram_message(f"No history found for line id {line_id}")
+        elif text.startswith("/help"):
+            send_telegram_message(
+                "Commands:\n/snapshot - current value props\n/history LINE_ID - recent line history"
+            )
+        else:
+            send_telegram_message("Unknown command. Use /help for options.")
+
 # --------------- MAIN LOOP -----------------
 def main_loop(track_only: bool = False):
     """Continuous loop fetching props and optionally alerting Telegram."""
@@ -468,6 +532,7 @@ def main_loop(track_only: bool = False):
         raise RuntimeError(
             "API keys and Telegram credentials must be set via environment variables"
         )
+    global latest_value_props
     init_db()
     while True:
         try:
@@ -479,6 +544,7 @@ def main_loop(track_only: bool = False):
             consensus_props = fetch_consensus_props()
             print(f"Fetched consensus for {len(consensus_props)} games.")
             value_props = find_value_props(underdog_props, consensus_props)
+            latest_value_props = value_props
             if value_props and not track_only:
                 print(f"Found {len(value_props)} value props! Alerting Telegram.")
                 alert_value_props(value_props)
@@ -486,6 +552,7 @@ def main_loop(track_only: bool = False):
                 print("No value found this cycle.")
         except Exception as e:
             print("Main loop error:", e)
+        process_telegram_commands()
         time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
