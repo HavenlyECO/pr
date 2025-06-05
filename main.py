@@ -37,6 +37,13 @@ UNDERDOG_GQL_URL = "https://api.underdogfantasy.com/beta/v4/over_under_lines"
 THE_ODDS_API_KEY = os.getenv("THE_ODDS_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+# Display basic environment info to aid debugging
+print("=== MLB VALUE FINDER SCRIPT STARTED ===")
+print("Working directory:", os.getcwd())
+print(f"THE_ODDS_API_KEY: {repr(os.getenv('THE_ODDS_API_KEY'))}")
+print(f"TELEGRAM_BOT_TOKEN: {repr(os.getenv('TELEGRAM_BOT_TOKEN'))}")
+print(f"TELEGRAM_CHAT_ID: {repr(os.getenv('TELEGRAM_CHAT_ID'))}")
+
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
 # Retry configuration for network requests
