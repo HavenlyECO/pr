@@ -7,6 +7,7 @@ import re
 import sqlite3
 from datetime import datetime
 from difflib import SequenceMatcher
+import random
 
 try:
     from rapidfuzz import fuzz as rapidfuzz_fuzz
@@ -557,6 +558,53 @@ def _best_ev_side(prop):
     return "under", 1 - prop["historical_over_prob"], prop["ev_under"]
 
 
+def kelly_fraction(win_prob: float, odds: float) -> float:
+    """Return optimal bankroll fraction for a bet using the Kelly criterion."""
+    b = american_to_decimal(odds) - 1
+    q = 1 - win_prob
+    if b <= 0:
+        return 0.0
+    fraction = (b * win_prob - q) / b
+    return max(fraction, 0.0)
+
+
+def simulate_drawdown(ev_props, bankroll=1000.0, fraction=1.0, sims=1000):
+    """Simulate betting using Kelly sizing and return avg bankroll and drawdown."""
+    bets = []
+    for p in ev_props:
+        side, prob, _ = _best_ev_side(p)
+        odds = p["over_odds"] if side == "over" else p["under_odds"]
+        kelly = kelly_fraction(prob, odds) * fraction
+        if kelly <= 0:
+            continue
+        bets.append({"prob": prob, "odds": odds, "kelly": kelly})
+
+    if not bets:
+        return bankroll, 0.0
+
+    final_bankrolls = []
+    drawdowns = []
+    for _ in range(sims):
+        bal = bankroll
+        peak = bankroll
+        max_dd = 0.0
+        for b in bets:
+            wager = bal * b["kelly"]
+            if random.random() < b["prob"]:
+                bal += wager * (american_to_decimal(b["odds"]) - 1)
+            else:
+                bal -= wager
+            peak = max(peak, bal)
+            dd = 1 - bal / peak
+            max_dd = max(max_dd, dd)
+        final_bankrolls.append(bal)
+        drawdowns.append(max_dd)
+
+    avg_final = sum(final_bankrolls) / sims
+    avg_dd = sum(drawdowns) / sims
+    return avg_final, avg_dd
+
+
 def generate_parlays(ev_props, min_legs=2, max_legs=5):
     """Generate parlays and calculate expected value for each."""
     from itertools import combinations
@@ -750,6 +798,29 @@ if __name__ == "__main__":
         action="store_true",
         help="Generate parlay EV simulation using historical probabilities and exit",
     )
+    parser.add_argument(
+        "--risk-sim",
+        action="store_true",
+        help="Simulate bankroll growth with Kelly staking and report drawdown",
+    )
+    parser.add_argument(
+        "--bankroll",
+        type=float,
+        default=1000.0,
+        help="Starting bankroll for risk simulation",
+    )
+    parser.add_argument(
+        "--kelly-scale",
+        type=float,
+        default=1.0,
+        help="Scale Kelly fraction (e.g. 0.5 for half Kelly)",
+    )
+    parser.add_argument(
+        "--sims",
+        type=int,
+        default=1000,
+        help="Number of Monte Carlo simulations for risk analysis",
+    )
     args = parser.parse_args()
 
     if args.plot:
@@ -780,5 +851,20 @@ if __name__ == "__main__":
                 f"{p['num_legs']}-leg parlay EV: {p['ev']:.3f} "
                 f"TrueP: {p['prob']:.3f} Payout: {p['payout']}x -> {legs}"
             )
+    elif args.risk_sim:
+        print("Fetching Underdog MLB props...")
+        ud_props = fetch_underdog_props()
+        print("Fetching consensus props...")
+        cons_props = fetch_consensus_props()
+        ev_props = find_ev_props(ud_props, cons_props)
+        avg_final, avg_dd = simulate_drawdown(
+            ev_props,
+            bankroll=args.bankroll,
+            fraction=args.kelly_scale,
+            sims=args.sims,
+        )
+        print(
+            f"Avg Final Bankroll: {avg_final:.2f} | Avg Max Drawdown: {avg_dd*100:.1f}%"
+        )
     else:
         main_loop(track_only=args.track_only)
