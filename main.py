@@ -25,6 +25,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
+# Retry configuration for network requests
+MAX_RETRIES = 3
+RETRY_BACKOFF = 5  # seconds between retries
 # Base threshold used when a stat-specific value is not provided
 DEFAULT_EDGE_THRESHOLD = 0.7  # minimum difference to alert
 
@@ -330,16 +333,18 @@ def fetch_player_over_probability(
     return over / len(stats)
 
 # --------------- FETCH UNDERDOG MLB PROPS -----------------
-def fetch_underdog_props():
-    params = {
-        "sport": "mlb",
-        "platform": "web"
-    }
-    query_params = urllib.parse.urlencode(params)
-    with urllib.request.urlopen(f"{UNDERDOG_GQL_URL}?{query_params}") as resp:
-        if resp.status != 200:
-            raise RuntimeError(f"Underdog API error: {resp.status}")
-        data = json.loads(resp.read().decode())
+def _notify_error(message: str):
+    """Print and send an error notification via Telegram if configured."""
+    print(message)
+    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+        try:
+            send_telegram_message(f"[ERROR] {message}")
+        except Exception as exc:
+            print("Telegram notify error:", exc)
+
+
+def _parse_underdog_data(data):
+    """Convert raw Underdog JSON to a list of prop dictionaries."""
     props = []
     for line in data.get("over_under_lines", []):
         prop = {
@@ -349,10 +354,51 @@ def fetch_underdog_props():
             "game": line.get("over_under", {}).get("game", {}).get("matchup"),
             "id": line.get("id"),
         }
-        # Filter out props without required info (sometimes happens)
         if prop["player"] and prop["stat"] and prop["line"]:
             props.append(prop)
     return props
+
+
+def _fetch_json_with_retry(url: str, headers: dict | None = None) -> dict:
+    """Fetch JSON from a URL with retry logic."""
+    last_exc = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            req = urllib.request.Request(url, headers=headers or {})
+            with urllib.request.urlopen(req) as resp:
+                if resp.status != 200:
+                    raise RuntimeError(f"HTTP error: {resp.status}")
+                return json.loads(resp.read().decode())
+        except Exception as exc:
+            last_exc = exc
+            time.sleep(RETRY_BACKOFF * attempt)
+    raise last_exc
+
+
+def scrape_underdog_props() -> list:
+    """Fallback scraper for Underdog props when the API fails."""
+    params = {"sport": "mlb"}
+    query_params = urllib.parse.urlencode(params)
+    url = f"{UNDERDOG_GQL_URL}?{query_params}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        data = _fetch_json_with_retry(url, headers=headers)
+    except Exception as exc:
+        _notify_error(f"Failover scrape error: {exc}")
+        return []
+    return _parse_underdog_data(data)
+
+
+def fetch_underdog_props() -> list:
+    params = {"sport": "mlb", "platform": "web"}
+    query_params = urllib.parse.urlencode(params)
+    url = f"{UNDERDOG_GQL_URL}?{query_params}"
+    try:
+        data = _fetch_json_with_retry(url)
+        return _parse_underdog_data(data)
+    except Exception as exc:
+        _notify_error(f"Underdog fetch failed: {exc}")
+        return scrape_underdog_props()
 
 # --------------- FETCH CONSENSUS MLB PROPS -----------------
 def fetch_consensus_props():
