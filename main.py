@@ -97,13 +97,15 @@ USE_SEQ_MODEL = os.getenv("USE_SEQ_MODEL", "0") == "1"
 ML_WEIGHTS = [
     1.5,
     0.5,
+    0.2,
+    0.2,
     0.3,
     0.2,
     0.4,
     0.1,
     0.1,
     0.05,
-]  # [stat_diff, ballpark, weather, umpire, matchup, wind, temp, humidity]
+]  # [stat_diff, park_emb1, park_emb2, weather, umpire, matchup, wind, temp, humidity]
 ML_BIAS = 0.0
 
 # Simplified environment factors by home team abbreviation
@@ -114,6 +116,13 @@ WIND_FACTORS = {"COL": 1.05, "NYY": 0.95, "BOS": 1.0}
 TEMP_FACTORS = {"COL": 1.02, "NYY": 1.0, "BOS": 0.99}
 HUMIDITY_FACTORS = {"COL": 1.01, "NYY": 0.98, "BOS": 1.0}
 
+# Simple 2D embedding for each ballpark
+BALLPARK_EMBEDDINGS = {
+    "COL": [0.5, 0.2],
+    "NYY": [0.2, 0.1],
+    "BOS": [0.1, 0.3],
+}
+
 # Opponent strength adjustments by team (1.0 = average)
 TEAM_PITCHING_RATINGS = {"NYY": 1.05, "BOS": 0.95}
 TEAM_HITTING_RATINGS = {"NYY": 1.1, "BOS": 1.0}
@@ -122,15 +131,15 @@ TEAM_HITTING_RATINGS = {"NYY": 1.1, "BOS": 1.0}
 PLAYER_TEAM_MAP = {"Aaron Judge": "NYY", "Gerrit Cole": "NYY"}
 
 # Example linear regression weights for predicting raw stat values
-# Order of features: [recent_avg, ballpark, weather, umpire, matchup, wind, temp, humidity]
+# Order of features: [recent_avg, park_emb1, park_emb2, ballpark, weather, umpire, matchup, wind, temp, humidity]
 STAT_VALUE_WEIGHTS = {
-    "hits": [0.85, 0.05, 0.03, 0.02, 0.05, 0.02, 0.02, 0.01],
-    "strikeouts": [0.9, 0.03, 0.02, 0.0, 0.05, 0.02, 0.02, 0.01],
-    "total bases": [0.8, 0.1, 0.03, 0.02, 0.05, 0.02, 0.02, 0.01],
+    "hits": [0.85, 0.05, 0.05, 0.05, 0.03, 0.02, 0.05, 0.02, 0.02, 0.01],
+    "strikeouts": [0.9, 0.04, 0.04, 0.03, 0.02, 0.0, 0.05, 0.02, 0.02, 0.01],
+    "total bases": [0.8, 0.06, 0.04, 0.1, 0.03, 0.02, 0.05, 0.02, 0.02, 0.01],
 }
 # Bias terms for the stat prediction model
 STAT_VALUE_BIAS = {"hits": 0.0, "strikeouts": 0.0, "total bases": 0.0}
-DEFAULT_STAT_WEIGHTS = [1.0, 0.1, 0.05, 0.05, 0.05, 0.02, 0.02, 0.01]
+DEFAULT_STAT_WEIGHTS = [1.0, 0.05, 0.05, 0.05, 0.05, 0.05, 0.02, 0.02, 0.01, 0.01]
 
 
 
@@ -420,6 +429,18 @@ def get_environment_factors(game: str | None):
     )
 
 
+def get_ballpark_embedding(game: str | None) -> list[float]:
+    """Return embedding vector representing the ballpark."""
+    if not game:
+        return [0.0, 0.0]
+    try:
+        parts = [p.strip() for p in game.split("@", 1)]
+        home = parts[1] if len(parts) == 2 else parts[0]
+    except Exception:
+        home = game.strip()
+    return BALLPARK_EMBEDDINGS.get(home, [0.0, 0.0])
+
+
 def get_matchup_factor(player_name: str, stat: str, game: str | None) -> float:
     """Return matchup factor based on opposing team strength."""
     if not game:
@@ -454,10 +475,11 @@ def predict_over_probability_ml(
         return None
     avg_stat = sum(stats) / len(stats)
     ballpark, weather, umpire, wind, temp, humidity = get_environment_factors(game)
+    park_emb = get_ballpark_embedding(game)
     matchup = get_matchup_factor(player_name, stat, game)
     features = [
         avg_stat - line,
-        ballpark - 1.0,
+        *park_emb,
         weather - 1.0,
         umpire - 1.0,
         matchup - 1.0,
@@ -531,11 +553,12 @@ def predict_stat_value_ml(player_name: str, stat: str, game: str | None = None):
 
     avg_stat = sum(stats) / len(stats)
     ballpark, weather, umpire, wind, temp, humidity = get_environment_factors(game)
+    park_emb = get_ballpark_embedding(game)
     matchup = get_matchup_factor(player_name, stat, game)
     key = _normalize_stat_name(stat)
     weights = STAT_VALUE_WEIGHTS.get(key, DEFAULT_STAT_WEIGHTS)
     bias = STAT_VALUE_BIAS.get(key, 0.0)
-    features = [avg_stat, ballpark, weather, umpire, matchup, wind, temp, humidity]
+    features = [avg_stat, *park_emb, ballpark, weather, umpire, matchup, wind, temp, humidity]
     return bias + sum(w * f for w, f in zip(weights, features))
 
 
