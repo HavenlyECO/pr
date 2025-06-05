@@ -940,6 +940,23 @@ def fetch_events(sport: str) -> list:
         _notify_error(f"Events fetch failed: {exc}")
         return []
 
+def get_valid_mlb_markets() -> list:
+    """Return available MLB markets from TheOdds API."""
+    url = (
+        f"https://api.the-odds-api.com/v4/sports/baseball_mlb/?apiKey={THE_ODDS_API_KEY}"
+    )
+    try:
+        with urllib.request.urlopen(url) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"TheOdds API error: {resp.status}")
+            data = json.loads(resp.read().decode())
+            # The API returns a list of all supported markets
+            return data.get("markets", [])
+    except Exception as exc:
+        print("Could not fetch valid markets for MLB:", exc)
+        # Fallback to safe defaults
+        return ["h2h", "totals", "spreads"]
+
 # --------------- FETCH CONSENSUS MLB PROPS -----------------
 def fetch_consensus_props():
     if OFFLINE:
@@ -949,11 +966,19 @@ def fetch_consensus_props():
     if not mlb:
         _notify_error("baseball_mlb sport not found")
         return []
+    # Determine which markets the API currently supports for MLB
+    valid_markets = get_valid_mlb_markets()
+
+    # Use only markets that are both defined in STAT_KEY_MAP and supported
+    valid_player_markets = [m for m in ALL_MARKETS.split(",") if m in valid_markets]
+    if not valid_player_markets:
+        # Fallback to a basic market if none are returned
+        valid_player_markets = ["h2h"]
     url = f"https://api.the-odds-api.com/v4/sports/{mlb['key']}/odds"
     params = {
         "apiKey": THE_ODDS_API_KEY,
         "regions": "us",
-        "markets": ALL_MARKETS,
+        "markets": ",".join(valid_player_markets),
         "oddsFormat": "american",
         "bookmakers": ",".join(BOOKMAKER_KEYS),
     }
