@@ -10,7 +10,16 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except Exception:
-    pass
+    # Fallback to manual .env parsing if python-dotenv isn't available
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key, value)
 from datetime import datetime
 from difflib import SequenceMatcher
 import random
