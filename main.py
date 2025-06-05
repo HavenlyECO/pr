@@ -113,6 +113,16 @@ OFFLINE_SPORTS = [
     {"key": "baseball_mlb", "title": "Baseball MLB", "active": True}
 ]
 
+# Sample scores used when running in --offline mode
+OFFLINE_SCORES = [
+    {
+        "home_team": "NYM",
+        "away_team": "ATL",
+        "commence_time": "2023-06-01T17:00:00Z",
+        "scores": {"home_score": 5, "away_score": 3},
+    }
+]
+
 
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
@@ -893,6 +903,27 @@ def fetch_sports() -> list:
             return json.loads(resp.read().decode())
     except Exception as exc:
         _notify_error(f"Sports fetch failed: {exc}")
+        return []
+
+
+def fetch_scores(sport: str, days_from: int = 1, date_format: str = "iso") -> list:
+    """Retrieve recent scores for a sport from TheOdds API."""
+    if OFFLINE:
+        return OFFLINE_SCORES
+    url = f"https://api.the-odds-api.com/v4/sports/{sport}/scores/"
+    params = {
+        "apiKey": THE_ODDS_API_KEY,
+        "daysFrom": days_from,
+        "dateFormat": date_format,
+    }
+    query_params = urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(f"{url}?{query_params}") as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"TheOdds API error: {resp.status}")
+            return json.loads(resp.read().decode())
+    except Exception as exc:
+        _notify_error(f"Scores fetch failed: {exc}")
         return []
 
 # --------------- FETCH CONSENSUS MLB PROPS -----------------
@@ -1678,6 +1709,22 @@ if __name__ == "__main__":
         help="Cluster players for a stat and print over probabilities",
     )
     parser.add_argument(
+        "--scores",
+        metavar="SPORT",
+        help="Fetch recent scores for a sport from TheOdds API and exit",
+    )
+    parser.add_argument(
+        "--days-from",
+        type=int,
+        default=1,
+        help="Number of days from today to retrieve scores",
+    )
+    parser.add_argument(
+        "--date-format",
+        default="iso",
+        help="Date format for scores (iso or unix)",
+    )
+    parser.add_argument(
         "--offline",
         action="store_true",
         help="Run with bundled sample data instead of network calls",
@@ -1754,6 +1801,11 @@ if __name__ == "__main__":
                 prob = item["prob"]
                 prob_str = f"{prob:.3f}" if prob is not None else "N/A"
                 print(f"Cluster {item['cluster']} | {item['player']} -> {prob_str}")
+    elif args.scores:
+        scores = fetch_scores(
+            args.scores, days_from=args.days_from, date_format=args.date_format
+        )
+        print(json.dumps(scores, indent=2))
     elif args.backtest:
         print(backtest_line_history())
     else:
