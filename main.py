@@ -72,6 +72,11 @@ LINEUP_PLAYERS = set()  # updated each cycle from Rotowire
 MANUAL_CONFIRMED_PLAYERS = set()  # confirmed via Telegram
 SCRATCHED_PLAYERS = set()  # scratched pitchers via Telegram
 
+# Default bankroll configuration for unit sizing
+BANKROLL = float(os.getenv("BANKROLL", "1000"))
+# Base unit amount representing a typical wager size
+BASE_UNIT = float(os.getenv("BASE_UNIT", "10"))
+
 
 def init_db():
     """Initialize the SQLite database for line history and player data."""
@@ -539,6 +544,9 @@ def find_ev_props(ud_props, cons_props, games=100):
             "player": u["player"],
             "stat": u["stat"],
             "line": line,
+            "underdog_line": u["line"],
+            "consensus_line": line,
+            "diff": float(u["line"]) - float(line),
             "over_odds": over_price,
             "under_odds": under_price,
             "book": ", ".join(books) if books else "consensus",
@@ -608,6 +616,21 @@ def simulate_drawdown(ev_props, bankroll=1000.0, fraction=1.0, sims=1000):
     avg_final = sum(final_bankrolls) / sims
     avg_dd = sum(drawdowns) / sims
     return avg_final, avg_dd
+
+
+def calculate_unit_size(prop, bankroll=BANKROLL, base_unit=BASE_UNIT):
+    """Return recommended stake for a prop using edge and volatility."""
+    side, prob, _ = _best_ev_side(prop)
+    odds = prop["over_odds"] if side == "over" else prop["under_odds"]
+    kelly = kelly_fraction(prob, odds)
+    stat_norm = _normalize_stat_name(prop["stat"])
+    stat_threshold = EDGE_THRESHOLD_BY_STAT.get(stat_norm, DEFAULT_EDGE_THRESHOLD)
+    edge = abs(prop.get("diff", 0))
+    edge_factor = min(edge / stat_threshold, 2.0)
+    volatility_factor = DEFAULT_EDGE_THRESHOLD / stat_threshold
+    fraction = kelly * edge_factor * volatility_factor
+    stake = bankroll * fraction / base_unit
+    return side, max(stake, 0.0)
 
 
 def _get_stat_on_date(player: str, stat: str, game_date: str):
@@ -806,7 +829,8 @@ def process_telegram_commands():
                 "/snapshot - current value props\n"
                 "/history LINE_ID - recent line history\n"
                 "/confirm NAME - manually confirm a player\n"
-                "/scratch NAME - mark a player scratched"
+                "/scratch NAME - mark a player scratched\n"
+                "/units - show suggested bet sizing"
             )
         elif text.startswith("/confirm"):
             parts = text.split(maxsplit=1)
@@ -828,6 +852,22 @@ def process_telegram_commands():
             if name in MANUAL_CONFIRMED_PLAYERS:
                 MANUAL_CONFIRMED_PLAYERS.discard(name)
             send_telegram_message(f"Marked {parts[1]} as scratched.")
+        elif text.startswith("/units"):
+            ud_props = fetch_underdog_props()
+            cons_props = fetch_consensus_props()
+            ev_props = find_ev_props(ud_props, cons_props)
+            msgs = []
+            for p in ev_props[:5]:
+                side, units = calculate_unit_size(p)
+                if units <= 0:
+                    continue
+                msgs.append(
+                    f"{p['player']} {p['stat']} {side} - {units:.2f} units"
+                )
+            if msgs:
+                send_telegram_message("\n".join(msgs))
+            else:
+                send_telegram_message("No bets meet sizing criteria.")
         else:
             send_telegram_message("Unknown command. Use /help for options.")
 
