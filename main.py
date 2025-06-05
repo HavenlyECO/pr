@@ -435,6 +435,56 @@ def find_ev_props(ud_props, cons_props, games=100):
         })
     return ev_props
 
+# --------------- PARLAY SIMULATION -----------------
+# Fixed payout multipliers for Underdog pick'em parlays
+PICKEM_PAYOUTS = {2: 3.0, 3: 6.0, 4: 10.0, 5: 20.0}
+
+
+def _best_ev_side(prop):
+    """Return the side of the prop with the higher EV and its probability."""
+    if prop["ev_over"] >= prop["ev_under"]:
+        return "over", prop["historical_over_prob"], prop["ev_over"]
+    return "under", 1 - prop["historical_over_prob"], prop["ev_under"]
+
+
+def generate_parlays(ev_props, min_legs=2, max_legs=5):
+    """Generate parlays and calculate expected value for each."""
+    from itertools import combinations
+
+    edges = []
+    for p in ev_props:
+        side, prob, ev = _best_ev_side(p)
+        if ev <= 0:
+            continue
+        edges.append({
+            "player": p["player"],
+            "stat": p["stat"],
+            "side": side,
+            "prob": prob,
+        })
+
+    parlays = []
+    for n in range(min_legs, min(max_legs, len(edges)) + 1):
+        payout = PICKEM_PAYOUTS.get(n)
+        if not payout:
+            continue
+        for combo in combinations(edges, n):
+            prob = 1.0
+            legs_desc = []
+            for leg in combo:
+                prob *= leg["prob"]
+                legs_desc.append(f"{leg['player']} {leg['stat']} {leg['side']}")
+            ev = prob * payout - 1
+            parlays.append({
+                "legs": legs_desc,
+                "num_legs": n,
+                "prob": prob,
+                "payout": payout,
+                "ev": ev,
+            })
+
+    return sorted(parlays, key=lambda x: x["ev"], reverse=True)
+
 # --------------- TELEGRAM ALERT -----------------
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -574,6 +624,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Calculate expected value using historical data and exit",
     )
+    parser.add_argument(
+        "--parlay-sim",
+        action="store_true",
+        help="Generate parlay EV simulation using historical probabilities and exit",
+    )
     args = parser.parse_args()
 
     if args.plot:
@@ -590,6 +645,19 @@ if __name__ == "__main__":
                 f"{p['player']} {p['stat']} line {p['line']} "
                 f"Over EV: {p['ev_over']:.3f} Under EV: {p['ev_under']:.3f} "
                 f"Hold: {p['hold']:.3f}"
+            )
+    elif args.parlay_sim:
+        print("Fetching Underdog MLB props...")
+        ud_props = fetch_underdog_props()
+        print("Fetching consensus props...")
+        cons_props = fetch_consensus_props()
+        ev_props = find_ev_props(ud_props, cons_props)
+        parlays = generate_parlays(ev_props)
+        for p in parlays[:10]:
+            legs = " | ".join(p["legs"])
+            print(
+                f"{p['num_legs']}-leg parlay EV: {p['ev']:.3f} "
+                f"TrueP: {p['prob']:.3f} Payout: {p['payout']}x -> {legs}"
             )
     else:
         main_loop(track_only=args.track_only)
