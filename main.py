@@ -1,13 +1,21 @@
-import requests
+import json
+import urllib.request
+import urllib.parse
 import time
+import os
 
 # --------------- CONFIG -----------------
 UNDERDOG_GQL_URL = "https://api.underdogfantasy.com/beta/v4/over_under_lines"
-THE_ODDS_API_KEY = "YOUR_THEODDSAPI_KEY"         # <-- REPLACE with your TheOddsAPI key
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"   # <-- REPLACE with your Telegram bot token
-TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"       # <-- REPLACE with your Telegram chat id
+THE_ODDS_API_KEY = os.getenv("THE_ODDS_API_KEY", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 CHECK_INTERVAL = 60  # seconds between checks
 EDGE_THRESHOLD = 0.7 # minimum difference to alert (tune for MLB stat, e.g. 0.5-1)
+
+if not (THE_ODDS_API_KEY and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+    raise RuntimeError(
+        "API keys and Telegram credentials must be set via environment variables"
+    )
 
 # --------------- FETCH UNDERDOG MLB PROPS -----------------
 def fetch_underdog_props():
@@ -15,9 +23,11 @@ def fetch_underdog_props():
         "sport": "mlb",
         "platform": "web"
     }
-    r = requests.get(UNDERDOG_GQL_URL, params=params)
-    r.raise_for_status()
-    data = r.json()
+    query_params = urllib.parse.urlencode(params)
+    with urllib.request.urlopen(f"{UNDERDOG_GQL_URL}?{query_params}") as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"Underdog API error: {resp.status}")
+        data = json.loads(resp.read().decode())
     props = []
     for line in data.get("over_under_lines", []):
         prop = {
@@ -41,9 +51,11 @@ def fetch_consensus_props():
         "markets": "player_hits,player_home_runs,player_total_bases,player_rbis,player_strikeouts,player_runs", # add more as needed
         "oddsFormat": "american"
     }
-    r = requests.get(url, params=params)
-    r.raise_for_status()
-    return r.json()
+    query_params = urllib.parse.urlencode(params)
+    with urllib.request.urlopen(f"{url}?{query_params}") as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"TheOdds API error: {resp.status}")
+        return json.loads(resp.read().decode())
 
 # --------------- FIND VALUE PROPS -----------------
 def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
@@ -83,9 +95,11 @@ def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
 def send_telegram_message(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+    data = urllib.parse.urlencode(payload).encode()
+    req = urllib.request.Request(url, data=data)
     try:
-        r = requests.post(url, data=payload)
-        return r.ok
+        with urllib.request.urlopen(req) as resp:
+            return resp.status == 200
     except Exception as e:
         print("Telegram error:", e)
         return False
