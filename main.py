@@ -68,7 +68,7 @@ ALL_MARKETS = ",".join(sorted({m for v in STAT_KEY_MAP.values() for m in v}))
 
 
 def init_db():
-    """Initialize the SQLite database for line history."""
+    """Initialize the SQLite database for line history and player data."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
@@ -80,6 +80,17 @@ def init_db():
             stat TEXT,
             line REAL,
             ts INTEGER
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_performance (
+            player TEXT,
+            stat TEXT,
+            game_date TEXT,
+            value REAL,
+            PRIMARY KEY (player, stat, game_date)
         )
         """
     )
@@ -131,6 +142,90 @@ def plot_line_history(line_id):
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
+
+
+def save_player_performance(player: str, stat: str, logs):
+    """Save a list of (date, value) tuples to the player performance table."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    for game_date, value in logs:
+        cur.execute(
+            "INSERT OR REPLACE INTO player_performance (player, stat, game_date, value) VALUES (?, ?, ?, ?)",
+            (player, stat, game_date, value),
+        )
+    conn.commit()
+    conn.close()
+
+
+def load_player_performance(player: str, stat: str, games: int):
+    """Load recent game values for a player/stat from the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT game_date, value FROM player_performance WHERE player=? AND stat=? ORDER BY game_date DESC LIMIT ?",
+        (player, stat, games),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [r[1] for r in rows]
+
+
+def fetch_player_game_logs_api(player_name: str, stat: str, games: int = 100, season: str = None):
+    """Fetch game logs from the MLB Stats API."""
+    try:
+        search_url = (
+            "https://statsapi.mlb.com/api/v1/people/search?name="
+            + urllib.parse.quote(player_name)
+        )
+        with urllib.request.urlopen(search_url) as resp:
+            search_data = json.loads(resp.read().decode())
+        results = search_data.get("people") or []
+        if not results:
+            return []
+        player_id = results[0]["id"]
+        params = {
+            "stats": "gameLog",
+            "group": "hitting",
+            "sportId": 1,
+            "limit": games,
+        }
+        if season:
+            params["season"] = season
+        url = (
+            f"https://statsapi.mlb.com/api/v1/people/{player_id}/stats?"
+            + urllib.parse.urlencode(params)
+        )
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as exc:
+        print("Historical data error:", exc)
+        return []
+
+    splits = data.get("stats", [{}])[0].get("splits", [])
+    logs = []
+    for g in splits:
+        val = g.get("stat", {}).get(stat)
+        if val is None:
+            continue
+        try:
+            value = float(val)
+        except Exception:
+            continue
+        game_date = g.get("date") or g.get("gameDate")
+        logs.append((game_date, value))
+    return logs
+
+
+def get_recent_player_stats(player_name: str, stat: str, games: int = 100):
+    """Return recent game values for the player, updating the DB if needed."""
+    stats = load_player_performance(player_name, stat, games)
+    if len(stats) >= games:
+        return stats
+    new_logs = fetch_player_game_logs_api(player_name, stat, games)
+    if new_logs:
+        save_player_performance(player_name, stat, new_logs)
+        stats = load_player_performance(player_name, stat, games)
+    return stats
 
 
 def _fuzzy_ratio(a: str, b: str) -> float:
@@ -212,66 +307,16 @@ def compute_ev(true_prob: float, odds: float) -> float:
     return true_prob * dec - 1
 
 
-def fetch_player_over_probability(player_name: str, stat: str, line: float, season: str = None, games: int = 100):
-    """Return probability of player going over a line using MLB Stats API.
+def fetch_player_over_probability(
+    player_name: str, stat: str, line: float, season: str = None, games: int = 100
+):
+    """Return probability of player going over a line using cached game logs."""
 
-    This function queries the public MLB Stats API to retrieve recent game logs
-    for a player and calculates the proportion of games in which the specified
-    stat went over the provided line. Theoddsapi is deliberately not used so
-    historical performance comes from a different source.
-    """
-    try:
-        search_url = (
-            "https://statsapi.mlb.com/api/v1/people/search?name="
-            + urllib.parse.quote(player_name)
-        )
-        with urllib.request.urlopen(search_url) as resp:
-            search_data = json.loads(resp.read().decode())
-        results = search_data.get("people") or []
-        if not results:
-            return None
-        player_id = results[0]["id"]
-        params = {
-            "stats": "gameLog",
-            "group": "hitting",
-            "sportId": 1,
-            "limit": games,
-        }
-        if season:
-            params["season"] = season
-        url = (
-            f"https://statsapi.mlb.com/api/v1/people/{player_id}/stats?"
-            + urllib.parse.urlencode(params)
-        )
-        with urllib.request.urlopen(url) as resp:
-            data = json.loads(resp.read().decode())
-    except Exception as exc:  # network or parse error
-        print("Historical data error:", exc)
+    stats = get_recent_player_stats(player_name, stat, games)
+    if not stats:
         return None
-
-    splits = (
-        data.get("stats", [{}])[0]
-        .get("splits", [])
-    )
-    if not splits:
-        return None
-
-    over = 0
-    total = 0
-    for g in splits:
-        stat_val = g.get("stat", {}).get(stat)
-        if stat_val is None:
-            continue
-        try:
-            val = float(stat_val)
-        except Exception:
-            continue
-        total += 1
-        if val > line:
-            over += 1
-    if total == 0:
-        return None
-    return over / total
+    over = sum(1 for v in stats if v > line)
+    return over / len(stats)
 
 # --------------- FETCH UNDERDOG MLB PROPS -----------------
 def fetch_underdog_props():
