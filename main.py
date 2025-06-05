@@ -67,6 +67,11 @@ STAT_KEY_MAP = {
 
 ALL_MARKETS = ",".join(sorted({m for v in STAT_KEY_MAP.values() for m in v}))
 
+# Sets for managing lineup confirmations and scratches
+LINEUP_PLAYERS = set()  # updated each cycle from Rotowire
+MANUAL_CONFIRMED_PLAYERS = set()  # confirmed via Telegram
+SCRATCHED_PLAYERS = set()  # scratched pitchers via Telegram
+
 
 def init_db():
     """Initialize the SQLite database for line history and player data."""
@@ -658,6 +663,10 @@ def send_telegram_message(message):
 
 def alert_value_props(value_props):
     for prop in value_props:
+        norm = _normalize_name(prop.get("player", ""))
+        confirmed = norm in MANUAL_CONFIRMED_PLAYERS or norm in LINEUP_PLAYERS
+        if not confirmed or norm in SCRATCHED_PLAYERS:
+            continue
         msg = (
             f"⚾️ MLB Value Prop!\n"
             f"{prop['player']} – {prop['stat']}\n"
@@ -691,7 +700,7 @@ def get_telegram_updates(offset=None):
 
 def process_telegram_commands():
     """Respond to user commands sent via Telegram."""
-    global LAST_UPDATE_ID
+    global LAST_UPDATE_ID, MANUAL_CONFIRMED_PLAYERS, SCRATCHED_PLAYERS
     updates = get_telegram_updates(LAST_UPDATE_ID + 1 if LAST_UPDATE_ID else None)
     for upd in updates:
         LAST_UPDATE_ID = upd.get("update_id", LAST_UPDATE_ID)
@@ -726,8 +735,32 @@ def process_telegram_commands():
                 send_telegram_message(f"No history found for line id {line_id}")
         elif text.startswith("/help"):
             send_telegram_message(
-                "Commands:\n/snapshot - current value props\n/history LINE_ID - recent line history"
+                "Commands:\n"
+                "/snapshot - current value props\n"
+                "/history LINE_ID - recent line history\n"
+                "/confirm NAME - manually confirm a player\n"
+                "/scratch NAME - mark a player scratched"
             )
+        elif text.startswith("/confirm"):
+            parts = text.split(maxsplit=1)
+            if len(parts) != 2:
+                send_telegram_message("Usage: /confirm PLAYER_NAME")
+                continue
+            name = _normalize_name(parts[1])
+            MANUAL_CONFIRMED_PLAYERS.add(name)
+            if name in SCRATCHED_PLAYERS:
+                SCRATCHED_PLAYERS.discard(name)
+            send_telegram_message(f"Confirmed {parts[1]} for alerts.")
+        elif text.startswith("/scratch"):
+            parts = text.split(maxsplit=1)
+            if len(parts) != 2:
+                send_telegram_message("Usage: /scratch PLAYER_NAME")
+                continue
+            name = _normalize_name(parts[1])
+            SCRATCHED_PLAYERS.add(name)
+            if name in MANUAL_CONFIRMED_PLAYERS:
+                MANUAL_CONFIRMED_PLAYERS.discard(name)
+            send_telegram_message(f"Marked {parts[1]} as scratched.")
         else:
             send_telegram_message("Unknown command. Use /help for options.")
 
@@ -751,6 +784,8 @@ def main_loop(track_only: bool = False):
             print("Fetching Rotowire injuries and lineups...")
             lineup_players = fetch_rotowire_lineup_players()
             injured_players = fetch_rotowire_injured_players()
+            global LINEUP_PLAYERS
+            LINEUP_PLAYERS = {_normalize_name(p) for p in lineup_players}
             before = len(underdog_props)
             underdog_props = filter_dead_props(
                 underdog_props, lineup_players, injured_players
