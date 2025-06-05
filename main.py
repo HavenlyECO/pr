@@ -27,6 +27,9 @@ CHECK_INTERVAL = 60  # seconds between checks
 EDGE_THRESHOLD = 0.7 # minimum difference to alert (tune for MLB stat, e.g. 0.5-1)
 PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
 
+# Bookmaker keys to use for consensus lines
+BOOKMAKER_KEYS = ["draftkings", "fanduel", "pointsbetus", "betmgm"]
+
 # Map normalized Underdog stat types to TheOdds API market keys.
 # Additional stats can be added here as needed.
 STAT_KEY_MAP = {
@@ -188,7 +191,8 @@ def fetch_consensus_props():
         "apiKey": THE_ODDS_API_KEY,
         "regions": "us",
         "markets": ALL_MARKETS,
-        "oddsFormat": "american"
+        "oddsFormat": "american",
+        "bookmakers": ",".join(BOOKMAKER_KEYS),
     }
     query_params = urllib.parse.urlencode(params)
     with urllib.request.urlopen(f"{url}?{query_params}") as resp:
@@ -196,39 +200,54 @@ def fetch_consensus_props():
             raise RuntimeError(f"TheOdds API error: {resp.status}")
         return json.loads(resp.read().decode())
 
+# --------------- CONSENSUS AGGREGATION -----------------
+def aggregate_consensus_line(cons_props, market_keys, player_name):
+    """Return the average line for a player across configured bookmakers."""
+    lines = []
+    books = []
+    for game in cons_props:
+        for bookmaker in game.get("bookmakers", []):
+            if bookmaker.get("key") not in BOOKMAKER_KEYS:
+                continue
+            for market in bookmaker.get("markets", []):
+                if market.get("key") not in market_keys:
+                    continue
+                for outcome in market.get("outcomes", []):
+                    if player_match(player_name, outcome.get("name", "")):
+                        line = outcome.get("point")
+                        if line is not None:
+                            try:
+                                lines.append(float(line))
+                                books.append(bookmaker.get("title", bookmaker.get("key")))
+                            except Exception:
+                                pass
+    if lines:
+        return sum(lines) / len(lines), sorted(set(books))
+    return None, []
+
 # --------------- FIND VALUE PROPS -----------------
 def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
     value_props = []
     for u in ud_props:
-        u_player = u["player"]
         market_keys = get_market_keys(u["stat"])
         if not market_keys:
             continue
-        for game in cons_props:
-            for bookmaker in game.get("bookmakers", []):
-                for market in bookmaker.get("markets", []):
-                    market_key = market.get("key", "")
-                    if market_key not in market_keys:
-                        continue
-                    for outcome in market.get("outcomes", []):
-                        outcome_name = outcome.get("name", "")
-                        if player_match(u_player, outcome_name):
-                            consensus_line = outcome.get("point")
-                            if consensus_line is not None:
-                                try:
-                                    diff = float(u["line"]) - float(consensus_line)
-                                    if abs(diff) >= threshold:
-                                        value_props.append({
-                                            "player": u["player"],
-                                            "stat": u["stat"],
-                                            "underdog_line": u["line"],
-                                            "consensus_line": consensus_line,
-                                            "diff": diff,
-                                            "game": u["game"],
-                                            "book": bookmaker.get("title", "consensus"),
-                                        })
-                                except Exception as e:
-                                    print("Parse error:", e)
+        consensus_line, books = aggregate_consensus_line(cons_props, market_keys, u["player"])
+        if consensus_line is not None:
+            try:
+                diff = float(u["line"]) - float(consensus_line)
+                if abs(diff) >= threshold:
+                    value_props.append({
+                        "player": u["player"],
+                        "stat": u["stat"],
+                        "underdog_line": u["line"],
+                        "consensus_line": consensus_line,
+                        "diff": diff,
+                        "game": u["game"],
+                        "book": ", ".join(books) if books else "consensus",
+                    })
+            except Exception as e:
+                print("Parse error:", e)
     return value_props
 
 # --------------- TELEGRAM ALERT -----------------
