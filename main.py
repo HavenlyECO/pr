@@ -42,8 +42,8 @@ except Exception:
     fuzzywuzzy_fuzz = None
 
 # --------------- CONFIG -----------------
-UNDERDOG_GQL_URL = "https://api.underdogfantasy.com/beta/v4/over_under_lines"
 THE_ODDS_API_KEY = os.getenv("THE_ODDS_API_KEY", "")
+DEFAULT_BOOKMAKER = "draftkings"  # bookmaker used for baseline props
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Display basic environment info to aid debugging
@@ -161,6 +161,9 @@ STAT_KEY_MAP = {
     "doubles": ["player_doubles"],
     "triples": ["player_triples"],
 }
+
+# Reverse lookup to map market keys back to stat names
+REVERSE_STAT_KEY_MAP = {m: s for s, ms in STAT_KEY_MAP.items() for m in ms}
 
 ALL_MARKETS = ",".join(sorted({m for v in STAT_KEY_MAP.values() for m in v}))
 
@@ -827,20 +830,7 @@ def _notify_error(message: str):
             print("Telegram notify error:", exc)
 
 
-def _parse_underdog_data(data):
-    """Convert raw Underdog JSON to a list of prop dictionaries."""
-    props = []
-    for line in data.get("over_under_lines", []):
-        prop = {
-            "player": line.get("over_under", {}).get("title"),
-            "stat": line.get("over_under", {}).get("stat_type"),
-            "line": line.get("line_score"),
-            "game": line.get("over_under", {}).get("game", {}).get("matchup"),
-            "id": line.get("id"),
-        }
-        if prop["player"] and prop["stat"] and prop["line"]:
-            props.append(prop)
-    return props
+
 
 
 def _fetch_json_with_retry(url: str, headers: dict | None = None) -> dict:
@@ -861,33 +851,41 @@ def _fetch_json_with_retry(url: str, headers: dict | None = None) -> dict:
     raise last_exc
 
 
-def scrape_underdog_props() -> list:
-    """Fallback scraper for Underdog props when the API fails."""
-    params = {"sport": "mlb"}
-    query_params = urllib.parse.urlencode(params)
-    url = f"{UNDERDOG_GQL_URL}?{query_params}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        data = _fetch_json_with_retry(url, headers=headers)
-    except Exception as exc:
-        _notify_error(f"Failover scrape error: {exc}")
-        return []
-    return _parse_underdog_data(data)
-
-
-def fetch_underdog_props() -> list:
+def fetch_baseline_props() -> list:
+    """Return player props from the configured bookmaker via TheOdds API."""
     if OFFLINE:
         return OFFLINE_UNDERDOG_PROPS
-    params = {"sport": "mlb", "platform": "web"}
-    query_params = urllib.parse.urlencode(params)
-    url = f"{UNDERDOG_GQL_URL}?{query_params}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    try:
-        data = _fetch_json_with_retry(url, headers=headers)
-        return _parse_underdog_data(data)
-    except Exception as exc:
-        _notify_error(f"Underdog fetch failed: {exc}")
-        return scrape_underdog_props()
+    cons_data = fetch_consensus_props()
+    props = []
+    for game in cons_data:
+        matchup = None
+        away = game.get("away_team")
+        home = game.get("home_team")
+        if away and home:
+            matchup = f"{away} @ {home}"
+        for bookmaker in game.get("bookmakers", []):
+            if bookmaker.get("key") != DEFAULT_BOOKMAKER:
+                continue
+            for market in bookmaker.get("markets", []):
+                stat = REVERSE_STAT_KEY_MAP.get(market.get("key"))
+                if not stat:
+                    continue
+                for outcome in market.get("outcomes", []):
+                    name = outcome.get("name", "")
+                    if "over" not in name.lower():
+                        continue
+                    player = re.sub(r"\s+over\s*$", "", name, flags=re.I)
+                    line = outcome.get("point")
+                    if player and line is not None:
+                        props.append({
+                            "player": player,
+                            "stat": stat,
+                            "line": line,
+                            "game": matchup,
+                            "id": f"{DEFAULT_BOOKMAKER}-{player}-{stat}",
+                        })
+                    break
+    return props
 
 def fetch_sports() -> list:
     """Retrieve available sports from TheOdds API."""
@@ -1418,9 +1416,8 @@ def alert_value_props(value_props):
         msg = (
             f"⚾️ MLB Value Prop!\n"
             f"{prop['player']} – {prop['stat']}\n"
-            f"Underdog: {prop['underdog_line']} | Consensus: {prop['consensus_line']} ({'+' if prop['diff'] > 0 else ''}{prop['diff']:.2f})\n"
-            f"Game: {prop['game']}\n"
-            f"Book: {prop['book']}"
+            f"{prop['book']} line: {prop['underdog_line']} | Consensus: {prop['consensus_line']} ({prop['diff']:+.2f})\n"
+            f"Game: {prop['game']}"
         )
         send_telegram_message(msg)
 
@@ -1522,7 +1519,7 @@ def process_telegram_commands():
                 MANUAL_CONFIRMED_PLAYERS.discard(name)
             send_telegram_message(f"Marked {parts[1]} as scratched.")
         elif text.startswith("/units"):
-            ud_props = fetch_underdog_props()
+            ud_props = fetch_baseline_props()
             cons_props = fetch_consensus_props()
             ev_props = find_ev_props(ud_props, cons_props)
             msgs = []
@@ -1549,7 +1546,7 @@ def process_telegram_commands():
             else:
                 send_telegram_message(f"No history found for line id {parts[1]}")
         elif text.startswith("/ev"):
-            ud_props = fetch_underdog_props()
+            ud_props = fetch_baseline_props()
             cons_props = fetch_consensus_props()
             ev_props = find_ev_props(ud_props, cons_props)
             lines = [
@@ -1560,7 +1557,7 @@ def process_telegram_commands():
             ]
             send_telegram_message("\n".join(lines) if lines else "No value props found.")
         elif text.startswith("/parlay"):
-            ud_props = fetch_underdog_props()
+            ud_props = fetch_baseline_props()
             cons_props = fetch_consensus_props()
             ev_props = find_ev_props(ud_props, cons_props)
             parlays = generate_parlays(ev_props)
@@ -1577,7 +1574,7 @@ def process_telegram_commands():
             bankroll = float(parts[1]) if len(parts) > 1 else 1000.0
             kelly = float(parts[2]) if len(parts) > 2 else 1.0
             sims = int(parts[3]) if len(parts) > 3 else 1000
-            ud_props = fetch_underdog_props()
+            ud_props = fetch_baseline_props()
             cons_props = fetch_consensus_props()
             ev_props = find_ev_props(ud_props, cons_props)
             avg_final, avg_dd = simulate_drawdown(
@@ -1607,7 +1604,7 @@ def process_telegram_commands():
                 continue
             stat = parts[1]
             init_db()
-            ud_props = fetch_underdog_props()
+            ud_props = fetch_baseline_props()
             players = [p for p in ud_props if _normalize_stat_name(p["stat"]) == _normalize_stat_name(stat)]
             if not players:
                 send_telegram_message("No props found for that stat")
@@ -1642,8 +1639,8 @@ def main_loop(track_only: bool = False):
     init_db()
     while True:
         try:
-            print("Fetching Underdog MLB props...")
-            underdog_props = fetch_underdog_props()
+            print("Fetching MLB props...")
+            underdog_props = fetch_baseline_props()
             print(f"Fetched {len(underdog_props)} props.")
             save_line_history(underdog_props)
             print("Fetching consensus props...")
@@ -1759,8 +1756,8 @@ if __name__ == "__main__":
         init_db()
         plot_line_history(args.plot)
     elif args.ev_once:
-        print("Fetching Underdog MLB props...")
-        ud_props = fetch_underdog_props()
+        print("Fetching MLB props...")
+        ud_props = fetch_baseline_props()
         print("Fetching consensus props...")
         cons_props = fetch_consensus_props()
         ev_props = find_ev_props(ud_props, cons_props)
@@ -1771,8 +1768,8 @@ if __name__ == "__main__":
                 f"Hold: {p['hold']:.3f}"
             )
     elif args.parlay_sim:
-        print("Fetching Underdog MLB props...")
-        ud_props = fetch_underdog_props()
+        print("Fetching MLB props...")
+        ud_props = fetch_baseline_props()
         print("Fetching consensus props...")
         cons_props = fetch_consensus_props()
         ev_props = find_ev_props(ud_props, cons_props)
@@ -1784,8 +1781,8 @@ if __name__ == "__main__":
                 f"TrueP: {p['prob']:.3f} Payout: {p['payout']}x -> {legs}"
             )
     elif args.risk_sim:
-        print("Fetching Underdog MLB props...")
-        ud_props = fetch_underdog_props()
+        print("Fetching MLB props...")
+        ud_props = fetch_baseline_props()
         print("Fetching consensus props...")
         cons_props = fetch_consensus_props()
         ev_props = find_ev_props(ud_props, cons_props)
@@ -1809,7 +1806,7 @@ if __name__ == "__main__":
     elif args.cluster_probs:
         stat = args.cluster_probs
         init_db()
-        ud_props = fetch_underdog_props()
+        ud_props = fetch_baseline_props()
         players = [p for p in ud_props if _normalize_stat_name(p["stat"]) == _normalize_stat_name(stat)]
         if not players:
             print("No props found for that stat")
