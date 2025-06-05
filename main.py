@@ -3,6 +3,16 @@ import urllib.request
 import urllib.parse
 import time
 import os
+from difflib import SequenceMatcher
+
+try:
+    from rapidfuzz import fuzz as rapidfuzz_fuzz
+except Exception:
+    rapidfuzz_fuzz = None
+try:
+    from fuzzywuzzy import fuzz as fuzzywuzzy_fuzz
+except Exception:
+    fuzzywuzzy_fuzz = None
 
 # --------------- CONFIG -----------------
 UNDERDOG_GQL_URL = "https://api.underdogfantasy.com/beta/v4/over_under_lines"
@@ -11,6 +21,35 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 CHECK_INTERVAL = 60  # seconds between checks
 EDGE_THRESHOLD = 0.7 # minimum difference to alert (tune for MLB stat, e.g. 0.5-1)
+PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
+
+
+def _fuzzy_ratio(a: str, b: str) -> float:
+    """Return a fuzzy match ratio between two strings.
+
+    Uses RapidFuzz if available, otherwise fuzzywuzzy or a basic SequenceMatcher
+    fallback.
+    """
+    if rapidfuzz_fuzz:
+        return rapidfuzz_fuzz.token_set_ratio(a, b)
+    if fuzzywuzzy_fuzz:
+        return fuzzywuzzy_fuzz.token_set_ratio(a, b)
+    return SequenceMatcher(None, a, b).ratio() * 100
+
+
+def _normalize_name(name: str) -> str:
+    """Normalize player names for fuzzy comparison."""
+    name = name.lower().replace('.', '').replace(',', '')
+    for suffix in [" jr", " sr", " jr", " sr", " iii", " ii"]:
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+    return name.strip()
+
+
+def player_match(name_a: str, name_b: str, threshold: int = PLAYER_MATCH_THRESHOLD) -> bool:
+    """Return True if two player names match with a ratio above the threshold."""
+    score = _fuzzy_ratio(_normalize_name(name_a), _normalize_name(name_b))
+    return score >= threshold
 
 if not (THE_ODDS_API_KEY and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
     raise RuntimeError(
@@ -61,7 +100,7 @@ def fetch_consensus_props():
 def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
     value_props = []
     for u in ud_props:
-        u_player = u['player'].split()[0]  # First name only for rough match (you can improve this)
+        u_player = u['player']
         u_stat = u['stat'].lower()
         for game in cons_props:
             for bookmaker in game.get("bookmakers", []):
@@ -71,8 +110,7 @@ def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
                     if u_stat in market_key:
                         for outcome in market.get("outcomes", []):
                             outcome_name = outcome.get("name", "")
-                            # Simple player name check (first name substring)
-                            if u_player.lower() in outcome_name.lower():
+                            if player_match(u_player, outcome_name):
                                 consensus_line = outcome.get("point")
                                 if consensus_line is not None:
                                     try:
