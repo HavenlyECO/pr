@@ -587,6 +587,124 @@ def fetch_player_over_probability(
     over = sum(1 for v in stats if v > line)
     return over / len(stats)
 
+
+def get_player_feature_vector(player: str, stat: str, games: int = 30):
+    """Return feature vector [avg, std] for the player's recent games."""
+    values = get_recent_player_stats(player, stat, games)
+    if not values:
+        return None
+    avg = sum(values) / len(values)
+    var = sum((v - avg) ** 2 for v in values) / len(values)
+    std = math.sqrt(var)
+    return [avg, std]
+
+
+def _euclidean_distance(a: list[float], b: list[float]) -> float:
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+
+def _kmeans(points: list[list[float]], k: int = 3, iters: int = 10) -> list[int]:
+    """Simple K-means clustering returning labels for each point."""
+    if not points:
+        return []
+    k = min(k, len(points))
+    centroids = random.sample(points, k)
+    for _ in range(iters):
+        clusters = [[] for _ in range(k)]
+        for p in points:
+            idx = min(range(k), key=lambda i: _euclidean_distance(p, centroids[i]))
+            clusters[idx].append(p)
+        for i, c in enumerate(clusters):
+            if c:
+                centroids[i] = [sum(vals) / len(c) for vals in zip(*c)]
+    labels = []
+    for p in points:
+        idx = min(range(k), key=lambda i: _euclidean_distance(p, centroids[i]))
+        labels.append(idx)
+    return labels
+
+
+def _dbscan(points: list[list[float]], eps: float = 1.0, min_pts: int = 2) -> list[int]:
+    """Very small DBSCAN implementation returning labels for each point."""
+    if not points:
+        return []
+    labels = [-1] * len(points)
+    visited = [False] * len(points)
+    cluster_id = 0
+
+    def neighbors(i):
+        return [j for j, q in enumerate(points) if _euclidean_distance(points[i], q) <= eps]
+
+    for i in range(len(points)):
+        if visited[i]:
+            continue
+        visited[i] = True
+        neigh = neighbors(i)
+        if len(neigh) < min_pts:
+            labels[i] = -1
+            continue
+        labels[i] = cluster_id
+        seeds = [n for n in neigh if n != i]
+        while seeds:
+            j = seeds.pop()
+            if not visited[j]:
+                visited[j] = True
+                neigh_j = neighbors(j)
+                if len(neigh_j) >= min_pts:
+                    for n in neigh_j:
+                        if n not in seeds:
+                            seeds.append(n)
+            if labels[j] == -1:
+                labels[j] = cluster_id
+        cluster_id += 1
+    return labels
+
+
+def cluster_player_probabilities(
+    players: list[str],
+    stat: str,
+    lines: list[float],
+    games: int = 30,
+    game_map: dict | None = None,
+    method: str = "kmeans",
+    k: int = 3,
+    eps: float = 1.0,
+    min_pts: int = 2,
+):
+    """Return list of {{player, cluster, prob}} using clustering transfer."""
+    feats = []
+    probs = []
+    names = []
+    for player, line in zip(players, lines):
+        f = get_player_feature_vector(player, stat, games)
+        if f is None:
+            continue
+        feats.append(f)
+        names.append(player)
+        game = game_map.get(player) if game_map else None
+        prob = fetch_player_over_probability(player, stat, line, games=games, game=game)
+        probs.append(prob)
+    if not feats:
+        return []
+
+    if method == "dbscan":
+        labels = _dbscan(feats, eps=eps, min_pts=min_pts)
+    else:
+        labels = _kmeans(feats, k=k)
+
+    cluster_probs: dict[int, list[float]] = {}
+    for lbl, p in zip(labels, probs):
+        if p is not None:
+            cluster_probs.setdefault(lbl, []).append(p)
+    cluster_avg = {c: sum(v) / len(v) for c, v in cluster_probs.items() if v}
+
+    results = []
+    for name, lbl, p in zip(names, labels, probs):
+        if p is None:
+            p = cluster_avg.get(lbl)
+        results.append({"player": name, "cluster": lbl, "prob": p})
+    return results
+
 # --------------- FETCH UNDERDOG MLB PROPS -----------------
 def _notify_error(message: str):
     """Print and send an error notification via Telegram if configured."""
@@ -1344,6 +1462,11 @@ if __name__ == "__main__":
         metavar=("PLAYER", "STAT", "GAME"),
         help="Predict a player's stat value for a matchup and exit",
     )
+    parser.add_argument(
+        "--cluster-probs",
+        metavar="STAT",
+        help="Cluster players for a stat and print over probabilities",
+    )
     args = parser.parse_args()
 
     if args.plot:
@@ -1397,6 +1520,22 @@ if __name__ == "__main__":
             print("Insufficient data to make prediction")
         else:
             print(f"Predicted {stat} for {player} vs {game}: {value:.2f}")
+    elif args.cluster_probs:
+        stat = args.cluster_probs
+        init_db()
+        ud_props = fetch_underdog_props()
+        players = [p for p in ud_props if _normalize_stat_name(p["stat"]) == _normalize_stat_name(stat)]
+        if not players:
+            print("No props found for that stat")
+        else:
+            names = [p["player"] for p in players]
+            lines = [p["line"] for p in players]
+            game_map = {p["player"]: p.get("game") for p in players}
+            clustered = cluster_player_probabilities(names, stat, lines, game_map=game_map)
+            for item in clustered:
+                prob = item["prob"]
+                prob_str = f"{prob:.3f}" if prob is not None else "N/A"
+                print(f"Cluster {item['cluster']} | {item['player']} -> {prob_str}")
     elif args.backtest:
         backtest_line_history()
     else:
