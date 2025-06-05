@@ -11,6 +11,13 @@ import random
 import math
 
 try:
+    import torch
+    import torch.nn as nn
+except Exception:
+    torch = None
+    nn = None
+
+try:
     from rapidfuzz import fuzz as rapidfuzz_fuzz
 except Exception:
     rapidfuzz_fuzz = None
@@ -83,6 +90,8 @@ BASE_UNIT = float(os.getenv("BASE_UNIT", "10"))
 
 # ----- MACHINE LEARNING CONFIG -----
 USE_ML_MODEL = os.getenv("USE_ML_MODEL", "0") == "1"
+# Enable sequence models (LSTM/GRU) for stat value predictions
+USE_SEQ_MODEL = os.getenv("USE_SEQ_MODEL", "0") == "1"
 
 # Example logistic regression weights for advanced model
 ML_WEIGHTS = [1.5, 0.5, 0.3, 0.2]  # [stat_diff, ballpark, weather, umpire]
@@ -403,11 +412,66 @@ def predict_over_probability_ml(
     return 1 / (1 + math.exp(-z))
 
 
+def _predict_stat_sequence(values: list[float], epochs: int = 50):
+    """Train a simple LSTM on the sequence and forecast the next value."""
+    if torch is None or nn is None:
+        return None
+    if len(values) < 6:
+        return None
+    seq_len = min(5, len(values) - 1)
+    x_data = []
+    y_data = []
+    for i in range(len(values) - seq_len):
+        x_data.append(values[i : i + seq_len])
+        y_data.append(values[i + seq_len])
+    if not x_data:
+        return None
+    X = torch.tensor(x_data, dtype=torch.float32).unsqueeze(-1)
+    y = torch.tensor(y_data, dtype=torch.float32)
+
+    class LSTMReg(nn.Module):
+        def __init__(self, hidden_size: int = 16):
+            super().__init__()
+            self.lstm = nn.LSTM(1, hidden_size, batch_first=True)
+            self.fc = nn.Linear(hidden_size, 1)
+
+        def forward(self, x):
+            out, _ = self.lstm(x)
+            out = out[:, -1, :]
+            return self.fc(out).squeeze(-1)
+
+    model = LSTMReg()
+    criterion = nn.MSELoss()
+    opt = torch.optim.Adam(model.parameters(), lr=0.01)
+    model.train()
+    for _ in range(epochs):
+        opt.zero_grad()
+        preds = model(X)
+        loss = criterion(preds, y)
+        loss.backward()
+        opt.step()
+
+    model.eval()
+    inp = torch.tensor(values[-seq_len:], dtype=torch.float32).unsqueeze(0).unsqueeze(-1)
+    with torch.no_grad():
+        pred = model(inp).item()
+    return pred
+
+
 def predict_stat_value_ml(player_name: str, stat: str, game: str | None = None):
-    """Predict the raw stat value using a simple linear regression model."""
+    """Predict the raw stat value using ML models."""
     stats = get_recent_player_stats(player_name, stat, 30)
     if not stats:
         return None
+
+    if USE_SEQ_MODEL:
+        try:
+            pred = _predict_stat_sequence(stats)
+            if pred is not None:
+                return pred
+        except Exception as exc:
+            print("Sequence model error:", exc)
+
     avg_stat = sum(stats) / len(stats)
     ballpark, weather, umpire = get_environment_factors(game)
     key = _normalize_stat_name(stat)
