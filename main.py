@@ -4,6 +4,8 @@ import urllib.parse
 import time
 import os
 import re
+import sqlite3
+from datetime import datetime
 from difflib import SequenceMatcher
 
 try:
@@ -20,6 +22,7 @@ UNDERDOG_GQL_URL = "https://api.underdogfantasy.com/beta/v4/over_under_lines"
 THE_ODDS_API_KEY = os.getenv("THE_ODDS_API_KEY", "")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
 EDGE_THRESHOLD = 0.7 # minimum difference to alert (tune for MLB stat, e.g. 0.5-1)
 PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
@@ -40,6 +43,72 @@ STAT_KEY_MAP = {
 }
 
 ALL_MARKETS = ",".join(sorted({m for v in STAT_KEY_MAP.values() for m in v}))
+
+
+def init_db():
+    """Initialize the SQLite database for line history."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS line_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            line_id TEXT,
+            player TEXT,
+            stat TEXT,
+            line REAL,
+            ts INTEGER
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_line_history(props):
+    """Save the current Underdog lines to the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    ts = int(time.time())
+    for p in props:
+        cur.execute(
+            "INSERT INTO line_history (line_id, player, stat, line, ts) VALUES (?, ?, ?, ?, ?)",
+            (p.get("id"), p.get("player"), p.get("stat"), p.get("line"), ts),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_line_history(line_id):
+    """Return historical line values for a given line id."""
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT ts, line FROM line_history WHERE line_id=? ORDER BY ts",
+        (line_id,),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def plot_line_history(line_id):
+    """Plot line movement over time for a given line."""
+    rows = get_line_history(line_id)
+    if not rows:
+        print(f"No history found for line id {line_id}")
+        return
+    import matplotlib.pyplot as plt
+
+    times = [datetime.fromtimestamp(r[0]) for r in rows]
+    lines = [r[1] for r in rows]
+    plt.plot(times, lines, marker="o")
+    plt.title(f"Line history for {line_id}")
+    plt.xlabel("Time")
+    plt.ylabel("Line")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
 
 def _fuzzy_ratio(a: str, b: str) -> float:
@@ -86,11 +155,6 @@ def player_match(name_a: str, name_b: str, threshold: int = PLAYER_MATCH_THRESHO
     """Return True if two player names match with a ratio above the threshold."""
     score = _fuzzy_ratio(_normalize_name(name_a), _normalize_name(name_b))
     return score >= threshold
-
-if not (THE_ODDS_API_KEY and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
-    raise RuntimeError(
-        "API keys and Telegram credentials must be set via environment variables"
-    )
 
 # --------------- FETCH UNDERDOG MLB PROPS -----------------
 def fetch_underdog_props():
@@ -192,17 +256,26 @@ def alert_value_props(value_props):
         send_telegram_message(msg)
 
 # --------------- MAIN LOOP -----------------
-def main_loop():
+def main_loop(track_only: bool = False):
+    """Continuous loop fetching props and optionally alerting Telegram."""
+    if not track_only and not (
+        THE_ODDS_API_KEY and TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+    ):
+        raise RuntimeError(
+            "API keys and Telegram credentials must be set via environment variables"
+        )
+    init_db()
     while True:
         try:
             print("Fetching Underdog MLB props...")
             underdog_props = fetch_underdog_props()
             print(f"Fetched {len(underdog_props)} props.")
+            save_line_history(underdog_props)
             print("Fetching consensus props...")
             consensus_props = fetch_consensus_props()
             print(f"Fetched consensus for {len(consensus_props)} games.")
             value_props = find_value_props(underdog_props, consensus_props)
-            if value_props:
+            if value_props and not track_only:
                 print(f"Found {len(value_props)} value props! Alerting Telegram.")
                 alert_value_props(value_props)
             else:
@@ -212,4 +285,23 @@ def main_loop():
         time.sleep(CHECK_INTERVAL)
 
 if __name__ == "__main__":
-    main_loop()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Underdog MLB value finder")
+    parser.add_argument(
+        "--plot",
+        metavar="LINE_ID",
+        help="Plot line history for a given Underdog line id and exit",
+    )
+    parser.add_argument(
+        "--track-only",
+        action="store_true",
+        help="Track line history without sending Telegram alerts",
+    )
+    args = parser.parse_args()
+
+    if args.plot:
+        init_db()
+        plot_line_history(args.plot)
+    else:
+        main_loop(track_only=args.track_only)
