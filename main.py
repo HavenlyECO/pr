@@ -959,6 +959,7 @@ def fetch_consensus_props():
     }
     query_params = urllib.parse.urlencode(params)
     try:
+        print("CONSENSUS URL:", f"{url}?{query_params}")
         with urllib.request.urlopen(f"{url}?{query_params}") as resp:
             if resp.status != 200:
                 raise RuntimeError(f"TheOdds API error: {resp.status}")
@@ -1375,6 +1376,8 @@ def send_telegram_message(message):
     data = urllib.parse.urlencode(payload).encode()
     req = urllib.request.Request(url, data=data)
     try:
+        print("TELEGRAM URL:", url)
+        print("TELEGRAM PAYLOAD:", payload)
         with urllib.request.urlopen(req) as resp:
             return resp.status == 200
     except Exception as e:
