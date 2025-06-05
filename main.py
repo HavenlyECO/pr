@@ -942,9 +942,7 @@ def fetch_events(sport: str) -> list:
 
 def get_valid_mlb_markets() -> list:
     """Fetch the list of valid markets for MLB from The Odds API."""
-    url = (
-        f"https://api.the-odds-api.com/v4/sports/baseball_mlb/?apiKey={THE_ODDS_API_KEY}"
-    )
+    url = "https://api.the-odds-api.com/v4/sports/baseball_mlb"
     try:
         with urllib.request.urlopen(url) as resp:
             if resp.status != 200:
