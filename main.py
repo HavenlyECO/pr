@@ -109,6 +109,10 @@ OFFLINE_CONSENSUS_PROPS = [
     }
 ]
 
+OFFLINE_SPORTS = [
+    {"key": "baseball_mlb", "title": "Baseball MLB", "active": True}
+]
+
 
 DB_PATH = os.getenv("LINE_HISTORY_DB", "line_history.db")
 CHECK_INTERVAL = 60  # seconds between checks
@@ -875,11 +879,32 @@ def fetch_underdog_props() -> list:
         _notify_error(f"Underdog fetch failed: {exc}")
         return scrape_underdog_props()
 
+def fetch_sports() -> list:
+    """Retrieve available sports from TheOdds API."""
+    if OFFLINE:
+        return OFFLINE_SPORTS
+    url = "https://api.the-odds-api.com/v4/sports/"
+    params = {"apiKey": THE_ODDS_API_KEY}
+    query_params = urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(f"{url}?{query_params}") as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"TheOdds API error: {resp.status}")
+            return json.loads(resp.read().decode())
+    except Exception as exc:
+        _notify_error(f"Sports fetch failed: {exc}")
+        return []
+
 # --------------- FETCH CONSENSUS MLB PROPS -----------------
 def fetch_consensus_props():
     if OFFLINE:
         return OFFLINE_CONSENSUS_PROPS
-    url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds"
+    sports = fetch_sports()
+    mlb = next((s for s in sports if s.get("key") == "baseball_mlb"), None)
+    if not mlb:
+        _notify_error("baseball_mlb sport not found")
+        return []
+    url = f"https://api.the-odds-api.com/v4/sports/{mlb['key']}/odds"
     params = {
         "apiKey": THE_ODDS_API_KEY,
         "regions": "us",
