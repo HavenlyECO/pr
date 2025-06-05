@@ -3,6 +3,7 @@ import urllib.request
 import urllib.parse
 import time
 import os
+import re
 from difflib import SequenceMatcher
 
 try:
@@ -22,6 +23,23 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 CHECK_INTERVAL = 60  # seconds between checks
 EDGE_THRESHOLD = 0.7 # minimum difference to alert (tune for MLB stat, e.g. 0.5-1)
 PLAYER_MATCH_THRESHOLD = 80  # fuzzy name match ratio threshold
+
+# Map normalized Underdog stat types to TheOdds API market keys.
+# Additional stats can be added here as needed.
+STAT_KEY_MAP = {
+    "hits": ["player_hits"],
+    "home runs": ["player_home_runs"],
+    "total bases": ["player_total_bases"],
+    "rbis": ["player_rbis"],
+    "strikeouts": ["player_strikeouts"],
+    "runs": ["player_runs"],
+    "walks": ["player_walks"],
+    "singles": ["player_singles"],
+    "doubles": ["player_doubles"],
+    "triples": ["player_triples"],
+}
+
+ALL_MARKETS = ",".join(sorted({m for v in STAT_KEY_MAP.values() for m in v}))
 
 
 def _fuzzy_ratio(a: str, b: str) -> float:
@@ -44,6 +62,24 @@ def _normalize_name(name: str) -> str:
         if name.endswith(suffix):
             name = name[: -len(suffix)]
     return name.strip()
+
+
+def _normalize_stat_name(stat: str) -> str:
+    """Normalize stat type names for matching."""
+    stat = stat.lower()
+    stat = re.sub(r"[^a-z0-9]+", " ", stat)
+    return stat.strip()
+
+
+def get_market_keys(stat: str):
+    """Return TheOdds market keys for a given Underdog stat type."""
+    norm = _normalize_stat_name(stat)
+    if norm in STAT_KEY_MAP:
+        return STAT_KEY_MAP[norm]
+    for key, markets in STAT_KEY_MAP.items():
+        if key in norm:
+            return markets
+    return []
 
 
 def player_match(name_a: str, name_b: str, threshold: int = PLAYER_MATCH_THRESHOLD) -> bool:
@@ -87,7 +123,7 @@ def fetch_consensus_props():
     params = {
         "apiKey": THE_ODDS_API_KEY,
         "regions": "us",
-        "markets": "player_hits,player_home_runs,player_total_bases,player_rbis,player_strikeouts,player_runs", # add more as needed
+        "markets": ALL_MARKETS,
         "oddsFormat": "american"
     }
     query_params = urllib.parse.urlencode(params)
@@ -100,33 +136,35 @@ def fetch_consensus_props():
 def find_value_props(ud_props, cons_props, threshold=EDGE_THRESHOLD):
     value_props = []
     for u in ud_props:
-        u_player = u['player']
-        u_stat = u['stat'].lower()
+        u_player = u["player"]
+        market_keys = get_market_keys(u["stat"])
+        if not market_keys:
+            continue
         for game in cons_props:
             for bookmaker in game.get("bookmakers", []):
                 for market in bookmaker.get("markets", []):
                     market_key = market.get("key", "")
-                    # Fuzzy stat matching
-                    if u_stat in market_key:
-                        for outcome in market.get("outcomes", []):
-                            outcome_name = outcome.get("name", "")
-                            if player_match(u_player, outcome_name):
-                                consensus_line = outcome.get("point")
-                                if consensus_line is not None:
-                                    try:
-                                        diff = float(u["line"]) - float(consensus_line)
-                                        if abs(diff) >= threshold:
-                                            value_props.append({
-                                                "player": u["player"],
-                                                "stat": u["stat"],
-                                                "underdog_line": u["line"],
-                                                "consensus_line": consensus_line,
-                                                "diff": diff,
-                                                "game": u["game"],
-                                                "book": bookmaker.get("title", "consensus")
-                                            })
-                                    except Exception as e:
-                                        print("Parse error:", e)
+                    if market_key not in market_keys:
+                        continue
+                    for outcome in market.get("outcomes", []):
+                        outcome_name = outcome.get("name", "")
+                        if player_match(u_player, outcome_name):
+                            consensus_line = outcome.get("point")
+                            if consensus_line is not None:
+                                try:
+                                    diff = float(u["line"]) - float(consensus_line)
+                                    if abs(diff) >= threshold:
+                                        value_props.append({
+                                            "player": u["player"],
+                                            "stat": u["stat"],
+                                            "underdog_line": u["line"],
+                                            "consensus_line": consensus_line,
+                                            "diff": diff,
+                                            "game": u["game"],
+                                            "book": bookmaker.get("title", "consensus"),
+                                        })
+                                except Exception as e:
+                                    print("Parse error:", e)
     return value_props
 
 # --------------- TELEGRAM ALERT -----------------
