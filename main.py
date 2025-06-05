@@ -80,6 +80,19 @@ BANKROLL = float(os.getenv("BANKROLL", "1000"))
 # Base unit amount representing a typical wager size
 BASE_UNIT = float(os.getenv("BASE_UNIT", "10"))
 
+# ----- MACHINE LEARNING CONFIG -----
+USE_ML_MODEL = os.getenv("USE_ML_MODEL", "0") == "1"
+
+# Example logistic regression weights for advanced model
+ML_WEIGHTS = [1.5, 0.5, 0.3, 0.2]  # [stat_diff, ballpark, weather, umpire]
+ML_BIAS = 0.0
+
+# Simplified environment factors by home team abbreviation
+BALLPARK_FACTORS = {"COL": 1.2, "NYY": 1.1, "BOS": 1.05}
+WEATHER_FACTORS = {"COL": 1.05, "NYY": 1.0, "BOS": 0.98}
+UMPIRE_FACTORS = {"COL": 1.02, "NYY": 1.0, "BOS": 1.01}
+
+
 
 def init_db():
     """Initialize the SQLite database for line history and player data."""
@@ -321,10 +334,54 @@ def compute_ev(true_prob: float, odds: float) -> float:
     return true_prob * dec - 1
 
 
-def fetch_player_over_probability(
-    player_name: str, stat: str, line: float, season: str = None, games: int = 100
+def get_environment_factors(game: str | None):
+    """Return ballpark, weather, and umpire factors for the given matchup."""
+    if not game:
+        return 1.0, 1.0, 1.0
+    try:
+        parts = [p.strip() for p in game.split("@", 1)]
+        home = parts[1] if len(parts) == 2 else parts[0]
+    except Exception:
+        home = game.strip()
+    return (
+        BALLPARK_FACTORS.get(home, 1.0),
+        WEATHER_FACTORS.get(home, 1.0),
+        UMPIRE_FACTORS.get(home, 1.0),
+    )
+
+
+def predict_over_probability_ml(
+    player_name: str, stat: str, line: float, game: str | None = None
 ):
-    """Return probability of player going over a line using cached game logs."""
+    """Predict over probability using a simple logistic regression model."""
+    stats = get_recent_player_stats(player_name, stat, 30)
+    if not stats:
+        return None
+    avg_stat = sum(stats) / len(stats)
+    ballpark, weather, umpire = get_environment_factors(game)
+    features = [avg_stat - line, ballpark - 1.0, weather - 1.0, umpire - 1.0]
+    z = ML_BIAS + sum(w * f for w, f in zip(ML_WEIGHTS, features))
+    return 1 / (1 + math.exp(-z))
+
+
+def fetch_player_over_probability(
+    player_name: str,
+    stat: str,
+    line: float,
+    season: str = None,
+    games: int = 100,
+    game: str | None = None,
+):
+    """Return probability of player going over a line.
+
+    Uses a machine learning model when enabled, otherwise falls back to simple
+    historical frequency.
+    """
+
+    if USE_ML_MODEL:
+        prob = predict_over_probability_ml(player_name, stat, line, game)
+        if prob is not None:
+            return prob
 
     stats = get_recent_player_stats(player_name, stat, games)
     if not stats:
@@ -580,7 +637,13 @@ def find_ev_props(ud_props, cons_props, games=100):
         )
         if line is None or over_price is None or under_price is None:
             continue
-        true_over_prob = fetch_player_over_probability(u["player"], _normalize_stat_name(u["stat"]), line, games=games)
+        true_over_prob = fetch_player_over_probability(
+            u["player"],
+            _normalize_stat_name(u["stat"]),
+            line,
+            games=games,
+            game=u.get("game"),
+        )
         if true_over_prob is None:
             continue
         hold, imp_over, imp_under = remove_hold(over_price, under_price)
