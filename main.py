@@ -221,6 +221,29 @@ def plot_line_history(line_id):
     plt.show()
 
 
+def plot_line_history_image(line_id):
+    """Return path to a saved plot image for the line history."""
+    rows = get_line_history(line_id)
+    if not rows:
+        return None
+    import matplotlib.pyplot as plt
+    import tempfile
+
+    times = [datetime.fromtimestamp(r[0]) for r in rows]
+    lines = [r[1] for r in rows]
+    plt.figure()
+    plt.plot(times, lines, marker="o")
+    plt.title(f"Line history for {line_id}")
+    plt.xlabel("Time")
+    plt.ylabel("Line")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    plt.savefig(tmp.name)
+    plt.close()
+    return tmp.name
+
+
 def save_player_performance(player: str, stat: str, logs):
     """Save a list of (date, value) tuples to the player performance table."""
     conn = sqlite3.connect(DB_PATH)
@@ -1166,17 +1189,18 @@ def backtest_line_history():
         results.append((outcome, diff))
 
     if not results:
-        print("No historical data available for backtest.")
-        return
+        return "No historical data available for backtest."
 
     over_hits = sum(1 for o, _ in results if o == "over")
     under_hits = len(results) - over_hits
     avg_diff = sum(d for _, d in results) / len(results)
 
-    print(f"Backtested {len(results)} props")
-    print(f"Over win rate: {over_hits/len(results):.3f}")
-    print(f"Under win rate: {under_hits/len(results):.3f}")
-    print(f"Avg result minus line: {avg_diff:.2f}")
+    return (
+        f"Backtested {len(results)} props\n"
+        f"Over win rate: {over_hits/len(results):.3f}\n"
+        f"Under win rate: {under_hits/len(results):.3f}\n"
+        f"Avg result minus line: {avg_diff:.2f}"
+    )
 
 
 def generate_parlays(ev_props, min_legs=2, max_legs=5, use_corr=True):
@@ -1237,6 +1261,29 @@ def send_telegram_message(message):
             return resp.status == 200
     except Exception as e:
         print("Telegram error:", e)
+        return False
+
+
+def send_telegram_photo(image_path):
+    """Send an image to the configured Telegram chat."""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+    boundary = "----telegramphoto"
+    with open(image_path, "rb") as img:
+        photo_data = img.read()
+    data = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="chat_id"\r\n\r\n{TELEGRAM_CHAT_ID}\r\n'
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="photo"; filename="plot.png"\r\n'
+        "Content-Type: image/png\r\n\r\n"
+    ).encode() + photo_data + f"\r\n--{boundary}--\r\n".encode()
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+    req = urllib.request.Request(url, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status == 200
+    except Exception as e:
+        print("Telegram photo error:", e)
         return False
 
 def alert_value_props(value_props):
@@ -1318,7 +1365,14 @@ def process_telegram_commands():
                 "/history LINE_ID - recent line history\n"
                 "/confirm NAME - manually confirm a player\n"
                 "/scratch NAME - mark a player scratched\n"
-                "/units - show suggested bet sizing"
+                "/units - show suggested bet sizing\n"
+                "/plot LINE_ID - plot line history\n"
+                "/ev - calculate expected value now\n"
+                "/parlay - show parlay EVs\n"
+                "/risk [BANKROLL] [KELLY] [SIMS] - bankroll simulation\n"
+                "/predict PLAYER STAT GAME - predict stat line\n"
+                "/cluster STAT - cluster player probabilities\n"
+                "/backtest - run historical backtest"
             )
         elif text.startswith("/confirm"):
             parts = text.split(maxsplit=1)
@@ -1356,6 +1410,93 @@ def process_telegram_commands():
                 send_telegram_message("\n".join(msgs))
             else:
                 send_telegram_message("No bets meet sizing criteria.")
+        elif text.startswith("/plot"):
+            parts = text.split(maxsplit=1)
+            if len(parts) != 2:
+                send_telegram_message("Usage: /plot LINE_ID")
+                continue
+            path = plot_line_history_image(parts[1])
+            if path:
+                send_telegram_photo(path)
+                os.unlink(path)
+            else:
+                send_telegram_message(f"No history found for line id {parts[1]}")
+        elif text.startswith("/ev"):
+            ud_props = fetch_underdog_props()
+            cons_props = fetch_consensus_props()
+            ev_props = find_ev_props(ud_props, cons_props)
+            lines = [
+                f"{p['player']} {p['stat']} line {p['line']} "
+                f"Over EV: {p['ev_over']:.3f} Under EV: {p['ev_under']:.3f} "
+                f"Hold: {p['hold']:.3f}"
+                for p in ev_props
+            ]
+            send_telegram_message("\n".join(lines) if lines else "No value props found.")
+        elif text.startswith("/parlay"):
+            ud_props = fetch_underdog_props()
+            cons_props = fetch_consensus_props()
+            ev_props = find_ev_props(ud_props, cons_props)
+            parlays = generate_parlays(ev_props)
+            msgs = []
+            for p in parlays[:10]:
+                legs = " | ".join(p["legs"])
+                msgs.append(
+                    f"{p['num_legs']}-leg parlay EV: {p['ev']:.3f} "
+                    f"TrueP: {p['prob']:.3f} Payout: {p['payout']}x -> {legs}"
+                )
+            send_telegram_message("\n".join(msgs) if msgs else "No parlays generated.")
+        elif text.startswith("/risk"):
+            parts = text.split()
+            bankroll = float(parts[1]) if len(parts) > 1 else 1000.0
+            kelly = float(parts[2]) if len(parts) > 2 else 1.0
+            sims = int(parts[3]) if len(parts) > 3 else 1000
+            ud_props = fetch_underdog_props()
+            cons_props = fetch_consensus_props()
+            ev_props = find_ev_props(ud_props, cons_props)
+            avg_final, avg_dd = simulate_drawdown(
+                ev_props, bankroll=bankroll, fraction=kelly, sims=sims
+            )
+            send_telegram_message(
+                f"Avg Final Bankroll: {avg_final:.2f} | Avg Max Drawdown: {avg_dd*100:.1f}%"
+            )
+        elif text.startswith("/predict"):
+            parts = text.split(maxsplit=3)
+            if len(parts) != 4:
+                send_telegram_message("Usage: /predict PLAYER STAT GAME")
+                continue
+            player, stat, game = parts[1], parts[2], parts[3]
+            init_db()
+            value = predict_stat_value_ml(player, stat, game)
+            if value is None:
+                send_telegram_message("Insufficient data to make prediction")
+            else:
+                send_telegram_message(
+                    f"Predicted {stat} for {player} vs {game}: {value:.2f}"
+                )
+        elif text.startswith("/cluster"):
+            parts = text.split(maxsplit=1)
+            if len(parts) != 2:
+                send_telegram_message("Usage: /cluster STAT")
+                continue
+            stat = parts[1]
+            init_db()
+            ud_props = fetch_underdog_props()
+            players = [p for p in ud_props if _normalize_stat_name(p["stat"]) == _normalize_stat_name(stat)]
+            if not players:
+                send_telegram_message("No props found for that stat")
+            else:
+                names = [p["player"] for p in players]
+                lines_vals = [p["line"] for p in players]
+                game_map = {p["player"]: p.get("game") for p in players}
+                clustered = cluster_player_probabilities(names, stat, lines_vals, game_map=game_map)
+                msgs = []
+                for item in clustered:
+                    prob = item["prob"]
+                    prob_str = f"{prob:.3f}" if prob is not None else "N/A"
+                    msgs.append(f"Cluster {item['cluster']} | {item['player']} -> {prob_str}")
+                send_telegram_message("\n".join(msgs))
+        elif text.startswith("/backtest"):
+            send_telegram_message(backtest_line_history())
         else:
             send_telegram_message("Unknown command. Use /help for options.")
 
@@ -1537,6 +1678,6 @@ if __name__ == "__main__":
                 prob_str = f"{prob:.3f}" if prob is not None else "N/A"
                 print(f"Cluster {item['cluster']} | {item['player']} -> {prob_str}")
     elif args.backtest:
-        backtest_line_history()
+        print(backtest_line_history())
     else:
         main_loop(track_only=args.track_only)
