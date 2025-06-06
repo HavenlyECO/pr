@@ -323,7 +323,9 @@ def main() -> None:
             print("No odds found or API returned unexpected data.")
         return
 
-    if args.command in {"moneyline", "historical"}:
+    if args.command == "historical":
+        print(format_moneyline(games))
+    elif args.command == "moneyline":
         print(format_moneyline(games))
     else:
         print(json.dumps(games, indent=2))
