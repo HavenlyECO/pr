@@ -112,29 +112,33 @@ def fetch_historical_odds(
         odds_format=odds_format,
         include_scores=True,
     )
+    print(f"[DEBUG] Requesting historical odds from: {url}")
     try:
-        with urllib.request.urlopen(url) as resp:
-            return json.loads(resp.read().decode())
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as resp:
+            print(f"[DEBUG] HTTP Status: {resp.status}")
+            print(f"[DEBUG] HTTP Headers: {resp.headers}")
+            raw = resp.read()
+            print(f"[DEBUG] Raw API response: {raw!r}")
+            data = json.loads(raw.decode())
+            print(f"[DEBUG] Parsed API response: {data!r}")
+            return data
     except urllib.error.HTTPError as e:
-        message = e.read().decode() if hasattr(e, "read") else str(e)
+        print(f"[DEBUG] HTTPError: {e.code} {e.reason}")
+        if hasattr(e, "headers"):
+            print(f"[DEBUG] Error Headers: {e.headers}")
         try:
-            msg_json = json.loads(message)
-            if msg_json.get("error_code") == "INVALID_HISTORICAL_TIMESTAMP":
-                print(
-                    f"\n[!] No historical data available for {sport_key} on {date}: {msg_json.get('message')}"
-                )
-                print(
-                    "    - This usually means the date is out of range, not yet available, or off-season."
-                )
-                print("    - Try a different, more recent or in-season date.\n")
-                return []
-        except Exception:
-            pass
-        print(f"HTTPError fetching odds: {message}")
-        return []
+            error_body = e.read()
+            print(f"[DEBUG] Error Body: {error_body!r}")
+            error_data = json.loads(error_body.decode())
+            print(f"[DEBUG] Parsed Error Body: {error_data!r}")
+        except Exception as err:
+            print(f"[DEBUG] Could not parse error body: {err}")
+        message = error_body.decode() if 'error_body' in locals() else str(e)
+        raise RuntimeError(f"Failed to fetch historical odds: {message}") from e
     except Exception as e:
-        print(f"Error fetching historical odds: {e}")
-        return []
+        print(f"[DEBUG] Unexpected Exception: {e}")
+        raise
 
 
 def _format_header(idx: int, game: dict) -> str:
@@ -273,6 +277,7 @@ def main() -> None:
             parser.error("--date is required for historical command")
 
     if args.command == "historical":
+        print(f"[DEBUG] Command line args: {args}")
         url = build_historical_odds_url(
             args.sport,
             date=args.date,
