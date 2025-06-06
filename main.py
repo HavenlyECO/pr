@@ -103,7 +103,7 @@ def fetch_historical_odds(
     markets: str = "h2h",
     odds_format: str = "american",
 ):
-    """Fetch historical odds for ``sport_key`` on ``date``."""
+    """Fetch historical odds for a given sport on a specific date."""
     url = build_historical_odds_url(
         sport_key,
         date=date,
@@ -119,13 +119,18 @@ def fetch_historical_odds(
         message = e.read().decode() if hasattr(e, "read") else str(e)
         try:
             msg_json = json.loads(message)
-            if "INVALID_HISTORICAL_TIMESTAMP" in msg_json.get("error_code", ""):
-                print(f"\n[!] No historical data for {sport_key} on {date}: {msg_json.get('message')}")
-                print("    (Maybe the date is out of range or too recent. Try an earlier date.)\n")
+            if msg_json.get("error_code") == "INVALID_HISTORICAL_TIMESTAMP":
+                print(
+                    f"\n[!] No historical data available for {sport_key} on {date}: {msg_json.get('message')}"
+                )
+                print(
+                    "    - This usually means the date is out of range, not yet available, or off-season."
+                )
+                print("    - Try a different, more recent or in-season date.\n")
                 return []
         except Exception:
             pass
-        print(f"HTTPError: {message}")
+        print(f"HTTPError fetching odds: {message}")
         return []
     except Exception as e:
         print(f"Error fetching historical odds: {e}")
