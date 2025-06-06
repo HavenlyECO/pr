@@ -141,12 +141,42 @@ def format_totals(games):
     return "\n".join(lines)
 
 
+def _format_outright_header(idx: int, event: dict) -> str:
+    title = event.get("title", "Outright")
+    time = event.get("commence_time", "")
+    return f"{idx}. {title} ({time})"
+
+
+def format_outrights(events):
+    """Return a formatted string of outright (futures) odds for display."""
+    lines = []
+    for idx, event in enumerate(events, 1):
+        lines.append(_format_outright_header(idx, event))
+        lines.append("   Futures:")
+
+        for bookmaker in event.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "outrights":
+                    continue
+                outcomes = [
+                    f"{o.get('name', '')} ({o.get('price', '')})"
+                    for o in market.get("outcomes", [])
+                ]
+                if outcomes:
+                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
+                break
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch and display odds")
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["moneyline", "spreads", "totals"],
+        choices=["moneyline", "spreads", "totals", "outrights"],
         default="moneyline",
         help="Type of odds to display",
     )
@@ -158,6 +188,8 @@ def main():
     args = parser.parse_args()
 
     markets = "h2h,spreads,totals"
+    if args.command == "outrights":
+        markets = "outrights"
     url = build_odds_url(args.sport, markets=markets)
     print(f"Fetching {args.command} odds for {args.sport}...\n{url}\n")
     odds = fetch_odds(args.sport, markets=markets)
@@ -170,8 +202,10 @@ def main():
         print(format_moneyline(odds))
     elif args.command == "spreads":
         print(format_spreads(odds))
-    else:
+    elif args.command == "totals":
         print(format_totals(odds))
+    else:
+        print(format_outrights(odds))
 
 
 if __name__ == "__main__":

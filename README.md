@@ -28,6 +28,13 @@ To display totals (over/under) odds, run:
 python main.py totals
 ```
 
-The script requests head-to-head, point spread, and totals markets. It prints
+To display outrights (futures) odds, run:
+
+```bash
+python main.py outrights
+```
+
+The script requests head-to-head, point spread, totals, and outright markets as
+needed. It prints
 the API endpoint used and displays odds for the selected market in a clean
 layout.
