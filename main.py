@@ -242,6 +242,45 @@ def format_alternate_team_totals(games):
     return "\n".join(lines)
 
 
+PLAYER_PROP_MARKETS = {
+    "player_hits": "Player Hits",
+    "player_home_runs": "Player Home Runs",
+    "player_strikeouts": "Player Strikeouts",
+}
+
+
+def format_player_props(games):
+    """Return a formatted string of player prop odds for display."""
+    lines = []
+    for idx, game in enumerate(games, 1):
+        lines.append(_format_header(idx, game))
+        lines.append("   Player Props:")
+
+        for bookmaker in game.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                key = market.get("key")
+                if key not in PLAYER_PROP_MARKETS:
+                    continue
+                outcomes = []
+                for o in market.get("outcomes", []):
+                    point = o.get("point")
+                    if point is not None:
+                        outcomes.append(
+                            f"{o.get('name', '')} {point} ({o.get('price', '')})"
+                        )
+                    else:
+                        outcomes.append(f"{o.get('name', '')} ({o.get('price', '')})")
+                if outcomes:
+                    lines.append(
+                        f"      {bm_title} {PLAYER_PROP_MARKETS[key]}: "
+                        + " | ".join(outcomes)
+                    )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def _format_outright_header(idx: int, event: dict) -> str:
     title = event.get("title", "Outright")
     time = event.get("commence_time", "")
@@ -286,6 +325,7 @@ def main():
             "alternate_totals",
             "team_totals",
             "alternate_team_totals",
+            "player_props",
         ],
         default="moneyline",
         help="Type of odds to display",
@@ -313,6 +353,8 @@ def main():
         markets = "team_totals"
     elif args.command == "alternate_team_totals":
         markets = "alternate_team_totals"
+    elif args.command == "player_props":
+        markets = "player_hits,player_home_runs,player_strikeouts"
     url = build_odds_url(
         args.sport,
         markets=markets,
@@ -343,6 +385,8 @@ def main():
         print(format_team_totals(odds))
     elif args.command == "alternate_team_totals":
         print(format_alternate_team_totals(odds))
+    elif args.command == "player_props":
+        print(format_player_props(odds))
     else:
         print(format_outrights(odds))
 
