@@ -1,6 +1,7 @@
 import os
 import pickle
 import json
+import time
 from pathlib import Path
 from datetime import datetime, timedelta
 import urllib.parse
@@ -175,3 +176,25 @@ def predict_win_probability(model_path: str, features: dict) -> float:
     df = pd.DataFrame([features])
     proba = model.predict_proba(df)[0][1]
     return float(proba)
+
+
+def continuous_train_classifier(
+    sport_key: str,
+    start_date: str,
+    *,
+    interval_hours: int = 24,
+    model_out: str = "moneyline_classifier.pkl",
+) -> None:
+    """Continuously train the classifier on new data.
+
+    This utility repeatedly fetches historical odds from ``start_date`` up to
+    the current date, trains a new model and saves it to ``model_out`` every
+    ``interval_hours`` hours. The loop runs indefinitely until interrupted.
+    """
+
+    while True:
+        end_date = datetime.utcnow().strftime("%Y-%m-%d")
+        df = build_dataset_from_api(sport_key, start_date, end_date)
+        train_classifier_df(df, model_out=model_out)
+        print(f"Waiting {interval_hours} hours for next training run...")
+        time.sleep(interval_hours * 3600)
