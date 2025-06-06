@@ -194,6 +194,54 @@ def format_alternate_totals(games):
     return "\n".join(lines)
 
 
+def format_team_totals(games):
+    """Return a formatted string of team totals odds for display."""
+    lines = []
+    for idx, game in enumerate(games, 1):
+        lines.append(_format_header(idx, game))
+        lines.append("   Team Totals:")
+
+        for bookmaker in game.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "team_totals":
+                    continue
+                outcomes = [
+                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
+                    for o in market.get("outcomes", [])
+                ]
+                if outcomes:
+                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
+                break
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def format_alternate_team_totals(games):
+    """Return a formatted string of alternate team totals odds for display."""
+    lines = []
+    for idx, game in enumerate(games, 1):
+        lines.append(_format_header(idx, game))
+        lines.append("   Alternate Team Totals:")
+
+        for bookmaker in game.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "alternate_team_totals":
+                    continue
+                outcomes = [
+                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
+                    for o in market.get("outcomes", [])
+                ]
+                if outcomes:
+                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
+                break
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def _format_outright_header(idx: int, event: dict) -> str:
     title = event.get("title", "Outright")
     time = event.get("commence_time", "")
@@ -236,6 +284,8 @@ def main():
             "outrights",
             "alternate_spreads",
             "alternate_totals",
+            "team_totals",
+            "alternate_team_totals",
         ],
         default="moneyline",
         help="Type of odds to display",
@@ -259,6 +309,10 @@ def main():
         markets = "alternate_spreads"
     elif args.command == "alternate_totals":
         markets = "alternate_totals"
+    elif args.command == "team_totals":
+        markets = "team_totals"
+    elif args.command == "alternate_team_totals":
+        markets = "alternate_team_totals"
     url = build_odds_url(
         args.sport,
         markets=markets,
@@ -285,6 +339,10 @@ def main():
         print(format_alternate_spreads(odds))
     elif args.command == "alternate_totals":
         print(format_alternate_totals(odds))
+    elif args.command == "team_totals":
+        print(format_team_totals(odds))
+    elif args.command == "alternate_team_totals":
+        print(format_alternate_team_totals(odds))
     else:
         print(format_outrights(odds))
 
