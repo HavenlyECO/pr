@@ -229,10 +229,10 @@ def continuous_train_classifier(
     model_out: str = "moneyline_classifier.pkl",
     verbose: bool = False,
 ) -> None:
+    start_dt = safe_fromisoformat(start_date)
     while True:
         end_dt = datetime.utcnow()
         end_date = end_dt.strftime("%Y-%m-%d")
-        start_dt = safe_fromisoformat(start_date)
         if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
             start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
         df = build_dataset_from_api(
