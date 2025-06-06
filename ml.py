@@ -32,6 +32,13 @@ if not API_KEY:
 
 MAX_HISTORICAL_DAYS = 365
 
+
+def safe_fromisoformat(dtstr: str) -> datetime:
+    """Parse an ISO 8601 string, handling trailing 'Z' or 'z' for UTC."""
+    if dtstr.endswith("z") or dtstr.endswith("Z"):
+        dtstr = dtstr[:-1] + "+00:00"
+    return datetime.fromisoformat(dtstr)
+
 def build_historical_odds_url(
     sport_key: str,
     *,
@@ -132,8 +139,8 @@ def build_dataset_from_api(
     markets: str = "h2h",
     verbose: bool = False,
 ) -> pd.DataFrame:
-    start = datetime.fromisoformat(start_date)
-    end = datetime.fromisoformat(end_date)
+    start = safe_fromisoformat(start_date)
+    end = safe_fromisoformat(end_date)
     if (end - start).days > MAX_HISTORICAL_DAYS:
         raise ValueError(
             f"Date range exceeds {MAX_HISTORICAL_DAYS} days which is the maximum allowed by the Odds API"
@@ -225,7 +232,7 @@ def continuous_train_classifier(
     while True:
         end_dt = datetime.utcnow()
         end_date = end_dt.strftime("%Y-%m-%d")
-        start_dt = datetime.fromisoformat(start_date)
+        start_dt = safe_fromisoformat(start_date)
         if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
             start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
         df = build_dataset_from_api(
@@ -253,7 +260,7 @@ def _cli():
     if args.once:
         end_dt = datetime.utcnow()
         end_date = end_dt.strftime("%Y-%m-%d")
-        start_dt = datetime.fromisoformat(args.start_date)
+        start_dt = safe_fromisoformat(args.start_date)
         if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
             start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
         df = build_dataset_from_api(args.sport, start_dt.strftime("%Y-%m-%d"), end_date, verbose=args.verbose)
