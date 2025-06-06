@@ -128,4 +128,6 @@ python main.py continuous_train_classifier --sport=baseball_mlb \
 The process runs indefinitely until interrupted and writes the model to the path
 given by ``--model-out`` after each training cycle.
 Note that The Odds API only provides historical results for roughly the last
-year. Using a start date older than this will result in missing data.
+year. If the supplied ``--start-date`` is older than that window, the
+continuous training command automatically clamps it to the most recent date
+allowed by the API.
