@@ -73,7 +73,11 @@ def fetch_historical_games(
     )
     try:
         with urllib.request.urlopen(url) as resp:
-            return json.loads(resp.read().decode())
+            data = json.loads(resp.read().decode())
+            # Always extract the "data" key if present
+            if isinstance(data, dict) and "data" in data:
+                return data["data"]
+            return data if isinstance(data, list) else []
     except urllib.error.HTTPError as e:
         message = e.read().decode() if hasattr(e, "read") else str(e)
         try:
