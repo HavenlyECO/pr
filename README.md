@@ -28,6 +28,18 @@ To display totals (over/under) odds, run:
 python main.py totals
 ```
 
+To display alternate spreads odds, run:
+
+```bash
+python main.py alternate_spreads
+```
+
+To display alternate totals odds, run:
+
+```bash
+python main.py alternate_totals
+```
+
 To display outrights (futures) odds, run:
 
 ```bash
