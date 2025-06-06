@@ -371,6 +371,7 @@ def main():
             "historical",
             "train_classifier",
             "predict_classifier",
+            "continuous_train_classifier",
         ],
         default="moneyline",
         help="Type of odds to display",
@@ -420,6 +421,12 @@ def main():
         default=None,
         help="End date for training data in YYYY-MM-DD format",
     )
+    parser.add_argument(
+        "--interval-hours",
+        type=int,
+        default=24,
+        help="Interval between training runs in hours for continuous training",
+    )
     args = parser.parse_args()
 
     if args.command == "train_classifier":
@@ -452,6 +459,19 @@ def main():
         feature_values = json.loads(args.features)
         prob = predict_win_probability(args.model, feature_values)
         print(f"Home win probability: {prob:.3f}")
+        return
+
+    if args.command == "continuous_train_classifier":
+        from ml import continuous_train_classifier
+
+        if not args.start_date:
+            parser.error("--start-date is required for continuous_train_classifier")
+        continuous_train_classifier(
+            args.sport,
+            args.start_date,
+            interval_hours=args.interval_hours,
+            model_out=args.model_out,
+        )
         return
 
     markets = "h2h,spreads,totals"

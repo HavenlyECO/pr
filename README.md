@@ -112,3 +112,16 @@ python main.py predict_classifier --features='{"home_team_stat":1.2,"away_team_s
 ```
 
 The command prints the home team win probability.
+
+To keep the classifier up to date without manually running a command each time,
+use the continuous training mode. This repeatedly fetches historical data from a
+start date up to the current day and retrains the model on a fixed interval
+(24&nbsp;hours by default):
+
+```bash
+python main.py continuous_train_classifier --sport=baseball_mlb \
+    --start-date=2024-04-01 --interval-hours=24
+```
+
+The process runs indefinitely until interrupted and writes the model to the path
+given by ``--model-out`` after each training cycle.
