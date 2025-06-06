@@ -214,8 +214,21 @@ def continuous_train_classifier(
     """
 
     while True:
-        end_date = datetime.utcnow().strftime("%Y-%m-%d")
-        df = build_dataset_from_api(sport_key, start_date, end_date)
+        end_dt = datetime.utcnow()
+        end_date = end_dt.strftime("%Y-%m-%d")
+
+        # The Odds API only supports a one year historical window. If the
+        # configured ``start_date`` exceeds this range, clamp it so that the
+        # request stays within the allowed limit.
+        start_dt = datetime.fromisoformat(start_date)
+        if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
+            start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
+
+        df = build_dataset_from_api(
+            sport_key,
+            start_dt.strftime("%Y-%m-%d"),
+            end_date,
+        )
         train_classifier_df(df, model_out=model_out)
         print(f"Waiting {interval_hours} hours for next training run...")
         time.sleep(interval_hours * 3600)
