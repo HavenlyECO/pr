@@ -29,7 +29,7 @@ def build_historical_odds_url(
 ) -> str:
     """Return historical odds API URL."""
     base_url = (
-        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds-history"
     )
     params = {
         "apiKey": API_KEY,
@@ -57,8 +57,12 @@ def fetch_historical_games(
         markets=markets,
         odds_format=odds_format,
     )
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:  # pragma: no cover - network error handling
+        message = e.read().decode() if hasattr(e, "read") else str(e)
+        raise RuntimeError(f"Failed to fetch historical games: {message}") from e
 
 
 def _parse_game(game: dict) -> dict | None:
