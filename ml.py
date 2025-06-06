@@ -141,15 +141,25 @@ def build_dataset_from_api(
     rows: list[dict] = []
     current = start
     while current <= end:
-        date_str = current.strftime("%Y-%m-%d")
+        # Use a random time within the current day to avoid hitting
+        # the same cached timestamp on the API for every request.
+        hour = random.randint(0, 23)
+        minute = random.randint(0, 59)
+        second = random.randint(0, 59)
+        date_iso = (
+            current.replace(hour=hour, minute=minute, second=second, microsecond=0)
+            .strftime("%Y-%m-%dT%H:%M:%SZ")
+        )
+        if verbose:
+            print(f"Requesting data for: {date_iso}")
         games = fetch_historical_games(
             sport_key,
-            date=date_str,
+            date=date_iso,
             regions=regions,
             markets=markets,
         )
         if verbose:
-            print(f"Fetched {len(games)} games for {date_str}")
+            print(f"Fetched {len(games)} games for {date_iso}")
         for game in games:
             row = _parse_game(game)
             if row:
