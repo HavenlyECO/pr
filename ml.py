@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import urllib.parse
 import urllib.request
+import logging
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -17,6 +18,12 @@ API_KEY = os.getenv("THE_ODDS_API_KEY")
 
 if not API_KEY:
     raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 
 # The Odds API only allows fetching historical data for roughly the last year.
 # Requests outside this window return HTTP 422 (INVALID_HISTORICAL_TIMESTAMP).
@@ -65,15 +72,20 @@ def fetch_historical_games(
         odds_format=odds_format,
         include_scores=True,
     )
+    logging.info("Fetching %s", url)
     try:
         with urllib.request.urlopen(url) as resp:
-            return json.loads(resp.read().decode())
+            data = json.loads(resp.read().decode())
+            logging.info("Fetched %d games for %s", len(data), date)
+            return data
     except urllib.error.HTTPError as e:  # pragma: no cover - network error handling
         message = e.read().decode() if hasattr(e, "read") else str(e)
         if "INVALID_HISTORICAL_TIMESTAMP" in message:
+            logging.warning("Historical data is not available for date %s", date)
             raise ValueError(
                 "Historical data is not available for the requested date"
             ) from e
+        logging.error("Failed to fetch historical games for %s: %s", date, message)
         raise RuntimeError(f"Failed to fetch historical games: {message}") from e
 
 
@@ -81,6 +93,9 @@ def _parse_game(game: dict) -> dict | None:
     """Extract training features from a game record."""
     home = game.get("home_team")
     away = game.get("away_team")
+    if not home or not away:
+        logging.debug("Missing team info, skipping game.")
+        return None
     home_price = None
     away_price = None
     for bm in game.get("bookmakers", []):
@@ -98,10 +113,19 @@ def _parse_game(game: dict) -> dict | None:
 
     scores = {s.get("name"): s.get("score") for s in (game.get("scores") or [])}
     if home_price is None or away_price is None:
+        logging.debug("Missing price info, skipping game.")
         return None
     if home not in scores or away not in scores:
+        logging.debug("Missing score info, skipping game.")
         return None
-    home_win = 1 if scores[home] > scores[away] else 0
+    try:
+        home_score = float(scores[home])
+        away_score = float(scores[away])
+    except Exception:
+        logging.debug("Score is not numeric, skipping game.")
+        return None
+
+    home_win = 1 if home_score > away_score else 0
     return {
         "home_price": home_price,
         "away_price": away_price,
@@ -135,21 +159,27 @@ def build_dataset_from_api(
                 regions=regions,
                 markets=markets,
             )
-            print(f"Fetched {len(games)} games for {date_str}")
-            print(json.dumps(games[:1], indent=2))
         except ValueError:
             # Skip dates that are outside the API's historical range
             current += timedelta(days=1)
             continue
+
+        if not games:
+            logging.info("No games returned for %s", date_str)
+        else:
+            logging.info("Fetched %d games for %s", len(games), date_str)
+
         for game in games:
             row = _parse_game(game)
             if not row:
-                print("Skipping game, parse failed:", json.dumps(game, indent=2))
+                logging.debug("Skipping game, parse failed")
             else:
                 rows.append(row)
         current += timedelta(days=1)
     if not rows:
+        logging.error("No historical data with complete features was returned for the given range.")
         raise RuntimeError("No historical data returned")
+    logging.info("Dataset contains %d rows.", len(rows))
     return pd.DataFrame(rows)
 
 
@@ -177,10 +207,10 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     model.fit(X_train, y_train)
     preds = model.predict(X_test)
     acc = accuracy_score(y_test, preds)
-    print(f"Validation accuracy: {acc:.3f}")
+    logging.info("Validation accuracy: %.3f", acc)
     with open(model_out, "wb") as f:
         pickle.dump(model, f)
-    print(f"Model saved to {model_out}")
+    logging.info("Model saved to %s", model_out)
 
 
 def train_classifier(dataset_path: str, model_out: str = "moneyline_classifier.pkl") -> None:
@@ -238,5 +268,46 @@ def continuous_train_classifier(
             end_date,
         )
         train_classifier_df(df, model_out=model_out)
-        print(f"Waiting {interval_hours} hours for next training run...")
+        logging.info("Waiting %d hours for next training run...", interval_hours)
         time.sleep(interval_hours * 3600)
+
+
+def _cli() -> None:
+    """Command line interface for training utilities."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ML Odds Trainer")
+    parser.add_argument("--sport", default="baseball_mlb")
+    parser.add_argument("--start-date", required=True)
+    parser.add_argument("--interval-hours", type=int, default=24)
+    parser.add_argument("--model-out", default="moneyline_classifier.pkl")
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Run only one training cycle instead of looping",
+    )
+    args = parser.parse_args()
+
+    if args.once:
+        end_dt = datetime.utcnow()
+        end_date = end_dt.strftime("%Y-%m-%d")
+        start_dt = datetime.fromisoformat(args.start_date)
+        if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
+            start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
+        df = build_dataset_from_api(
+            args.sport,
+            start_dt.strftime("%Y-%m-%d"),
+            end_date,
+        )
+        train_classifier_df(df, model_out=args.model_out)
+    else:
+        continuous_train_classifier(
+            args.sport,
+            args.start_date,
+            interval_hours=args.interval_hours,
+            model_out=args.model_out,
+        )
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI execution
+    _cli()
