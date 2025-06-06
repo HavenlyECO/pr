@@ -12,6 +12,24 @@ if not API_KEY:
     raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
 
 
+def build_odds_url(
+    sport_key: str,
+    *,
+    regions: str = "us",
+    markets: str = "h2h",
+    odds_format: str = "american",
+) -> str:
+    """Return the fully qualified odds API URL."""
+    base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
+    params = {
+        "apiKey": API_KEY,
+        "regions": regions,
+        "markets": markets,
+        "oddsFormat": odds_format,
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
 def fetch_odds(
     sport_key: str,
     *,
@@ -33,14 +51,12 @@ def fetch_odds(
         Format of the odds to return. Defaults to ``"american"``.
     """
 
-    base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
-    params = {
-        "apiKey": API_KEY,
-        "regions": regions,
-        "markets": markets,
-        "oddsFormat": odds_format,
-    }
-    url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    url = build_odds_url(
+        sport_key,
+        regions=regions,
+        markets=markets,
+        odds_format=odds_format,
+    )
     with urllib.request.urlopen(url) as resp:
         return json.loads(resp.read().decode())
 
@@ -53,6 +69,7 @@ def format_odds(games):
         away = game.get("away_team", "N/A")
         time = game.get("commence_time", "")
         lines.append(f"{idx}. {home} vs {away} ({time})")
+        lines.append("   Head-to-Head (Moneyline):")
 
         for bookmaker in game.get("bookmakers", []):
             bm_title = bookmaker.get("title", bookmaker.get("key", ""))
@@ -64,7 +81,7 @@ def format_odds(games):
                     for o in market.get("outcomes", [])
                 ]
                 if outcomes:
-                    lines.append(f"   {bm_title}: " + " | ".join(outcomes))
+                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
                 break
         lines.append("")
 
@@ -73,7 +90,8 @@ def format_odds(games):
 
 def main():
     key = "baseball_mlb"
-    print(f"Fetching odds for {key}...\n")
+    url = build_odds_url(key, markets="h2h,spreads")
+    print(f"Fetching odds for {key}...\n{url}\n")
     odds = fetch_odds(key, markets="h2h,spreads")
 
     if not odds:
