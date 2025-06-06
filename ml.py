@@ -8,16 +8,32 @@ import urllib.parse
 import urllib.request
 import logging
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    raise ImportError(
+        "python-dotenv is required. Install it with 'pip install python-dotenv'"
+    )
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
 
+# Explicitly load environment variables from the repo root .env
+ROOT_DIR = Path(__file__).resolve().parent
+DOTENV_PATH = ROOT_DIR / ".env"
+if not DOTENV_PATH.exists():
+    raise RuntimeError(f".env file not found at {DOTENV_PATH}")
+load_dotenv(dotenv_path=DOTENV_PATH)
+
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 
 if not API_KEY:
-    raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
+    raise RuntimeError(
+        "THE_ODDS_API_KEY environment variable is not set (check /pr/.env)"
+    )
 
 logging.basicConfig(
     level=logging.INFO,
