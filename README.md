@@ -70,6 +70,8 @@ To display historical odds for a specific date, run:
 python main.py historical --date=2024-01-01
 ```
 
+Historical data is only available for approximately the last year.
+
 The script requests head-to-head, point spread, totals, and outright markets as
 needed. It prints
 the API endpoint used and displays odds for the selected market in a clean
@@ -125,3 +127,5 @@ python main.py continuous_train_classifier --sport=baseball_mlb \
 
 The process runs indefinitely until interrupted and writes the model to the path
 given by ``--model-out`` after each training cycle.
+Note that The Odds API only provides historical results for roughly the last
+year. Using a start date older than this will result in missing data.

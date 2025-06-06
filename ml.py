@@ -18,6 +18,10 @@ API_KEY = os.getenv("THE_ODDS_API_KEY")
 if not API_KEY:
     raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
 
+# The Odds API only allows fetching historical data for roughly the last year.
+# Requests outside this window return HTTP 422 (INVALID_HISTORICAL_TIMESTAMP).
+MAX_HISTORICAL_DAYS = 365
+
 
 def build_historical_odds_url(
     sport_key: str,
@@ -62,6 +66,10 @@ def fetch_historical_games(
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:  # pragma: no cover - network error handling
         message = e.read().decode() if hasattr(e, "read") else str(e)
+        if "INVALID_HISTORICAL_TIMESTAMP" in message:
+            raise ValueError(
+                "Historical data is not available for the requested date"
+            ) from e
         raise RuntimeError(f"Failed to fetch historical games: {message}") from e
 
 
@@ -108,16 +116,25 @@ def build_dataset_from_api(
     """Return a dataframe of historical games between ``start_date`` and ``end_date``."""
     start = datetime.fromisoformat(start_date)
     end = datetime.fromisoformat(end_date)
+    if (end - start).days > MAX_HISTORICAL_DAYS:
+        raise ValueError(
+            f"Date range exceeds {MAX_HISTORICAL_DAYS} days which is the maximum allowed by the Odds API"
+        )
     rows: list[dict] = []
     current = start
     while current <= end:
         date_str = current.strftime("%Y-%m-%d")
-        games = fetch_historical_games(
-            sport_key,
-            date=date_str,
-            regions=regions,
-            markets=markets,
-        )
+        try:
+            games = fetch_historical_games(
+                sport_key,
+                date=date_str,
+                regions=regions,
+                markets=markets,
+            )
+        except ValueError:
+            # Skip dates that are outside the API's historical range
+            current += timedelta(days=1)
+            continue
         for game in games:
             row = _parse_game(game)
             if row:
