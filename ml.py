@@ -135,6 +135,8 @@ def build_dataset_from_api(
                 regions=regions,
                 markets=markets,
             )
+            print(f"Fetched {len(games)} games for {date_str}")
+            print(json.dumps(games[:1], indent=2))
         except ValueError:
             # Skip dates that are outside the API's historical range
             current += timedelta(days=1)
