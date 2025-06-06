@@ -143,7 +143,9 @@ def build_dataset_from_api(
             continue
         for game in games:
             row = _parse_game(game)
-            if row:
+            if not row:
+                print("Skipping game, parse failed:", json.dumps(game, indent=2))
+            else:
                 rows.append(row)
         current += timedelta(days=1)
     if not rows:
