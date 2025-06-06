@@ -64,6 +64,12 @@ To display outrights (futures) odds, run:
 python main.py outrights
 ```
 
+To display historical odds for a specific date, run:
+
+```bash
+python main.py historical --date=2024-01-01
+```
+
 The script requests head-to-head, point spread, totals, and outright markets as
 needed. It prints
 the API endpoint used and displays odds for the selected market in a clean
