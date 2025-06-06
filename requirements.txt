@@ -1,5 +1,1 @@
-torch
-rapidfuzz
-fuzzywuzzy
-matplotlib
 python-dotenv
