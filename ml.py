@@ -193,7 +193,11 @@ def build_dataset_from_api(
                 rows.append(row)
         current += timedelta(days=1)
     if not rows:
-        logging.error("No historical data with complete features was returned for the given range.")
+        print(
+            "\nNo historical data returned by Odds API for the selected date range.\n"
+            "This may be because the data is not yet available for recent games or for future dates.\n"
+            "Try an earlier date range (at least a week or two in the past).\n"
+        )
         raise RuntimeError("No historical data returned")
     logging.info("Dataset contains %d rows.", len(rows))
     return pd.DataFrame(rows)
