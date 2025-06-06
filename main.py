@@ -297,8 +297,16 @@ def main() -> None:
             game_period_markets=args.game_period_markets,
         )
 
-    if not odds:
-        print("No odds found for your query.")
+    if (
+        not odds
+        or not isinstance(odds, list)
+        or not all(isinstance(g, dict) for g in odds)
+    ):
+        # Handle API errors or empty/no-games gracefully
+        if isinstance(odds, dict) and odds.get("message"):
+            print(f"API message: {odds.get('message')}")
+        else:
+            print("No odds found or API returned unexpected data.")
         return
 
     if args.command in {"moneyline", "historical"}:
