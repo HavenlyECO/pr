@@ -12,13 +12,6 @@ if not API_KEY:
     raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
 
 
-def fetch_sports():
-    """Return a list of active sports from The Odds API."""
-    url = f"https://api.the-odds-api.com/v4/sports?apiKey={API_KEY}"
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
-
-
 def fetch_odds(
     sport_key: str,
     *,
@@ -52,21 +45,42 @@ def fetch_odds(
         return json.loads(resp.read().decode())
 
 
-def main():
-    sports = fetch_sports()
-    active = [s for s in sports if s.get("active")]
-    print("Active sports:")
-    for sport in active:
-        print(f"{sport['key']}: {sport['title']}")
+def format_odds(games):
+    """Return a formatted string of odds for display."""
+    lines = []
+    for idx, game in enumerate(games, 1):
+        home = game.get("home_team", "N/A")
+        away = game.get("away_team", "N/A")
+        time = game.get("commence_time", "")
+        lines.append(f"{idx}. {home} vs {away} ({time})")
 
-    if not active:
-        print("No active sports found.")
+        for bookmaker in game.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "h2h":
+                    continue
+                outcomes = [
+                    f"{o.get('name', '')} {o.get('price', '')}"
+                    for o in market.get("outcomes", [])
+                ]
+                if outcomes:
+                    lines.append(f"   {bm_title}: " + " | ".join(outcomes))
+                break
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def main():
+    key = "baseball_mlb"
+    print(f"Fetching odds for {key}...\n")
+    odds = fetch_odds(key, markets="h2h,spreads")
+
+    if not odds:
+        print("No odds found.")
         return
 
-    key = "baseball_mlb"
-    print(f"\nFetching odds for {key}...")
-    odds = fetch_odds(key, markets="h2h,spreads")
-    print(json.dumps(odds, indent=2)[:1000])
+    print(format_odds(odds))
 
 
 if __name__ == "__main__":
