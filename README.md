@@ -52,6 +52,12 @@ To display alternate team totals odds, run:
 python main.py alternate_team_totals
 ```
 
+To display player props odds, run:
+
+```bash
+python main.py player_props
+```
+
 To display outrights (futures) odds, run:
 
 ```bash
