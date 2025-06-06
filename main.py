@@ -1,21 +1,30 @@
 import argparse
 import json
 import os
+import sys
 import urllib.parse
 import urllib.request
+import urllib.error
+from pathlib import Path
+
 try:
     from dotenv import load_dotenv
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    def load_dotenv():
-        """Fallback no-op if python-dotenv isn't installed."""
-        pass
+except ImportError:
+    print("python-dotenv is required. Install it with 'pip install python-dotenv'")
+    sys.exit(1)
 
-load_dotenv()
+# Always load .env from the project root
+ROOT_DIR = Path(__file__).resolve().parent
+DOTENV_PATH = ROOT_DIR / ".env"
+if DOTENV_PATH.exists():
+    load_dotenv(DOTENV_PATH)
+else:
+    print(f"Warning: .env file not found at {DOTENV_PATH}")
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
-
 if not API_KEY:
-    raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
+    print("THE_ODDS_API_KEY environment variable is not set. Please set it in your .env file.")
+    sys.exit(1)
 
 
 def build_odds_url(
@@ -26,7 +35,7 @@ def build_odds_url(
     odds_format: str = "american",
     game_period_markets: str | None = None,
 ) -> str:
-    """Return the fully qualified odds API URL."""
+    """Return fully qualified odds API URL."""
     base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
     params = {
         "apiKey": API_KEY,
@@ -47,20 +56,7 @@ def fetch_odds(
     odds_format: str = "american",
     game_period_markets: str | None = None,
 ):
-    """Fetch upcoming odds for a given sport.
-
-    Parameters
-    ----------
-    sport_key: str
-        The key of the sport (e.g. ``"soccer_epl"``).
-    regions: str, optional
-        Comma separated region codes. Defaults to ``"us"``.
-    markets: str, optional
-        Market types to return, e.g. ``"h2h,spreads"``. Defaults to ``"h2h"``.
-    odds_format: str, optional
-        Format of the odds to return. Defaults to ``"american"``.
-    """
-
+    """Fetch upcoming odds for ``sport_key``."""
     url = build_odds_url(
         sport_key,
         regions=regions,
@@ -68,8 +64,12 @@ def fetch_odds(
         odds_format=odds_format,
         game_period_markets=game_period_markets,
     )
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        print(f"Error fetching odds: {e}")
+        return []
 
 
 def build_historical_odds_url(
@@ -81,10 +81,8 @@ def build_historical_odds_url(
     odds_format: str = "american",
     include_scores: bool = False,
 ) -> str:
-    """Return the fully qualified historical odds API URL."""
-    base_url = (
-        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
-    )
+    """Return fully qualified historical odds API URL."""
+    base_url = f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
     params = {
         "apiKey": API_KEY,
         "regions": regions,
@@ -105,7 +103,7 @@ def fetch_historical_odds(
     markets: str = "h2h",
     odds_format: str = "american",
 ):
-    """Fetch historical odds for a given sport on a specific date."""
+    """Fetch historical odds for ``sport_key`` on ``date``."""
     url = build_historical_odds_url(
         sport_key,
         date=date,
@@ -117,9 +115,21 @@ def fetch_historical_odds(
     try:
         with urllib.request.urlopen(url) as resp:
             return json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:  # pragma: no cover - network error handling
+    except urllib.error.HTTPError as e:
         message = e.read().decode() if hasattr(e, "read") else str(e)
-        raise RuntimeError(f"Failed to fetch historical odds: {message}") from e
+        try:
+            msg_json = json.loads(message)
+            if "INVALID_HISTORICAL_TIMESTAMP" in msg_json.get("error_code", ""):
+                print(f"\n[!] No historical data for {sport_key} on {date}: {msg_json.get('message')}")
+                print("    (Maybe the date is out of range or too recent. Try an earlier date.)\n")
+                return []
+        except Exception:
+            pass
+        print(f"HTTPError: {message}")
+        return []
+    except Exception as e:
+        print(f"Error fetching historical odds: {e}")
+        return []
 
 
 def _format_header(idx: int, game: dict) -> str:
@@ -129,244 +139,26 @@ def _format_header(idx: int, game: dict) -> str:
     return f"{idx}. {home} vs {away} ({time})"
 
 
-def format_moneyline(games):
-    """Return a formatted string of moneyline odds for display."""
-    lines = []
+def format_moneyline(games: list[dict]) -> str:
+    """Return a human readable moneyline summary."""
+    lines: list[str] = []
     for idx, game in enumerate(games, 1):
         lines.append(_format_header(idx, game))
         lines.append("   Head-to-Head (Moneyline):")
-
         for bookmaker in game.get("bookmakers", []):
             bm_title = bookmaker.get("title", bookmaker.get("key", ""))
             for market in bookmaker.get("markets", []):
                 if market.get("key") != "h2h":
                     continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('price', '')}"
-                    for o in market.get("outcomes", [])
-                ]
+                outcomes = [f"{o.get('name', '')} {o.get('price', '')}" for o in market.get("outcomes", [])]
                 if outcomes:
                     lines.append(f"      {bm_title}: " + " | ".join(outcomes))
                 break
         lines.append("")
-
     return "\n".join(lines)
 
 
-def format_spreads(games):
-    """Return a formatted string of point spread odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Spreads (Handicap):")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "spreads":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def format_totals(games):
-    """Return a formatted string of totals (over/under) odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Totals (Over/Under):")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "totals":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def format_alternate_spreads(games):
-    """Return a formatted string of alternate spread odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Alternate Spreads:")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "alternate_spreads":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def format_alternate_totals(games):
-    """Return a formatted string of alternate totals odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Alternate Totals:")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "alternate_totals":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def format_team_totals(games):
-    """Return a formatted string of team totals odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Team Totals:")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "team_totals":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def format_alternate_team_totals(games):
-    """Return a formatted string of alternate team totals odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Alternate Team Totals:")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "alternate_team_totals":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-PLAYER_PROP_MARKETS = {
-    "player_hits": "Player Hits",
-    "player_home_runs": "Player Home Runs",
-    "player_strikeouts": "Player Strikeouts",
-}
-
-
-def format_player_props(games):
-    """Return a formatted string of player prop odds for display."""
-    lines = []
-    for idx, game in enumerate(games, 1):
-        lines.append(_format_header(idx, game))
-        lines.append("   Player Props:")
-
-        for bookmaker in game.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                key = market.get("key")
-                if key not in PLAYER_PROP_MARKETS:
-                    continue
-                outcomes = []
-                for o in market.get("outcomes", []):
-                    point = o.get("point")
-                    if point is not None:
-                        outcomes.append(
-                            f"{o.get('name', '')} {point} ({o.get('price', '')})"
-                        )
-                    else:
-                        outcomes.append(f"{o.get('name', '')} ({o.get('price', '')})")
-                if outcomes:
-                    lines.append(
-                        f"      {bm_title} {PLAYER_PROP_MARKETS[key]}: "
-                        + " | ".join(outcomes)
-                    )
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def _format_outright_header(idx: int, event: dict) -> str:
-    title = event.get("title", "Outright")
-    time = event.get("commence_time", "")
-    return f"{idx}. {title} ({time})"
-
-
-def format_outrights(events):
-    """Return a formatted string of outright (futures) odds for display."""
-    lines = []
-    for idx, event in enumerate(events, 1):
-        lines.append(_format_outright_header(idx, event))
-        lines.append("   Futures:")
-
-        for bookmaker in event.get("bookmakers", []):
-            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "outrights":
-                    continue
-                outcomes = [
-                    f"{o.get('name', '')} ({o.get('price', '')})"
-                    for o in market.get("outcomes", [])
-                ]
-                if outcomes:
-                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
-                break
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch and display odds")
     parser.add_argument(
         "command",
@@ -389,73 +181,43 @@ def main():
         default="moneyline",
         help="Type of odds to display",
     )
-    parser.add_argument(
-        "--sport",
-        default="baseball_mlb",
-        help="Sport key, e.g. baseball_mlb",
-    )
+    parser.add_argument("--sport", default="baseball_mlb", help="Sport key, e.g. baseball_mlb")
     parser.add_argument(
         "--game-period-markets",
         default=None,
         help="Comma separated game period markets to include, e.g. first_half_totals",
     )
-    parser.add_argument(
-        "--dataset",
-        default=None,
-        help="CSV file for training the moneyline classifier",
-    )
-    parser.add_argument(
-        "--model-out",
-        default="moneyline_classifier.pkl",
-        help="Where to save the trained classifier",
-    )
-    parser.add_argument(
-        "--model",
-        default="moneyline_classifier.pkl",
-        help="Path to a trained classifier for prediction",
-    )
-    parser.add_argument(
-        "--features",
-        default=None,
-        help="JSON string of feature values for prediction",
-    )
-    parser.add_argument(
-        "--date",
-        default=None,
-        help="Date for historical odds in YYYY-MM-DD format",
-    )
-    parser.add_argument(
-        "--start-date",
-        default=None,
-        help="Start date for training data in YYYY-MM-DD format",
-    )
-    parser.add_argument(
-        "--end-date",
-        default=None,
-        help="End date for training data in YYYY-MM-DD format",
-    )
+    parser.add_argument("--dataset", default=None, help="CSV file for training the moneyline classifier")
+    parser.add_argument("--model-out", default="moneyline_classifier.pkl", help="Where to save the trained classifier")
+    parser.add_argument("--model", default="moneyline_classifier.pkl", help="Path to a trained classifier for prediction")
+    parser.add_argument("--features", default=None, help="JSON string of feature values for prediction")
+    parser.add_argument("--date", default=None, help="Date for historical odds in YYYY-MM-DD format")
+    parser.add_argument("--start-date", default=None, help="Start date for training data in YYYY-MM-DD format")
+    parser.add_argument("--end-date", default=None, help="End date for training data in YYYY-MM-DD format")
     parser.add_argument(
         "--interval-hours",
         type=int,
         default=24,
         help="Interval between training runs in hours for continuous training",
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
 
+    if args.verbose:
+        import logging
+
+        logging.basicConfig(level=logging.INFO)
+        print("Verbose logging enabled.")
+
+    # ML related imports deferred until needed
     if args.command == "train_classifier":
-        from ml import (
-            train_classifier,
-            train_classifier_df,
-            build_dataset_from_api,
-        )
+        from ml import train_classifier, train_classifier_df, build_dataset_from_api
 
         if args.dataset:
             train_classifier(args.dataset, model_out=args.model_out)
         else:
             if not args.start_date or not args.end_date:
-                parser.error(
-                    "--dataset or --start-date/--end-date required for train_classifier"
-                )
+                parser.error("--dataset or --start-date/--end-date required for train_classifier")
             df = build_dataset_from_api(
                 args.sport,
                 args.start_date,
@@ -487,6 +249,7 @@ def main():
         )
         return
 
+    # Odds viewing commands
     markets = "h2h,spreads,totals"
     if args.command == "outrights":
         markets = "outrights"
@@ -503,15 +266,14 @@ def main():
     elif args.command == "historical":
         if args.date is None:
             parser.error("--date is required for historical command")
+
     if args.command == "historical":
         url = build_historical_odds_url(
             args.sport,
             date=args.date,
             markets=markets,
         )
-        print(
-            f"Fetching historical odds for {args.sport} on {args.date}...\n{url}\n"
-        )
+        print(f"Fetching historical odds for {args.sport} on {args.date}...\n{url}\n")
         odds = fetch_historical_odds(
             args.sport,
             date=args.date,
@@ -534,26 +296,10 @@ def main():
         print("No odds found.")
         return
 
-    if args.command == "moneyline":
-        print(format_moneyline(odds))
-    elif args.command == "spreads":
-        print(format_spreads(odds))
-    elif args.command == "totals":
-        print(format_totals(odds))
-    elif args.command == "alternate_spreads":
-        print(format_alternate_spreads(odds))
-    elif args.command == "alternate_totals":
-        print(format_alternate_totals(odds))
-    elif args.command == "team_totals":
-        print(format_team_totals(odds))
-    elif args.command == "alternate_team_totals":
-        print(format_alternate_team_totals(odds))
-    elif args.command == "player_props":
-        print(format_player_props(odds))
-    elif args.command == "historical":
+    if args.command in {"moneyline", "historical"}:
         print(format_moneyline(odds))
     else:
-        print(format_outrights(odds))
+        print(json.dumps(odds, indent=2))
 
 
 if __name__ == "__main__":
