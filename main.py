@@ -3,7 +3,12 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    def load_dotenv():
+        """Fallback no-op if python-dotenv isn't installed."""
+        pass
 
 load_dotenv()
 
@@ -77,7 +82,7 @@ def build_historical_odds_url(
 ) -> str:
     """Return the fully qualified historical odds API URL."""
     base_url = (
-        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds-history"
     )
     params = {
         "apiKey": API_KEY,
@@ -105,8 +110,12 @@ def fetch_historical_odds(
         markets=markets,
         odds_format=odds_format,
     )
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:  # pragma: no cover - network error handling
+        message = e.read().decode() if hasattr(e, "read") else str(e)
+        raise RuntimeError(f"Failed to fetch historical odds: {message}") from e
 
 
 def _format_header(idx: int, game: dict) -> str:
