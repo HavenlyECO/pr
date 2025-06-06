@@ -79,6 +79,7 @@ def build_historical_odds_url(
     regions: str = "us",
     markets: str = "h2h",
     odds_format: str = "american",
+    include_scores: bool = False,
 ) -> str:
     """Return the fully qualified historical odds API URL."""
     base_url = (
@@ -91,6 +92,8 @@ def build_historical_odds_url(
         "oddsFormat": odds_format,
         "date": date,
     }
+    if include_scores:
+        params["include"] = "scores"
     return f"{base_url}?{urllib.parse.urlencode(params)}"
 
 
@@ -109,6 +112,7 @@ def fetch_historical_odds(
         regions=regions,
         markets=markets,
         odds_format=odds_format,
+        include_scores=True,
     )
     try:
         with urllib.request.urlopen(url) as resp:
