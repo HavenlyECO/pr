@@ -139,8 +139,11 @@ def build_dataset_from_api(
     markets: str = "h2h",
     verbose: bool = False,
 ) -> pd.DataFrame:
-    start = safe_fromisoformat(start_date)
-    end = safe_fromisoformat(end_date)
+    print(
+        f"[INFO] Building dataset from API for {sport_key} from {start_date} to {end_date} ..."
+    )
+    start = datetime.fromisoformat(start_date)
+    end = datetime.fromisoformat(end_date)
     if (end - start).days > MAX_HISTORICAL_DAYS:
         raise ValueError(
             f"Date range exceeds {MAX_HISTORICAL_DAYS} days which is the maximum allowed by the Odds API"
@@ -148,25 +151,15 @@ def build_dataset_from_api(
     rows: list[dict] = []
     current = start
     while current <= end:
-        # Use a random time within the current day to avoid hitting
-        # the same cached timestamp on the API for every request.
-        hour = random.randint(0, 23)
-        minute = random.randint(0, 59)
-        second = random.randint(0, 59)
-        date_iso = (
-            current.replace(hour=hour, minute=minute, second=second, microsecond=0)
-            .strftime("%Y-%m-%dT%H:%M:%SZ")
-        )
-        if verbose:
-            print(f"Requesting data for: {date_iso}")
+        date_str = current.strftime("%Y-%m-%d")
+        print(f"  [FETCH] Fetching games for {date_str} ...")
         games = fetch_historical_games(
             sport_key,
-            date=date_iso,
+            date=date_str,
             regions=regions,
             markets=markets,
         )
-        if verbose:
-            print(f"Fetched {len(games)} games for {date_iso}")
+        print(f"  [FETCH] {len(games)} games fetched for {date_str}")
         for game in games:
             row = _parse_game(game)
             if row:
@@ -174,12 +167,12 @@ def build_dataset_from_api(
         current += timedelta(days=1)
     if not rows:
         print(
-            "\nNo historical data returned by Odds API for the selected date range.\n"
+            "\n[WARNING] No historical data returned by Odds API for the selected date range.\n"
             "This may be because the data is not yet available for recent games, too old, or for future dates.\n"
-            "Try an earlier date range within the last year (MLB data may lag by several days after games are played).\n"
+            "Try an earlier date range within the last year.\n"
         )
         raise RuntimeError("No historical data returned")
-    print(f"Built dataset with {len(rows)} rows.")
+    print(f"[INFO] Built dataset with {len(rows)} rows.")
     return pd.DataFrame(rows)
 
 def load_dataset(path: str) -> tuple[pd.DataFrame, pd.Series]:
@@ -229,20 +222,28 @@ def continuous_train_classifier(
     model_out: str = "moneyline_classifier.pkl",
     verbose: bool = False,
 ) -> None:
-    start_dt = safe_fromisoformat(start_date)
     while True:
+        print("\n[INFO] Starting new training cycle ...")
         end_dt = datetime.utcnow()
         end_date = end_dt.strftime("%Y-%m-%d")
+        start_dt = datetime.fromisoformat(start_date)
         if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
             start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
-        df = build_dataset_from_api(
-            sport_key,
-            start_dt.strftime("%Y-%m-%d"),
-            end_date,
-            verbose=verbose,
+        print(
+            f"[INFO] Training window: {start_dt.date()} to {end_date} (UTC now: {end_dt.isoformat()})"
         )
-        train_classifier_df(df, model_out=model_out)
-        print(f"Waiting {interval_hours} hours for next training run...")
+        try:
+            df = build_dataset_from_api(
+                sport_key,
+                start_dt.strftime("%Y-%m-%d"),
+                end_date,
+                verbose=verbose,
+            )
+            print(f"[INFO] Training classifier and saving to {model_out} ...")
+            train_classifier_df(df, model_out=model_out)
+        except Exception as e:
+            print(f"[ERROR] Training failed: {e}")
+        print(f"[INFO] Waiting {interval_hours} hours for next training run...")
         time.sleep(interval_hours * 3600)
 
 # CLI entrypoint
