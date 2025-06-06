@@ -298,7 +298,7 @@ def main() -> None:
         )
 
     if not odds:
-        print("No odds found.")
+        print("No odds found for your query.")
         return
 
     if args.command in {"moneyline", "historical"}:
