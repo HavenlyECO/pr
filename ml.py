@@ -151,15 +151,17 @@ def build_dataset_from_api(
     rows: list[dict] = []
     current = start
     while current <= end:
-        date_str = current.strftime("%Y-%m-%d")
-        print(f"  [FETCH] Fetching games for {date_str} ...")
+        # The API expects an ISO 8601 timestamp. Use a fixed time (noon UTC)
+        # to avoid timezone issues when only a date is provided.
+        date_iso = current.strftime("%Y-%m-%dT12:00:00Z")
+        print(f"  [FETCH] Fetching games for {date_iso} ...")
         games = fetch_historical_games(
             sport_key,
-            date=date_str,
+            date=date_iso,
             regions=regions,
             markets=markets,
         )
-        print(f"  [FETCH] {len(games)} games fetched for {date_str}")
+        print(f"  [FETCH] {len(games)} games fetched for {date_iso}")
         for game in games:
             row = _parse_game(game)
             if row:
