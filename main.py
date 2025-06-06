@@ -19,12 +19,32 @@ def fetch_sports():
         return json.loads(resp.read().decode())
 
 
-def fetch_odds(sport_key: str, odds_format: str = "american"):
-    """Fetch upcoming odds for a given sport."""
+def fetch_odds(
+    sport_key: str,
+    *,
+    regions: str = "us",
+    markets: str = "h2h",
+    odds_format: str = "american",
+):
+    """Fetch upcoming odds for a given sport.
+
+    Parameters
+    ----------
+    sport_key: str
+        The key of the sport (e.g. ``"soccer_epl"``).
+    regions: str, optional
+        Comma separated region codes. Defaults to ``"us"``.
+    markets: str, optional
+        Market types to return, e.g. ``"h2h,spreads"``. Defaults to ``"h2h"``.
+    odds_format: str, optional
+        Format of the odds to return. Defaults to ``"american"``.
+    """
+
     base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
     params = {
         "apiKey": API_KEY,
-        "regions": "us",
+        "regions": regions,
+        "markets": markets,
         "oddsFormat": odds_format,
     }
     url = f"{base_url}?{urllib.parse.urlencode(params)}"
@@ -43,9 +63,9 @@ def main():
         print("No active sports found.")
         return
 
-    key = active[0]["key"]
+    key = "baseball_mlb"
     print(f"\nFetching odds for {key}...")
-    odds = fetch_odds(key)
+    odds = fetch_odds(key, markets="h2h,spreads")
     print(json.dumps(odds, indent=2)[:1000])
 
 
