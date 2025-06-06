@@ -22,5 +22,12 @@ To display point spread (handicap) odds, run:
 python main.py spreads
 ```
 
-The script requests both head-to-head and point spread markets. It prints the
-API endpoint used and displays odds for the selected market in a clean layout.
+To display totals (over/under) odds, run:
+
+```bash
+python main.py totals
+```
+
+The script requests head-to-head, point spread, and totals markets. It prints
+the API endpoint used and displays odds for the selected market in a clean
+layout.
