@@ -302,10 +302,19 @@ def main() -> None:
             game_period_markets=args.game_period_markets,
         )
 
+    # If the API response wraps games in a top-level "data" key,
+    # extract that list for display. Otherwise assume ``odds`` is
+    # already the list of games.
+    if isinstance(odds, dict) and "data" in odds:
+        games = odds["data"]
+    else:
+        games = odds
+
+    # Validate the games structure before attempting to format it.
     if (
-        not odds
-        or not isinstance(odds, list)
-        or not all(isinstance(g, dict) for g in odds)
+        not games
+        or not isinstance(games, list)
+        or not all(isinstance(g, dict) for g in games)
     ):
         # Handle API errors or empty/no-games gracefully
         if isinstance(odds, dict) and odds.get("message"):
@@ -315,9 +324,9 @@ def main() -> None:
         return
 
     if args.command in {"moneyline", "historical"}:
-        print(format_moneyline(odds))
+        print(format_moneyline(games))
     else:
-        print(json.dumps(odds, indent=2))
+        print(json.dumps(games, indent=2))
 
 
 if __name__ == "__main__":
