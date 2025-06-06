@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import urllib.parse
@@ -61,14 +62,18 @@ def fetch_odds(
         return json.loads(resp.read().decode())
 
 
-def format_odds(games):
-    """Return a formatted string of odds for display."""
+def _format_header(idx: int, game: dict) -> str:
+    home = game.get("home_team", "N/A")
+    away = game.get("away_team", "N/A")
+    time = game.get("commence_time", "")
+    return f"{idx}. {home} vs {away} ({time})"
+
+
+def format_moneyline(games):
+    """Return a formatted string of moneyline odds for display."""
     lines = []
     for idx, game in enumerate(games, 1):
-        home = game.get("home_team", "N/A")
-        away = game.get("away_team", "N/A")
-        time = game.get("commence_time", "")
-        lines.append(f"{idx}. {home} vs {away} ({time})")
+        lines.append(_format_header(idx, game))
         lines.append("   Head-to-Head (Moneyline):")
 
         for bookmaker in game.get("bookmakers", []):
@@ -88,17 +93,59 @@ def format_odds(games):
     return "\n".join(lines)
 
 
+def format_spreads(games):
+    """Return a formatted string of point spread odds for display."""
+    lines = []
+    for idx, game in enumerate(games, 1):
+        lines.append(_format_header(idx, game))
+        lines.append("   Spreads (Handicap):")
+
+        for bookmaker in game.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "spreads":
+                    continue
+                outcomes = [
+                    f"{o.get('name', '')} {o.get('point', '')} ({o.get('price', '')})"
+                    for o in market.get("outcomes", [])
+                ]
+                if outcomes:
+                    lines.append(f"      {bm_title}: " + " | ".join(outcomes))
+                break
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def main():
-    key = "baseball_mlb"
-    url = build_odds_url(key, markets="h2h,spreads")
-    print(f"Fetching odds for {key}...\n{url}\n")
-    odds = fetch_odds(key, markets="h2h,spreads")
+    parser = argparse.ArgumentParser(description="Fetch and display odds")
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["moneyline", "spreads"],
+        default="moneyline",
+        help="Type of odds to display",
+    )
+    parser.add_argument(
+        "--sport",
+        default="baseball_mlb",
+        help="Sport key, e.g. baseball_mlb",
+    )
+    args = parser.parse_args()
+
+    markets = "h2h,spreads"
+    url = build_odds_url(args.sport, markets=markets)
+    print(f"Fetching {args.command} odds for {args.sport}...\n{url}\n")
+    odds = fetch_odds(args.sport, markets=markets)
 
     if not odds:
         print("No odds found.")
         return
 
-    print(format_odds(odds))
+    if args.command == "moneyline":
+        print(format_moneyline(odds))
+    else:
+        print(format_spreads(odds))
 
 
 if __name__ == "__main__":
