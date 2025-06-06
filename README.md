@@ -81,3 +81,34 @@ pass them via the ``--game-period-markets`` option:
 ```bash
 python main.py --game-period-markets=first_half_totals
 ```
+
+## Moneyline Classifier
+
+
+The project includes a simple logistic regression model that predicts the
+probability of the home team winning a matchup. Training data can be supplied
+via a CSV file **or** gathered automatically using the Odds API historical odds
+endpoint. The dataset should contain a `home_team_win` column as the target
+along with feature columns such as team statistics, starting pitcher ratings,
+bullpen strength, park factor and injury indicators.
+
+To train the classifier and save it to ``moneyline_classifier.pkl`` run:
+
+```bash
+python main.py train_classifier --dataset=training_data.csv
+```
+
+Or fetch historical data for a date range and train directly from it:
+
+```bash
+python main.py train_classifier --sport=baseball_mlb \
+    --start-date=2024-04-01 --end-date=2024-04-07
+```
+
+To predict with a trained model supply feature values as a JSON string:
+
+```bash
+python main.py predict_classifier --features='{"home_team_stat":1.2,"away_team_stat":0.8}'
+```
+
+The command prints the home team win probability.

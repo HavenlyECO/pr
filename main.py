@@ -369,6 +369,8 @@ def main():
             "alternate_team_totals",
             "player_props",
             "historical",
+            "train_classifier",
+            "predict_classifier",
         ],
         default="moneyline",
         help="Type of odds to display",
@@ -384,11 +386,73 @@ def main():
         help="Comma separated game period markets to include, e.g. first_half_totals",
     )
     parser.add_argument(
+        "--dataset",
+        default=None,
+        help="CSV file for training the moneyline classifier",
+    )
+    parser.add_argument(
+        "--model-out",
+        default="moneyline_classifier.pkl",
+        help="Where to save the trained classifier",
+    )
+    parser.add_argument(
+        "--model",
+        default="moneyline_classifier.pkl",
+        help="Path to a trained classifier for prediction",
+    )
+    parser.add_argument(
+        "--features",
+        default=None,
+        help="JSON string of feature values for prediction",
+    )
+    parser.add_argument(
         "--date",
         default=None,
         help="Date for historical odds in YYYY-MM-DD format",
     )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Start date for training data in YYYY-MM-DD format",
+    )
+    parser.add_argument(
+        "--end-date",
+        default=None,
+        help="End date for training data in YYYY-MM-DD format",
+    )
     args = parser.parse_args()
+
+    if args.command == "train_classifier":
+        from ml import (
+            train_classifier,
+            train_classifier_df,
+            build_dataset_from_api,
+        )
+
+        if args.dataset:
+            train_classifier(args.dataset, model_out=args.model_out)
+        else:
+            if not args.start_date or not args.end_date:
+                parser.error(
+                    "--dataset or --start-date/--end-date required for train_classifier"
+                )
+            df = build_dataset_from_api(
+                args.sport,
+                args.start_date,
+                args.end_date,
+            )
+            train_classifier_df(df, model_out=args.model_out)
+        return
+
+    if args.command == "predict_classifier":
+        if args.features is None:
+            parser.error("--features is required for predict_classifier")
+        from ml import predict_win_probability
+
+        feature_values = json.loads(args.features)
+        prob = predict_win_probability(args.model, feature_values)
+        print(f"Home win probability: {prob:.3f}")
+        return
 
     markets = "h2h,spreads,totals"
     if args.command == "outrights":
