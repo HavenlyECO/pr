@@ -38,3 +38,10 @@ The script requests head-to-head, point spread, totals, and outright markets as
 needed. It prints
 the API endpoint used and displays odds for the selected market in a clean
 layout.
+
+To include game period markets (e.g. quarters or innings) in the API request,
+pass them via the ``--game-period-markets`` option:
+
+```bash
+python main.py --game-period-markets=first_half_totals
+```

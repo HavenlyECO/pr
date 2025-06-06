@@ -19,6 +19,7 @@ def build_odds_url(
     regions: str = "us",
     markets: str = "h2h",
     odds_format: str = "american",
+    game_period_markets: str | None = None,
 ) -> str:
     """Return the fully qualified odds API URL."""
     base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
@@ -28,6 +29,8 @@ def build_odds_url(
         "markets": markets,
         "oddsFormat": odds_format,
     }
+    if game_period_markets:
+        params["gamePeriodMarkets"] = game_period_markets
     return f"{base_url}?{urllib.parse.urlencode(params)}"
 
 
@@ -37,6 +40,7 @@ def fetch_odds(
     regions: str = "us",
     markets: str = "h2h",
     odds_format: str = "american",
+    game_period_markets: str | None = None,
 ):
     """Fetch upcoming odds for a given sport.
 
@@ -57,6 +61,7 @@ def fetch_odds(
         regions=regions,
         markets=markets,
         odds_format=odds_format,
+        game_period_markets=game_period_markets,
     )
     with urllib.request.urlopen(url) as resp:
         return json.loads(resp.read().decode())
@@ -185,14 +190,27 @@ def main():
         default="baseball_mlb",
         help="Sport key, e.g. baseball_mlb",
     )
+    parser.add_argument(
+        "--game-period-markets",
+        default=None,
+        help="Comma separated game period markets to include, e.g. first_half_totals",
+    )
     args = parser.parse_args()
 
     markets = "h2h,spreads,totals"
     if args.command == "outrights":
         markets = "outrights"
-    url = build_odds_url(args.sport, markets=markets)
+    url = build_odds_url(
+        args.sport,
+        markets=markets,
+        game_period_markets=args.game_period_markets,
+    )
     print(f"Fetching {args.command} odds for {args.sport}...\n{url}\n")
-    odds = fetch_odds(args.sport, markets=markets)
+    odds = fetch_odds(
+        args.sport,
+        markets=markets,
+        game_period_markets=args.game_period_markets,
+    )
 
     if not odds:
         print("No odds found.")
