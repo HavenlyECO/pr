@@ -34,7 +34,7 @@ def build_historical_odds_url(
 ) -> str:
     """Return historical odds API URL."""
     base_url = (
-        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds-history"
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
     )
     params = {
         "apiKey": API_KEY,
