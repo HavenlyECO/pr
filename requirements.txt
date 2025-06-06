@@ -1,5 +1,5 @@
-python-dotenv
-
-pandas
-scikit-learn
+# Core dependencies for the odds fetching and machine learning tools
+python-dotenv>=1.0
+pandas>=2.0
+scikit-learn>=1.3
 
