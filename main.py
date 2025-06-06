@@ -67,6 +67,48 @@ def fetch_odds(
         return json.loads(resp.read().decode())
 
 
+def build_historical_odds_url(
+    sport_key: str,
+    *,
+    date: str,
+    regions: str = "us",
+    markets: str = "h2h",
+    odds_format: str = "american",
+) -> str:
+    """Return the fully qualified historical odds API URL."""
+    base_url = (
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+    )
+    params = {
+        "apiKey": API_KEY,
+        "regions": regions,
+        "markets": markets,
+        "oddsFormat": odds_format,
+        "date": date,
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_historical_odds(
+    sport_key: str,
+    *,
+    date: str,
+    regions: str = "us",
+    markets: str = "h2h",
+    odds_format: str = "american",
+):
+    """Fetch historical odds for a given sport on a specific date."""
+    url = build_historical_odds_url(
+        sport_key,
+        date=date,
+        regions=regions,
+        markets=markets,
+        odds_format=odds_format,
+    )
+    with urllib.request.urlopen(url) as resp:
+        return json.loads(resp.read().decode())
+
+
 def _format_header(idx: int, game: dict) -> str:
     home = game.get("home_team", "N/A")
     away = game.get("away_team", "N/A")
@@ -326,6 +368,7 @@ def main():
             "team_totals",
             "alternate_team_totals",
             "player_props",
+            "historical",
         ],
         default="moneyline",
         help="Type of odds to display",
@@ -339,6 +382,11 @@ def main():
         "--game-period-markets",
         default=None,
         help="Comma separated game period markets to include, e.g. first_half_totals",
+    )
+    parser.add_argument(
+        "--date",
+        default=None,
+        help="Date for historical odds in YYYY-MM-DD format",
     )
     args = parser.parse_args()
 
@@ -355,17 +403,35 @@ def main():
         markets = "alternate_team_totals"
     elif args.command == "player_props":
         markets = "player_hits,player_home_runs,player_strikeouts"
-    url = build_odds_url(
-        args.sport,
-        markets=markets,
-        game_period_markets=args.game_period_markets,
-    )
-    print(f"Fetching {args.command} odds for {args.sport}...\n{url}\n")
-    odds = fetch_odds(
-        args.sport,
-        markets=markets,
-        game_period_markets=args.game_period_markets,
-    )
+    elif args.command == "historical":
+        if args.date is None:
+            parser.error("--date is required for historical command")
+    if args.command == "historical":
+        url = build_historical_odds_url(
+            args.sport,
+            date=args.date,
+            markets=markets,
+        )
+        print(
+            f"Fetching historical odds for {args.sport} on {args.date}...\n{url}\n"
+        )
+        odds = fetch_historical_odds(
+            args.sport,
+            date=args.date,
+            markets=markets,
+        )
+    else:
+        url = build_odds_url(
+            args.sport,
+            markets=markets,
+            game_period_markets=args.game_period_markets,
+        )
+        print(f"Fetching {args.command} odds for {args.sport}...\n{url}\n")
+        odds = fetch_odds(
+            args.sport,
+            markets=markets,
+            game_period_markets=args.game_period_markets,
+        )
 
     if not odds:
         print("No odds found.")
@@ -387,6 +453,8 @@ def main():
         print(format_alternate_team_totals(odds))
     elif args.command == "player_props":
         print(format_player_props(odds))
+    elif args.command == "historical":
+        print(format_moneyline(odds))
     else:
         print(format_outrights(odds))
 
