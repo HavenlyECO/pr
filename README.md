@@ -40,6 +40,18 @@ To display alternate totals odds, run:
 python main.py alternate_totals
 ```
 
+To display team totals odds, run:
+
+```bash
+python main.py team_totals
+```
+
+To display alternate team totals odds, run:
+
+```bash
+python main.py alternate_team_totals
+```
+
 To display outrights (futures) odds, run:
 
 ```bash
