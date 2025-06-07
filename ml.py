@@ -109,6 +109,71 @@ def fetch_event_ids_historical(
         return []
 
 
+def build_h2h_event_ids_url(
+    sport_key: str,
+    date: str,
+    *,
+    api_key: str,
+    regions: str = "us",
+) -> str:
+    """Build URL for head-to-head event IDs."""
+    base_url = (
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+    )
+    params = {
+        "apiKey": api_key,
+        "regions": regions,
+        "markets": "h2h",
+        "date": date,
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_h2h_event_ids(
+    sport_key: str,
+    date: str,
+    *,
+    api_key: str,
+    regions: str = "us",
+    verbose: bool = False,
+) -> list:
+    """Fetch event IDs using the provided API key."""
+    url = build_h2h_event_ids_url(
+        sport_key, date, api_key=api_key, regions=regions
+    )
+    cache_key = _safe_cache_key(
+        "h2h_event_ids", sport_key, date, regions, api_key
+    )
+    cached = _cache_load(CACHE_DIR, cache_key)
+    if cached is not None:
+        return cached
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+        if not isinstance(data, list):
+            raise ValueError(f"Unexpected event ids response: {data!r}")
+        event_ids = []
+        for g in data:
+            if not isinstance(g, dict) or not g.get("id"):
+                continue
+            for book in g.get("bookmakers", []):
+                for market in book.get("markets", []):
+                    if market.get("key") == "h2h":
+                        event_ids.append(g["id"])
+                        break
+                else:
+                    continue
+                break
+        _cache_save(CACHE_DIR, cache_key, event_ids)
+        if verbose:
+            print(f"Fetched {len(event_ids)} event ids for {date}")
+        return event_ids
+    except Exception as e:
+        print(f"Error fetching h2h event ids for {date}: {e}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
+
+
 def build_historical_odds_url(
     sport_key: str,
     date: str,
@@ -202,6 +267,76 @@ def fetch_h2h_props_historical(
             else:
                 out = []
             _cache_save(CACHE_DIR, cache_key, out)
+            return out
+    except Exception as e:
+        print(f"Error fetching h2h props for event {event_id} on {date}: {e}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
+
+
+def build_h2h_props_url(
+    sport_key: str,
+    event_id: str,
+    date: str,
+    *,
+    api_key: str,
+    regions: str = "us",
+    date_format: str = "iso",
+    odds_format: str = "american",
+) -> str:
+    """Build URL for head-to-head props."""
+    base_url = (
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds"
+    )
+    params = {
+        "apiKey": api_key,
+        "regions": regions,
+        "markets": "h2h",
+        "oddsFormat": odds_format,
+        "dateFormat": date_format,
+        "date": date,
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_h2h_props(
+    sport_key: str,
+    event_id: str,
+    date: str,
+    *,
+    api_key: str,
+    regions: str = "us",
+    odds_format: str = "american",
+    verbose: bool = False,
+) -> list:
+    """Fetch h2h props for the given event ID."""
+    cache_key = _safe_cache_key(
+        "h2h_props", sport_key, event_id, date, regions, odds_format, api_key
+    )
+    cached = _cache_load(CACHE_DIR, cache_key)
+    if cached is not None:
+        return cached
+
+    url = build_h2h_props_url(
+        sport_key,
+        event_id,
+        date,
+        api_key=api_key,
+        regions=regions,
+        odds_format=odds_format,
+    )
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+            if isinstance(data, dict) and "bookmakers" in data:
+                out = data["bookmakers"]
+            else:
+                out = []
+            _cache_save(CACHE_DIR, cache_key, out)
+            if verbose:
+                print(
+                    f"Fetched props for event {event_id} on {date} ({len(out)} bookmakers)"
+                )
             return out
     except Exception as e:
         print(f"Error fetching h2h props for event {event_id} on {date}: {e}")
@@ -338,5 +473,26 @@ def _cli():
         verbose=args.verbose,
     )
 
+
+def demo_fetch() -> None:
+    """Example usage of fetching h2h data."""
+    event_ids = fetch_h2h_event_ids(
+        sport_key="baseball_mlb",
+        date="2025-06-01T12:00:00Z",
+        api_key=API_KEY,
+        verbose=True,
+    )
+
+    for event_id in event_ids:
+        bookmakers = fetch_h2h_props(
+            sport_key="baseball_mlb",
+            event_id=event_id,
+            date="2025-06-01T12:00:00Z",
+            api_key=API_KEY,
+            verbose=True,
+        )
+        # process bookmakers as before...
+
 if __name__ == "__main__":
     _cli()
+    demo_fetch()
