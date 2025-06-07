@@ -58,6 +58,12 @@ To display player props odds, run:
 python main.py player_props
 ```
 
+To display projected strikeout prop odds using a trained model, run:
+
+```bash
+python main.py projected_ks_props
+```
+
 To display outrights (futures) odds, run:
 
 ```bash
