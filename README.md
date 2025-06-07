@@ -85,8 +85,15 @@ Historical data is only available for approximately the last year.
 
 The script requests head-to-head, point spread, totals, and outright markets as
 needed. It prints
+
 the API endpoint used and displays odds for the selected market in a clean
 layout.
+
+To list upcoming events and their IDs for a sport, run:
+
+```bash
+python main.py --list-events
+```
 
 To include game period markets (e.g. quarters or innings) in the API request,
 pass them via the ``--game-period-markets`` option:
