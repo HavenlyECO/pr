@@ -67,9 +67,9 @@ run:
 python main.py --model=pitcher_ks_classifier.pkl
 ```
 
-By default the script requests all markets and filters for strikeout props
-locally. Pass the ``--markets`` option to limit the API request to specific
-markets.
+By default the script requests only the ``batter_strikeouts`` market and
+evaluates those props. Pass the ``--markets`` option to request different or
+additional markets.
 
 To display outrights (futures) odds, run:
 

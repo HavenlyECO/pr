@@ -3,7 +3,6 @@ import json
 import urllib.parse
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta
 from pathlib import Path
 import argparse
 
@@ -115,12 +114,7 @@ def fetch_odds(
         raise RuntimeError(error_msg) from e
 
 
-def tomorrow_iso() -> str:
-    """Return tomorrow's date in YYYY-MM-DD (UTC)."""
-    return (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
-
-
-def evaluate_tomorrows_strikeout_props(
+def evaluate_strikeout_props(
     sport_key: str,
     model_path: str,
     *,
@@ -128,17 +122,17 @@ def evaluate_tomorrows_strikeout_props(
     regions: str = 'us',
     markets: str = '',
     player_props: bool = True,
-    collect_h2h: bool = False,
-) -> list | tuple[list, dict]:
-    """Return strikeout prop evaluations for games starting tomorrow.
+) -> list:
+    """Return ML strikeout prop evaluations for the given event(s).
 
-    This fetches odds for tomorrow's games, filters for strikeout props, and
-    evaluates the probability of the over using the ML model. If ``player_props``
-    is ``True`` the request includes player prop markets. Set ``collect_h2h`` to
-    ``True`` to also gather head-to-head prices for each game/bookmaker.
+    Odds are fetched from the event odds endpoint. If no ``markets`` value is
+    supplied the request defaults to ``batter_strikeouts`` which matches the
+    machine learning model training data.
     """
     from ml import predict_pitcher_ks_over_probability
 
+    if not markets:
+        markets = "batter_strikeouts"
     odds = fetch_odds(
         sport_key,
         event_id=event_id,
@@ -146,22 +140,16 @@ def evaluate_tomorrows_strikeout_props(
         markets=markets,
         player_props=player_props,
     )
+
     # The raw API response can be extremely verbose which makes it hard to
-    # view all player props on a single screen.  Comment the next line in when
-    # debugging to inspect the full JSON payload.
+    # view all player props on a single screen. Uncomment when debugging.
     # print("RAW ODDS DATA:", json.dumps(odds, indent=2))
-    target_date = tomorrow_iso()
+
     results = []
-    if collect_h2h:
-        h2h_data: dict[tuple[str, str], dict] = {}
-    else:
-        h2h_data = {}
     found_any_game = False
 
     for game in odds:
         commence = game.get('commence_time', '')
-        if event_id is None and not commence.startswith(target_date):
-            continue
         found_any_game = True
         print(
             "Found game:",
@@ -175,24 +163,6 @@ def evaluate_tomorrows_strikeout_props(
         away = game.get('away_team')
         for book in game.get('bookmakers', []):
             book_name = book.get('title') or book.get('key')
-            if collect_h2h:
-                for market in book.get('markets', []):
-                    if market.get('key') == 'h2h':
-                        price_home = None
-                        price_away = None
-                        for outcome in market.get('outcomes', []):
-                            if outcome.get('name') == home:
-                                price_home = outcome.get('price')
-                            elif outcome.get('name') == away:
-                                price_away = outcome.get('price')
-                        if price_home is not None and price_away is not None:
-                            h2h_data[(game.get('id'), book_name)] = {
-                                'home_team': home,
-                                'away_team': away,
-                                'price_home': price_home,
-                                'price_away': price_away,
-                            }
-                        break
             for market in book.get('markets', []):
                 print(
                     "MARKET KEY:",
@@ -245,9 +215,7 @@ def evaluate_tomorrows_strikeout_props(
                         'projected_over_probability': prob,
                     })
     if not found_any_game:
-        print("No games found for tomorrow.")
-    if collect_h2h:
-        return results, h2h_data
+        print("No games found.")
     return results
 
 
@@ -328,38 +296,9 @@ def print_projections_table(projections: list) -> None:
         print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
 
-def print_h2h_with_projections(projections: list, h2h_data: dict) -> None:
-    """Display H2H lines with strikeout projections grouped underneath."""
-    if not projections:
-        print("No projection data available.")
-        return
-
-    grouped: dict[tuple[str, str], list[dict]] = {}
-    for row in projections:
-        key = (row.get('game', ''), row.get('bookmaker', ''))
-        grouped.setdefault(key, []).append(row)
-
-    for (game, book), items in grouped.items():
-        event_id = items[0].get('event_id')
-        print(f"{game} - {book}")
-        h2h = h2h_data.get((event_id, book))
-        if h2h:
-            home = h2h['home_team']
-            away = h2h['away_team']
-            print(
-                f"  H2H: {home} {h2h['price_home']} vs {away} {h2h['price_away']}"
-            )
-        for row in items:
-            prob = row.get('projected_over_probability')
-            prob_str = f"{prob*100:.1f}%" if prob is not None else 'N/A'
-            print(
-                f"  {row['player']} {row['line']} O {row['price_over']} U {row['price_under']} P(OVER) {prob_str}"
-            )
-        print()
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Display projected pitcher strikeout props for tomorrow.'
+        description='Display projected pitcher strikeout props.'
     )
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
@@ -389,11 +328,6 @@ def main() -> None:
         action='store_true',
         help='List unique market keys/descriptions for upcoming games and exit'
     )
-    parser.add_argument(
-        '--blend-h2h',
-        action='store_true',
-        help='Display H2H odds with projected strikeout props underneath'
-    )
     args = parser.parse_args()
 
     if args.list_events:
@@ -416,20 +350,15 @@ def main() -> None:
                 print(key)
         return
 
-    projections_data = evaluate_tomorrows_strikeout_props(
+    projections = evaluate_strikeout_props(
         args.sport,
         args.model,
         event_id=args.event_id,
         regions=args.regions,
         markets=args.markets,
         player_props=args.player_props,
-        collect_h2h=args.blend_h2h,
     )
-    if args.blend_h2h:
-        projections, h2h_lines = projections_data
-        print_h2h_with_projections(projections, h2h_lines)
-    else:
-        print_projections_table(projections_data)
+    print_projections_table(projections)
 
 
 if __name__ == '__main__':
