@@ -96,6 +96,8 @@ To list upcoming events and their IDs for a sport, run:
 ```bash
 python main.py --list-events
 ```
+The region defaults to ``us``. Pass ``--regions`` with a comma-separated list to
+see events available in other regions.
 
 To include game period markets (e.g. quarters or innings) in the API request,
 pass them via the ``--game-period-markets`` option:

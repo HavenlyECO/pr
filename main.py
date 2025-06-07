@@ -54,14 +54,17 @@ def build_odds_url(
     return f"{base}?{urllib.parse.urlencode(params)}"
 
 
-def build_events_url(sport_key: str) -> str:
+def build_events_url(sport_key: str, *, regions: str = "us") -> str:
     """Return the Odds API URL for upcoming events for a sport."""
-    return f"https://api.the-odds-api.com/v4/sports/{sport_key}/events?apiKey={API_KEY}"
+    return (
+        f"https://api.the-odds-api.com/v4/sports/{sport_key}/events"
+        f"?apiKey={API_KEY}&regions={regions}"
+    )
 
 
-def fetch_events(sport_key: str) -> list:
+def fetch_events(sport_key: str, *, regions: str = "us") -> list:
     """Fetch upcoming events for the given sport."""
-    url = build_events_url(sport_key)
+    url = build_events_url(sport_key, regions=regions)
     try:
         with urllib.request.urlopen(url) as resp:
             return json.loads(resp.read().decode())
@@ -394,7 +397,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.list_events:
-        events = fetch_events(args.sport)
+        events = fetch_events(args.sport, regions=args.regions)
         print(json.dumps(events, indent=2))
         return
 
