@@ -139,7 +139,19 @@ def fetch_all_event_ids(
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
-            event_ids = [game.get("id") for game in data if game.get("id")]
+
+            # The historical odds API should return a list of event objects, but
+            # in the wild we've seen strings or dicts when an error occurs. Make
+            # sure ``data`` is a list of dicts before processing.
+            if isinstance(data, dict) and "data" in data:
+                games = data["data"]
+            else:
+                games = data
+
+            if not isinstance(games, list):
+                raise ValueError(f"Unexpected event ids response: {games!r}")
+
+            event_ids = [g.get("id") for g in games if isinstance(g, dict) and g.get("id")]
             _cache_save(CACHE_DIR, cache_key, event_ids)
             return event_ids
     except urllib.error.HTTPError as e:
