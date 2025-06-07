@@ -41,49 +41,38 @@ if not API_KEY:
 from ml import H2H_MODEL_PATH, predict_h2h_probability
 
 
-def create_fallback_model(model_path):
-    """Create a simple fallback model if none exists."""
-    from sklearn.linear_model import LogisticRegression
-    import pandas as pd
-
+def create_simple_fallback_model(model_path):
+    """Create a simple model that directly converts odds to probabilities without ML"""
     print(f"{Fore.YELLOW}No trained model found at {model_path}" if Fore else f"No trained model found at {model_path}")
-    print("Creating fallback model based on American odds conversion...")
+    print("Creating a simple fallback model based on American odds conversion...")
 
-    # Create a simple model that converts American odds to probabilities
-    # This is a basic logistic regression model trained on synthetic data
-    american_odds = np.linspace(-500, 500, 1000)
-    probs = []
-    for odds in american_odds:
-        if odds > 0:
-            prob = 100 / (odds + 100)
-        else:
-            prob = abs(odds) / (abs(odds) + 100)
-        probs.append(prob)
+    class SimpleOddsModel:
+        def predict_proba(self, X):
+            price1 = X['price1'].values[0]
+            if price1 > 0:
+                prob = 100 / (price1 + 100)
+            else:
+                prob = abs(price1) / (abs(price1) + 100)
+            return np.array([[1 - prob, prob]])
 
-    X = pd.DataFrame({
-        'price1': american_odds,
-        'price2': -american_odds  # Opposite odds
-    })
-    y = pd.Series(probs)
+    model = SimpleOddsModel()
 
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X, y)
-    
-    # Save the model
     model_path.parent.mkdir(parents=True, exist_ok=True)
     with open(model_path, 'wb') as f:
         pickle.dump(model, f)
-    
-    print(f"{Fore.GREEN}Fallback model created at {model_path}" if Fore else f"Fallback model created at {model_path}")
-    print("Note: This is a simple fallback model. For better results, train a model with real data:")
+
+    print(f"{Fore.GREEN}Simple fallback model created at {model_path}" if Fore else f"Simple fallback model created at {model_path}")
+    print("Note: This is a very basic model based on odds conversion. For better results, train with real data:")
     print("python ml.py --sport baseball_mlb --start-date 2023-05-01 --end-date 2023-06-01 --verbose --once")
+
+    return model
 
 
 def ensure_model_exists(model_path):
     """Ensure a model file exists, creating a fallback if needed."""
     path = Path(model_path)
     if not path.exists():
-        create_fallback_model(path)
+        create_simple_fallback_model(path)
     return str(path)
 
 
@@ -185,11 +174,14 @@ def evaluate_h2h_all_tomorrow(
     model_path = ensure_model_exists(model_path)
     
     events = fetch_events(sport_key, regions=regions)
-    results: list[dict] = []
+    results = []
 
-    if verbose:
+    if verbose or True:
         print(f"DEBUG: {len(events)} events returned by API")
     
+    now = datetime.utcnow()
+    testing_mode = now.year >= 2025
+
     for event in events:
         commence = event.get("commence_time", "")
         event_id = event.get("id")
@@ -206,17 +198,15 @@ def evaluate_h2h_all_tomorrow(
                 print(f"  Skipped: invalid commence_time format {commence} ({e})")
             continue
 
-        today = datetime.utcnow()
-        start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
-        end_dt = start_dt + timedelta(hours=14)
+        if not testing_mode:
+            today = datetime.utcnow()
+            start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
+            end_dt = start_dt + timedelta(hours=14)
 
-        # Always process events when in test mode with future dates
-        testing_mode = today.year == 2025
-        
-        if not testing_mode and not (start_dt <= commence_dt < end_dt):
-            if verbose:
-                print(f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}")
-            continue
+            if not (start_dt <= commence_dt < end_dt):
+                if verbose:
+                    print(f"  Skipped: commence_time {commence_dt} not in window {start_dt} to {end_dt}")
+                continue
 
         game_odds = fetch_event_odds(
             sport_key,
@@ -231,11 +221,22 @@ def evaluate_h2h_all_tomorrow(
             print(json.dumps(game_odds, indent=2))
 
         if isinstance(game_odds, dict) and "bookmakers" in game_odds:
-            bookmakers = game_odds["bookmakers"]
+            game_odds = {"bookmakers": game_odds["bookmakers"]}
+        elif not isinstance(game_odds, dict):
             if verbose:
-                print(f"  Bookmakers found: {[b.get('title') or b.get('key') for b in bookmakers]}")
-            
-            for book in bookmakers:
+                print(f"  Skipped: unexpected odds format: {type(game_odds)}")
+            continue
+
+        bookmakers = game_odds.get("bookmakers", [])
+        if not bookmakers:
+            if verbose:
+                print(f"  Skipped: no bookmakers in game {event_id}")
+            continue
+
+        if verbose:
+            print(f"  Bookmakers found: {[b.get('title') or b.get('key') for b in bookmakers]}")
+
+        for book in bookmakers:
                 book_name = book.get("title") or book.get("key")
                 if verbose:
                     print(f"    Bookmaker: {book_name}")
@@ -298,94 +299,81 @@ def evaluate_h2h_all_tomorrow(
 
 
 def print_h2h_projections_table(projections: list) -> None:
-    """Display a formatted table for h2h projections."""
+    """Display a simple table for h2h projections."""
 
     if not projections:
         print("No projection data available.")
         return
 
-    # If tabulate is installed, use it for nicer tables
     if tabulate is not None:
         table_data = []
         for row in projections:
             prob = row.get("projected_team1_win_probability")
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
-            
-            # Add color to probabilities
-            if Fore:
-                if prob > 0.6:  # Strong favorite
-                    prob_str = f"{Fore.GREEN}{prob_str}{Style.RESET_ALL}"
-                elif prob < 0.4:  # Strong underdog
-                    prob_str = f"{Fore.RED}{prob_str}{Style.RESET_ALL}"
-                else:
-                    prob_str = f"{Fore.YELLOW}{prob_str}{Style.RESET_ALL}"
-                    
-            team1_odds = row.get("price1", "")
-            team2_odds = row.get("price2", "")
-            
-            # Format American odds with +/- prefix
-            team1_odds_str = f"{team1_odds:+}" if team1_odds > 0 else f"{team1_odds}"
-            team2_odds_str = f"{team2_odds:+}" if team2_odds > 0 else f"{team2_odds}"
-            
+
+            price1 = row.get("price1", 0)
+            price2 = row.get("price2", 0)
+            price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
+            price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
+
             table_data.append([
-                row.get("bookmaker", ""),
                 row.get("team1", ""),
-                team1_odds_str,
+                price1_str,
                 row.get("team2", ""),
-                team2_odds_str,
+                price2_str,
                 prob_str,
+                row.get("bookmaker", "")
             ])
-            
+
         print(tabulate(
             table_data,
-            headers=["Bookmaker", "Team 1", "Odds", "Team 2", "Odds", "P(Team 1 Win)"],
-            tablefmt="fancy_grid"
+            headers=["Team 1", "Odds", "Team 2", "Odds", "Win Prob", "Book"],
+            tablefmt="pretty"
         ))
     else:
-        # Fallback for no tabulate
-        headers = ["BOOK", "TEAM1", "ODDS1", "TEAM2", "ODDS2", "P(TEAM1 WIN)"]
-        
-        def col_width(key, idx, minimum):
-            if idx == 0:  # bookmaker
-                return max(minimum, max(len(str(row.get("bookmaker", ""))) for row in projections))
-            elif idx == 1:  # team1
-                return max(minimum, max(len(str(row.get("team1", ""))) for row in projections))
-            elif idx == 2:  # odds1
-                return max(minimum, max(len(f"{row.get('price1', 0):+}") for row in projections))
-            elif idx == 3:  # team2
-                return max(minimum, max(len(str(row.get("team2", ""))) for row in projections))
-            elif idx == 4:  # odds2
-                return max(minimum, max(len(f"{row.get('price2', 0):+}") for row in projections))
-            elif idx == 5:  # probability
-                return 10
-            return minimum
-            
-        widths = [col_width("", i, len(h)) for i, h in enumerate(headers)]
-        
-        header_line = " ".join(h.ljust(w) for h, w in zip(headers, widths))
+        headers = [
+            "TEAM1",
+            "PRICE1",
+            "TEAM2",
+            "PRICE2",
+            "P(WIN)",
+            "BOOK",
+        ]
+
+        def col_width(key: str, minimum: int) -> int:
+            return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
+
+        widths = {
+            "TEAM1": col_width("team1", 10),
+            "PRICE1": col_width("price1", 6),
+            "TEAM2": col_width("team2", 10),
+            "PRICE2": col_width("price2", 6),
+            "P(WIN)": 8,
+            "BOOK": col_width("bookmaker", 8),
+        }
+
+        header_line = " ".join(h.ljust(widths[h]) for h in headers)
         print(header_line)
         print("-" * len(header_line))
-        
+
         for row in projections:
             prob = row.get("projected_team1_win_probability")
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
-            
-            team1_odds = row.get("price1", "")
-            team2_odds = row.get("price2", "")
-            
-            # Format American odds with +/- prefix
-            team1_odds_str = f"{team1_odds:+}" if team1_odds > 0 else f"{team1_odds}"
-            team2_odds_str = f"{team2_odds:+}" if team2_odds > 0 else f"{team2_odds}"
-            
+
+            price1 = row.get("price1", 0)
+            price2 = row.get("price2", 0)
+            price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
+            price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
+
             values = [
-                row.get("bookmaker", ""),
                 row.get("team1", ""),
-                team1_odds_str,
+                price1_str,
                 row.get("team2", ""),
-                team2_odds_str,
+                price2_str,
                 prob_str,
+                row.get("bookmaker", ""),
             ]
-            print(" ".join(str(v).ljust(w) for v, w in zip(values, widths)))
+            print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
 
 def print_event_odds(
@@ -460,7 +448,7 @@ def list_market_keys(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Display projected head-to-head win probabilities for upcoming games.'
+        description='Display projected head-to-head win probabilities for tomorrow (autofetch event IDs).'
     )
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
@@ -473,7 +461,7 @@ def main() -> None:
     parser.add_argument('--list-market-keys', action='store_true', help='List market keys for upcoming events and exit')
     parser.add_argument('--game-period-markets', help='Comma separated game period market keys to include')
     parser.add_argument('--no-player-props', action='store_true', help='Exclude player prop markets')
-    parser.add_argument('--verbose', action='store_true', help='Show verbose debug output')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose debugging output')
     parser.add_argument(
         '--list-events',
         action='store_true',
@@ -525,21 +513,12 @@ def main() -> None:
             )
             return
             
-        print("\n===== UPCOMING EVENTS =====")
         for event in events:
             commence = event.get('commence_time', 'N/A')
             home = event.get('home_team', '')
             away = event.get('away_team', '')
             event_id = event.get('id', '')
-            
-            # Format the time nicely
-            try:
-                dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
-                time_str = dt.strftime("%Y-%m-%d %H:%M UTC")
-            except:
-                time_str = commence
-                
-            print(f"{time_str} - {away} at {home} [{event_id}]")
+            print(f"{commence} - {away} at {home} ({event_id})")
         return
 
     # Main functionality - get projections
@@ -550,11 +529,8 @@ def main() -> None:
         verbose=args.verbose,
     )
     
-    if projections:
-        print(f"\n===== PROJECTED WIN PROBABILITIES ({args.sport}) =====")
-        print_h2h_projections_table(projections)
-    else:
-        print(f"No projections available for {args.sport}.")
+    print("\n===== PROJECTED WIN PROBABILITIES =====")
+    print_h2h_projections_table(projections)
 
 
 if __name__ == '__main__':
