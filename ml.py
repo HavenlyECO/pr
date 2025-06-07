@@ -189,6 +189,9 @@ def build_h2h_dataset_from_api(
                     if market.get("key") != "h2h":
                         continue
                     outcomes = market.get("outcomes", [])
+                    print(
+                        f"DEBUG EVENT {event_id}: outcomes={json.dumps(outcomes, indent=2)}"
+                    )
                     if len(outcomes) != 2:
                         continue
                     team1 = outcomes[0].get("name")
