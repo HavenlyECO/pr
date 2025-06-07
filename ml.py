@@ -197,6 +197,10 @@ def build_h2h_dataset_from_api(
                     price2 = outcomes[1].get("price")
                     result1 = outcomes[0].get("result")
                     result2 = outcomes[1].get("result")
+                    if verbose:
+                        print(
+                            f"DEBUG: {team1} vs {team2} | price1={price1}, price2={price2}, result1={result1}, result2={result2}"
+                        )
                     if None in (team1, team2, price1, price2, result1, result2):
                         continue
                     label = 1 if result1 == "win" else 0
