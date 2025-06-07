@@ -63,7 +63,8 @@ def _cache_save(cache_dir: Path, key: str, data):
         pickle.dump(data, f)
 
 
-CACHE_DIR = ROOT_DIR / "api_cache"
+H2H_DATA_DIR = ROOT_DIR / "h2h_data"
+CACHE_DIR = H2H_DATA_DIR / "api_cache"
 
 
 def implied_probability(price: float | int | None) -> float | None:
@@ -461,9 +462,11 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     preds = model.predict(X_test)
     acc = accuracy_score(y_test, preds)
     print(f"Validation accuracy: {acc:.3f}")
-    with open(model_out, "wb") as f:
+    out_path = Path(model_out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "wb") as f:
         pickle.dump(model, f)
-    print(f"Model saved to {model_out}")
+    print(f"Model saved to {out_path}")
 
 
 def train_pitcher_ks_classifier(
@@ -496,7 +499,7 @@ def train_h2h_classifier(
     start_date: str,
     end_date: str,
     *,
-    model_out: str = "h2h_classifier.pkl",
+    model_out: str = str(H2H_DATA_DIR / "h2h_classifier.pkl"),
     regions: str = "us",
     odds_format: str = "american",
     verbose: bool = False,
@@ -562,7 +565,9 @@ def _cli():
         start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
 
     model_out = args.model_out or (
-        "pitcher_ks_classifier.pkl" if args.mode == "ks" else "h2h_classifier.pkl"
+        "pitcher_ks_classifier.pkl"
+        if args.mode == "ks"
+        else str(H2H_DATA_DIR / "h2h_classifier.pkl")
     )
 
     if args.mode == "h2h":

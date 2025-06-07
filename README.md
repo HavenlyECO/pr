@@ -52,30 +52,15 @@ To display alternate team totals odds, run:
 python main.py alternate_team_totals
 ```
 
-Player prop markets (hits, home runs, strikeouts and batter strikeouts)
-are included in the odds request by default. Pass the ``--no-player-props``
-flag to exclude them:
+The script now focuses solely on head-to-head matchups. Running it without
+extra options will print projected win probabilities using the trained
+``h2h_classifier.pkl`` model:
 
 ```bash
-python main.py --no-player-props
+python main.py
 ```
 
-To display projected pitcher strikeout props using the machine learning model,
-run:
-
-```bash
-python main.py --model=pitcher_ks_classifier.pkl
-```
-
-To display projected head-to-head win probabilities with the moneyline model, run:
-
-```bash
-python main.py --h2h --model=h2h_classifier.pkl
-```
-
-By default the script requests only the ``batter_strikeouts`` market and
-evaluates those props. Pass the ``--markets`` option to request different or
-additional markets.
+Use ``--model`` to specify a different classifier file if needed.
 
 To display outrights (futures) odds, run:
 
@@ -104,22 +89,6 @@ python main.py --list-events
 ```
 The region defaults to ``us``. Pass ``--regions`` with a comma-separated list to
 see events available in other regions.
-
-To fetch all odds for a single event and print the raw JSON response, supply the
-event ID and ``--event-odds``:
-
-```bash
-python main.py --event-id=<event id> --event-odds
-```
-You can also customize the ``--markets``, ``--odds-format`` and ``--date-format``
-options when using this endpoint.
-
-To include game period markets (e.g. quarters or innings) in the API request,
-pass them via the ``--game-period-markets`` option:
-
-```bash
-python main.py --game-period-markets=first_half_totals
-```
 
 To list all market keys and descriptions available for upcoming games, run:
 
