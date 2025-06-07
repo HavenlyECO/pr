@@ -363,6 +363,164 @@ def print_projections_table(projections: list) -> None:
             print(" | ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
 
 
+def evaluate_h2h_all_tomorrow(
+    sport_key: str,
+    model_path: str,
+    regions: str = "us",
+) -> list:
+    """Evaluate head-to-head win probability for all games in today's window."""
+
+    from ml import predict_h2h_probability
+
+    events = fetch_events(sport_key, regions=regions)
+    results: list[dict] = []
+
+    print(f"DEBUG: {len(events)} events returned by API")
+    for event in events:
+        commence = event.get("commence_time", "")
+        event_id = event.get("id")
+        home = event.get("home_team")
+        away = event.get("away_team")
+        print(f"\nEVENT: {event_id} | {away} at {home} | {commence}")
+
+        try:
+            commence_dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception as e:
+            print(f"  Skipped: invalid commence_time format {commence} ({e})")
+            continue
+
+        today = datetime.utcnow()
+        start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
+        end_dt = start_dt + timedelta(hours=14)
+
+        if not (start_dt <= commence_dt < end_dt):
+            print(
+                f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
+            )
+            continue
+
+        game_odds = fetch_event_odds(
+            sport_key,
+            event_id,
+            markets="h2h",
+            regions=regions,
+            player_props=False,
+        )
+        print(f"  Raw odds for event {event_id}:")
+        print(json.dumps(game_odds, indent=2))
+
+        if isinstance(game_odds, dict) and "bookmakers" in game_odds:
+            game_odds = [game_odds]
+        elif not isinstance(game_odds, list):
+            print(f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}")
+            continue
+
+        for game in game_odds:
+            if not isinstance(game, dict):
+                print(f"  Skipped: game is not a dict: {game}")
+                continue
+            if not game.get("bookmakers"):
+                print(f"  Skipped: no bookmakers in game {game.get('id')} for this event")
+                continue
+            print(
+                f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers', [])]}"
+            )
+
+            for book in game.get("bookmakers", []):
+                book_name = book.get("title") or book.get("key")
+                print(f"    Bookmaker: {book_name}")
+                if not book.get("markets"):
+                    print("      Skipped: no markets in this bookmaker")
+                    continue
+                for market in book.get("markets", []):
+                    print(
+                        f"      Market key: {market.get('key')}, desc: {market.get('description')}"
+                    )
+                    if market.get("key") != "h2h":
+                        print("        Skipped: not a h2h market")
+                        continue
+                    if not market.get("outcomes"):
+                        print("        Skipped: no outcomes in market")
+                        continue
+                    if len(market.get("outcomes", [])) != 2:
+                        print("        Skipped: h2h market does not have exactly 2 outcomes")
+                        continue
+                    outcome1, outcome2 = market["outcomes"]
+                    team1 = outcome1.get("name")
+                    team2 = outcome2.get("name")
+                    price1 = outcome1.get("price")
+                    price2 = outcome2.get("price")
+                    if team1 is None or team2 is None or price1 is None or price2 is None:
+                        print("        Skipped: missing team name or price")
+                        continue
+                    prob = predict_h2h_probability(model_path, price1, price2)
+                    print(
+                        f"        EVAL: {team1}({price1}) vs {team2}({price2}) prob(team1 win)={prob}"
+                    )
+                    results.append(
+                        {
+                            "game": f"{team1} vs {team2}",
+                            "bookmaker": book_name,
+                            "team1": team1,
+                            "team2": team2,
+                            "price1": price1,
+                            "price2": price2,
+                            "event_id": event_id,
+                            "projected_team1_win_probability": prob,
+                        }
+                    )
+    print(f"DEBUG: Total evaluated h2h: {len(results)}")
+    return results
+
+
+def print_h2h_projections_table(projections: list) -> None:
+    """Display a simple table for h2h projections."""
+
+    if not projections:
+        print("No projection data available.")
+        return
+
+    headers = [
+        "GAME",
+        "BOOK",
+        "TEAM1",
+        "TEAM2",
+        "PRICE1",
+        "PRICE2",
+        "P(TEAM1 WIN)",
+    ]
+
+    def col_width(key: str, minimum: int) -> int:
+        return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
+
+    widths = {
+        "GAME": col_width("game", 10),
+        "BOOK": col_width("bookmaker", 6),
+        "TEAM1": col_width("team1", 8),
+        "TEAM2": col_width("team2", 8),
+        "PRICE1": col_width("price1", 6),
+        "PRICE2": col_width("price2", 6),
+        "P(TEAM1 WIN)": 13,
+    }
+
+    header_line = " ".join(h.ljust(widths[h]) for h in headers)
+    print(header_line)
+    print("-" * len(header_line))
+    for row in projections:
+        prob = row.get("projected_team1_win_probability")
+        prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
+        values = [
+            row.get("game", ""),
+            row.get("bookmaker", ""),
+            row.get("team1", ""),
+            row.get("team2", ""),
+            row.get("price1", ""),
+            row.get("price2", ""),
+            prob_str,
+        ]
+        print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
+
+
 def print_event_odds(
     sport_key: str,
     event_id: str,
@@ -429,7 +587,7 @@ def list_market_keys(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Display projected batter strikeout props for tomorrow (autofetch event IDs).'
+        description='Display projected batter strikeout props or head-to-head win probabilities for tomorrow (autofetch event IDs).'
     )
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
@@ -442,6 +600,7 @@ def main() -> None:
     parser.add_argument('--list-market-keys', action='store_true', help='List market keys for upcoming events and exit')
     parser.add_argument('--game-period-markets', help='Comma separated game period market keys to include')
     parser.add_argument('--no-player-props', action='store_true', help='Exclude player prop markets')
+    parser.add_argument('--h2h', action='store_true', help='Evaluate head-to-head win probabilities')
     parser.add_argument(
         '--list-events',
         action='store_true',
@@ -500,12 +659,22 @@ def main() -> None:
             print(f"{commence} - {away} at {home} ({event_id})")
         return
 
-    projections = evaluate_batter_strikeouts_all_tomorrow(
-        args.sport,
-        args.model,
-        regions=args.regions,
-    )
-    print_projections_table(projections)
+    if args.h2h:
+        if args.model == 'pitcher_ks_classifier.pkl':
+            args.model = 'h2h_classifier.pkl'
+        projections = evaluate_h2h_all_tomorrow(
+            args.sport,
+            args.model,
+            regions=args.regions,
+        )
+        print_h2h_projections_table(projections)
+    else:
+        projections = evaluate_batter_strikeouts_all_tomorrow(
+            args.sport,
+            args.model,
+            regions=args.regions,
+        )
+        print_projections_table(projections)
 
 
 if __name__ == '__main__':
