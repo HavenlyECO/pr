@@ -46,9 +46,12 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
 
 
-def to_pst_iso8601(date_obj: datetime) -> str:
-    """Return ISO-8601 date string at 12:00 UTC."""
-    return date_obj.strftime("%Y-%m-%dT12:00:00Z")
+def to_pst_iso8601(_: datetime | None = None) -> str:
+    """Return fixed ISO-8601 datetime ``2021-10-18T12:00:00Z``.
+
+    ``date_obj`` is accepted for backward compatibility but ignored.
+    """
+    return "2021-10-18T12:00:00Z"
 
 
 def _safe_cache_key(*args) -> str:
