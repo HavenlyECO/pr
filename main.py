@@ -27,7 +27,7 @@ def build_odds_url(
     *,
     event_id: str | None = None,
     regions: str = 'us',
-    markets: str = '',
+    markets: str = 'batter_strikeouts',
     odds_format: str = 'american',
     date_format: str = 'iso',
 ) -> str:
@@ -55,7 +55,7 @@ def fetch_odds(
     *,
     event_id: str | None = None,
     regions: str = "us",
-    markets: str = "",
+    markets: str = "batter_strikeouts",
     odds_format: str = "american",
     date_format: str = "iso",
 ) -> list:
@@ -83,7 +83,7 @@ def evaluate_tomorrows_strikeout_props(
     *,
     event_id: str | None = None,
     regions: str = 'us',
-    markets: str = '',
+    markets: str = 'batter_strikeouts',
 ) -> list:
     """Return strikeout prop evaluations for games starting tomorrow.
 
@@ -184,8 +184,8 @@ def main() -> None:
     parser.add_argument('--model', default='pitcher_ks_classifier.pkl', help='Path to trained ML model')
     parser.add_argument(
         '--markets',
-        default='',
-        help='Comma separated markets (default: all markets; leave blank for general)'
+        default='batter_strikeouts',
+        help='Comma separated markets (default: batter_strikeouts)'
     )
     parser.add_argument(
         '--event-id',
