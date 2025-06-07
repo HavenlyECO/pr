@@ -7,10 +7,24 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import argparse
 
+# For improved table and color output
+try:
+    from tabulate import tabulate
+    from colorama import Fore, Style, init as colorama_init
+    colorama_init(autoreset=True)
+except ImportError:
+    print(
+        "Please install tabulate and colorama for improved output: pip install tabulate colorama"
+    )
+    tabulate = None
+    Fore = Style = None
+
 try:
     from dotenv import load_dotenv
 except ImportError:
-    raise ImportError("python-dotenv is required. Install it with 'pip install python-dotenv'")
+    raise ImportError(
+        "python-dotenv is required. Install it with 'pip install python-dotenv'"
+    )
 
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / '.env'
@@ -93,10 +107,18 @@ def fetch_event_odds(
         with urllib.request.urlopen(url) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        # Optionally handle/log errors here
+        print(
+            Fore.RED + f"HTTPError fetching event odds: {e.code} {e.reason} for URL: {url}"
+            if Fore
+            else f"HTTPError fetching event odds: {e.code} {e.reason} for URL: {url}"
+        )
         return []
     except Exception as e:
-        # Defensive: Return empty on any other error
+        print(
+            Fore.RED + f"Error fetching event odds: {e}"
+            if Fore
+            else f"Error fetching event odds: {e}"
+        )
         return []
 
 
@@ -110,18 +132,28 @@ def evaluate_batter_strikeouts_all_tomorrow(
     events = fetch_events(sport_key, regions=regions)
     results = []
 
-    print(f"DEBUG: {len(events)} events returned by API")
+    print(
+        Fore.CYAN + f"DEBUG: {len(events)} events returned by API"
+        if Fore
+        else f"DEBUG: {len(events)} events returned by API"
+    )
     for event in events:
         commence = event.get('commence_time', '')
         event_id = event.get('id')
         home = event.get('home_team')
         away = event.get('away_team')
-        print(f"\nEVENT: {event_id} | {away} at {home} | {commence}")
+        print(
+            f"\n{Style.BRIGHT if Style else ''}EVENT: {event_id} | {away} at {home} | {commence}"
+        )
 
         try:
             commence_dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
         except Exception as e:
-            print(f"  Skipped: invalid commence_time format {commence} ({e})")
+            print(
+                Fore.YELLOW + f"  Skipped: invalid commence_time format {commence} ({e})"
+                if Fore
+                else f"  Skipped: invalid commence_time format {commence} ({e})"
+            )
             continue
 
         today = datetime.utcnow()
@@ -130,7 +162,10 @@ def evaluate_batter_strikeouts_all_tomorrow(
 
         if not (start_dt <= commence_dt < end_dt):
             print(
-                f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
+                Fore.YELLOW
+                + f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
+                if Fore
+                else f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
             )
             continue
 
@@ -138,40 +173,82 @@ def evaluate_batter_strikeouts_all_tomorrow(
             sport_key,
             event_id,
             markets="batter_strikeouts",
-            regions=regions
+            regions=regions,
         )
-        print(f"  Raw odds for event {event_id}:")
-        print(json.dumps(game_odds, indent=2))
 
-        # Handle if the API returns a single dict (with 'bookmakers') or a list
+        # Debug: show all bookmaker keys available for this event (even if no markets are present)
+        all_bookmaker_keys = []
         if isinstance(game_odds, dict) and 'bookmakers' in game_odds:
+            all_bookmaker_keys = [b.get('key') for b in game_odds['bookmakers']]
             game_odds = [game_odds]
-        elif not isinstance(game_odds, list):
-            print(f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}")
+        elif isinstance(game_odds, list):
+            for game in game_odds:
+                all_bookmaker_keys.extend([b.get('key') for b in game.get('bookmakers', [])])
+        print(
+            Fore.MAGENTA + f"  Bookmaker keys in event odds: {sorted(set(all_bookmaker_keys))}"
+            if Fore
+            else f"  Bookmaker keys in event odds: {sorted(set(all_bookmaker_keys))}"
+        )
+
+        if not isinstance(game_odds, list):
+            print(
+                Fore.RED
+                + f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}"
+                if Fore
+                else f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}"
+            )
             continue
 
         for game in game_odds:
             if not isinstance(game, dict):
-                print(f"  Skipped: game is not a dict: {game}")
+                print(
+                    Fore.RED + f"  Skipped: game is not a dict: {game}"
+                    if Fore
+                    else f"  Skipped: game is not a dict: {game}"
+                )
                 continue
             if not game.get('bookmakers'):
-                print(f"  Skipped: no bookmakers in game {game.get('id')} for this event")
+                print(
+                    Fore.YELLOW
+                    + f"  Skipped: no bookmakers in game {game.get('id')} for this event"
+                    if Fore
+                    else f"  Skipped: no bookmakers in game {game.get('id')} for this event"
+                )
                 continue  # no props posted for this event
-            print(f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers',[])]}")
+            print(
+                Fore.GREEN
+                + f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers',[])]}"
+                if Fore
+                else f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers',[])]}"
+            )
 
             for book in game.get('bookmakers', []):
                 book_name = book.get('title') or book.get('key')
                 print(f"    Bookmaker: {book_name}")
                 if not book.get('markets'):
-                    print("      Skipped: no markets in this bookmaker")
+                    print(
+                        Fore.YELLOW + "      Skipped: no markets in this bookmaker"
+                        if Fore
+                        else "      Skipped: no markets in this bookmaker"
+                    )
                     continue
                 for market in book.get('markets', []):
-                    print(f"      Market key: {market.get('key')}, desc: {market.get('description')}")
+                    print(
+                        f"      Market key: {market.get('key')}, desc: {market.get('description')}"
+                    )
                     if market.get('key') != 'batter_strikeouts':
-                        print("        Skipped: not a batter_strikeouts market")
+                        print(
+                            Fore.YELLOW + "        Skipped: not a batter_strikeouts market"
+                            if Fore
+                            else "        Skipped: not a batter_strikeouts market"
+                        )
                         continue
                     if not market.get('outcomes'):
-                        print("        Skipped: no outcomes in market")
+                        print(
+                            Fore.YELLOW + "        Skipped: no outcomes in market"
+                            if Fore
+                            else "        Skipped: no outcomes in market"
+                        )
                         continue
                     line_map = {}
                     for outcome in market.get('outcomes', []):
@@ -179,7 +256,12 @@ def evaluate_batter_strikeouts_all_tomorrow(
                         line = outcome.get('line')
                         desc = outcome.get('description', '').lower()
                         if player is None or line is None:
-                            print(f"        Skipped outcome: missing player or line: {outcome}")
+                            print(
+                                Fore.RED
+                                + f"        Skipped outcome: missing player or line: {outcome}"
+                                if Fore
+                                else f"        Skipped outcome: missing player or line: {outcome}"
+                            )
                             continue
                         key = (player, line)
                         if key not in line_map:
@@ -195,7 +277,12 @@ def evaluate_batter_strikeouts_all_tomorrow(
                             line_map[key]['price_under'] = outcome.get('price')
                     for props in line_map.values():
                         if props['price_over'] is None or props['price_under'] is None:
-                            print(f"        Skipped: missing price_over or price_under for {props}")
+                            print(
+                                Fore.YELLOW
+                                + f"        Skipped: missing price_over or price_under for {props}"
+                                if Fore
+                                else f"        Skipped: missing price_over or price_under for {props}"
+                            )
                             continue
                         features = {
                             'line': props['line'],
@@ -203,8 +290,17 @@ def evaluate_batter_strikeouts_all_tomorrow(
                             'price_under': props['price_under'],
                         }
                         prob = predict_pitcher_ks_over_probability(model_path, features)
+                        prob_str = (
+                            Fore.GREEN + f"{prob*100:.1f}%"
+                            if Fore and prob is not None and prob > 0.6
+                            else (
+                                Fore.RED + f"{prob*100:.1f}%"
+                                if Fore and prob is not None and prob < 0.4
+                                else f"{prob*100:.1f}%" if prob is not None else "N/A"
+                            )
+                        )
                         print(
-                            f"        EVAL: {props['player']} line={props['line']} over={props['price_over']} under={props['price_under']} prob={prob}"
+                            f"        EVAL: {props['player']} line={props['line']} over={props['price_over']} under={props['price_under']} prob={prob_str}"
                         )
                         results.append({
                             'game': f"{home} vs {away}",
@@ -216,45 +312,37 @@ def evaluate_batter_strikeouts_all_tomorrow(
                             'event_id': event_id,
                             'projected_over_probability': prob,
                         })
-    print(f"DEBUG: Total evaluated props: {len(results)}")
+    print(
+        Fore.CYAN + f"DEBUG: Total evaluated props: {len(results)}"
+        if Fore
+        else f"DEBUG: Total evaluated props: {len(results)}"
+    )
     return results
 
 
 def print_projections_table(projections: list) -> None:
     if not projections:
-        print("No projection data available.")
+        print(
+            Fore.YELLOW + "No projection data available." if Fore else "No projection data available."
+        )
         return
 
-    headers = [
-        "GAME",
-        "BOOK",
-        "PLAYER",
-        "LINE",
-        "OVER",
-        "UNDER",
-        "P(OVER)",
-    ]
-
-    def col_width(key, min_width):
-        return max(min_width, max(len(str(row.get(key, ""))) for row in projections))
-
-    widths = {
-        "GAME": col_width("game", 10),
-        "BOOK": col_width("bookmaker", 6),
-        "PLAYER": col_width("player", 8),
-        "LINE": col_width("line", 4),
-        "OVER": col_width("price_over", 4),
-        "UNDER": col_width("price_under", 5),
-        "P(OVER)": 7,
-    }
-
-    header_line = " ".join(h.ljust(widths[h]) for h in headers)
-    print(header_line)
-    print("-" * len(header_line))
+    headers = ["GAME", "BOOK", "PLAYER", "LINE", "OVER", "UNDER", "P(OVER)"]
+    table = []
     for row in projections:
         prob = row.get("projected_over_probability")
-        prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
-        values = [
+        prob_val = f"{prob*100:.1f}%" if prob is not None else "N/A"
+        # Colorize probability
+        if Fore and prob is not None:
+            if prob > 0.6:
+                prob_str = Fore.GREEN + prob_val + Style.RESET_ALL
+            elif prob < 0.4:
+                prob_str = Fore.RED + prob_val + Style.RESET_ALL
+            else:
+                prob_str = Fore.YELLOW + prob_val + Style.RESET_ALL
+        else:
+            prob_str = prob_val
+        table.append([
             row.get("game", ""),
             row.get("bookmaker", ""),
             row.get("player", ""),
@@ -262,8 +350,17 @@ def print_projections_table(projections: list) -> None:
             row.get("price_over", ""),
             row.get("price_under", ""),
             prob_str,
-        ]
-        print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
+        ])
+    if tabulate:
+        print(tabulate(table, headers, tablefmt="fancy_grid"))
+    else:
+        # Fallback: Plain text
+        col_widths = [max(len(str(x)) for x in [h] + [row[i] for row in table]) for i, h in enumerate(headers)]
+        header_line = " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
+        print(header_line)
+        print("-" * len(header_line))
+        for row in table:
+            print(" | ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
 
 
 def print_event_odds(
@@ -302,7 +399,7 @@ def list_market_keys(
 
     events = fetch_events(sport_key, regions=regions)
     if not events:
-        print("No upcoming events found.")
+        print(Fore.YELLOW + "No upcoming events found." if Fore else "No upcoming events found.")
         return
 
     req_markets = markets
@@ -354,7 +451,11 @@ def main() -> None:
 
     if args.event_odds:
         if not args.event_id:
-            print('--event-id is required with --event-odds')
+            print(
+                Fore.RED + '--event-id is required with --event-odds'
+                if Fore
+                else '--event-id is required with --event-odds'
+            )
             return
         req_markets = args.markets
         if args.game_period_markets:
@@ -385,7 +486,11 @@ def main() -> None:
     if args.list_events:
         events = fetch_events(args.sport, regions=args.regions)
         if not events:
-            print('No upcoming events found.')
+            print(
+                Fore.YELLOW + 'No upcoming events found.'
+                if Fore
+                else 'No upcoming events found.'
+            )
             return
         for event in events:
             commence = event.get('commence_time', 'N/A')
