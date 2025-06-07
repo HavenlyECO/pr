@@ -177,7 +177,7 @@ def format_projected_ks_props(games: list[dict], model_path: str) -> str:
         for bookmaker in game.get("bookmakers", []):
             bm_title = bookmaker.get("title", bookmaker.get("key", ""))
             for market in bookmaker.get("markets", []):
-                if market.get("key") != "player_strikeouts":
+                if market.get("key") != "batter_strikeouts":
                     continue
                 pitcher_lines: dict[tuple, dict] = {}
                 for outcome in market.get("outcomes", []):
