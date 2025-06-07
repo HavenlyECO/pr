@@ -2,6 +2,7 @@ import os
 import json
 import urllib.parse
 import urllib.request
+import urllib.error
 from datetime import datetime, timedelta
 from pathlib import Path
 import argparse
@@ -68,8 +69,20 @@ def fetch_odds(
         odds_format=odds_format,
         date_format=date_format,
     )
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = ""
+        if hasattr(e, "read"):
+            try:
+                body = e.read().decode()
+            except Exception:
+                body = str(e.read())
+        error_msg = (
+            f"HTTPError fetching odds: {e.code} {e.reason}\n{body}\nURL: {url}"
+        )
+        raise RuntimeError(error_msg) from e
 
 
 def tomorrow_iso() -> str:
