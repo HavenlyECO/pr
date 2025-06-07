@@ -2,18 +2,19 @@
 import os
 import sys
 import pickle
-from pathlib import Path
 import numpy as np
+from pathlib import Path
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+import json
 
 # Import from your ml.py module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from ml import H2H_DATA_DIR, H2H_MODEL_PATH, CACHE_DIR, build_h2h_dataset_from_api
+from ml import H2H_DATA_DIR, H2H_MODEL_PATH, CACHE_DIR
 
-
+# Define at module level (not inside a function) so it can be pickled
 class SimpleOddsModel:
     """A model that converts American odds to implied probability."""
 
@@ -42,26 +43,55 @@ def examine_cache_files(cache_dir=CACHE_DIR, max_files=5):
 
             print(f"\nFile {i+1}: {cache_file.name}")
 
-            if isinstance(data, list):
+            if isinstance(data, dict):
+                print(f"  Contains a dictionary with keys: {list(data.keys())}")
+
+                # Look inside the 'data' field which may contain the actual API response
+                if 'data' in data:
+                    inner_data = data['data']
+
+                    if isinstance(inner_data, list):
+                        print(f"  Data field contains a list of {len(inner_data)} items")
+
+                        if inner_data:
+                            for idx, item in enumerate(inner_data[:1]):  # Look at first item
+                                print(f"  Item {idx} type: {type(item)}")
+
+                                if isinstance(item, dict):
+                                    print(f"  Item {idx} keys: {list(item.keys())}")
+
+                                    # Check for bookmakers
+                                    if 'bookmakers' in item:
+                                        print(f"  Found {len(item['bookmakers'])} bookmakers")
+
+                                        for b_idx, book in enumerate(item['bookmakers'][:1]):  # First bookmaker
+                                            print(f"  Bookmaker {b_idx}: {book.get('key', 'unknown')}")
+
+                                            # Check for markets
+                                            if 'markets' in book:
+                                                print(f"  Found {len(book['markets'])} markets")
+
+                                                for m_idx, market in enumerate(book['markets'][:1]):  # First market
+                                                    print(f"  Market {m_idx} key: {market.get('key', 'unknown')}")
+
+                                                    # Check for h2h market
+                                                    if market.get('key') == 'h2h' and 'outcomes' in market:
+                                                        print(f"  Found h2h market with {len(market['outcomes'])} outcomes")
+
+                                                        # Check for results field
+                                                        has_results = any('result' in outcome for outcome in market['outcomes'])
+                                                        print(f"  Has results field: {has_results}")
+
+                                                        for o_idx, outcome in enumerate(market['outcomes']):
+                                                            print(f"  Outcome {o_idx} keys: {list(outcome.keys())}")
+                    elif isinstance(inner_data, dict):
+                        print(f"  Data field contains a dictionary with keys: {list(inner_data.keys())}")
+            elif isinstance(data, list):
                 print(f"  Contains a list of {len(data)} items")
+
                 if data and isinstance(data[0], dict):
                     print(f"  First item keys: {list(data[0].keys())}")
-                    if "markets" in data[0]:
-                        markets = data[0]["markets"]
-                        print(f"  Markets count: {len(markets)}")
-                        for market in markets:
-                            print(f"    Market key: {market.get('key')}")
-                            if market.get("key") == "h2h":
-                                outcomes = market.get("outcomes", [])
-                                print(f"    H2H outcomes: {len(outcomes)}")
-                                if outcomes:
-                                    has_results = "result" in outcomes[0]
-                                    print(f"    Has results: {has_results}")
-                                    print(f"    Sample outcome: {outcomes[0]}")
-            elif isinstance(data, dict):
-                print(f"  Contains a dictionary with keys: {list(data.keys())}")
-            else:
-                print(f"  Contains data of type: {type(data)}")
+
         except Exception as e:
             print(f"  Error examining file {cache_file}: {e}")
 
@@ -83,47 +113,68 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
 
     rows = []
     processed_files = 0
+
     for cache_file in cache_files:
         try:
             with open(cache_file, "rb") as f:
-                data = pickle.load(f)
+                cached_data = pickle.load(f)
 
+            # Handle the structure where data is in a 'data' field
+            if isinstance(cached_data, dict) and 'data' in cached_data:
+                data = cached_data['data']
+            else:
+                data = cached_data
+
+            # Process data, which could be a list of events
             if isinstance(data, list):
                 for item in data:
                     if not isinstance(item, dict):
                         continue
-                    for market in item.get("markets", []):
-                        if market.get("key") != "h2h":
-                            continue
-                        outcomes = market.get("outcomes", [])
-                        if len(outcomes) != 2:
-                            continue
-                        team1 = outcomes[0].get("name")
-                        team2 = outcomes[1].get("name")
-                        price1 = outcomes[0].get("price")
-                        price2 = outcomes[1].get("price")
-                        result1 = outcomes[0].get("result")
-                        result2 = outcomes[1].get("result")
-                        if None in (team1, team2, price1, price2, result1, result2):
-                            continue
-                        label = 1 if result1 == "win" else 0
-                        rows.append(
-                            {
-                                "team1": team1,
-                                "team2": team2,
-                                "price1": price1,
-                                "price2": price2,
-                                "team1_win": label,
-                            }
-                        )
+
+                    # Process bookmakers
+                    for book in item.get("bookmakers", []):
+                        for market in book.get("markets", []):
+                            if market.get("key") != "h2h":
+                                continue
+
+                            outcomes = market.get("outcomes", [])
+                            if len(outcomes) != 2:
+                                continue
+
+                            team1 = outcomes[0].get("name")
+                            team2 = outcomes[1].get("name")
+                            price1 = outcomes[0].get("price")
+                            price2 = outcomes[1].get("price")
+
+                            # Check if results are available
+                            result1 = outcomes[0].get("result")
+                            result2 = outcomes[1].get("result")
+
+                            if None in (team1, team2, price1, price2):
+                                continue
+
+                            # If we have results, use them for training
+                            if result1 is not None and result2 is not None:
+                                label = 1 if result1 == "win" else 0
+                                rows.append({
+                                    "team1": team1,
+                                    "team2": team2,
+                                    "price1": price1,
+                                    "price2": price2,
+                                    "team1_win": label,
+                                })
+                                if verbose:
+                                    print(f"Found h2h result: {team1}({price1}) vs {team2}({price2}) result: {result1}")
+
+            processed_files += 1
+            if verbose and processed_files % 100 == 0:
+                print(f"Processed {processed_files} cache files...")
+
         except Exception as e:
             if verbose:
                 print(f"Error processing cache file {cache_file}: {e}")
             continue
 
-    processed_files += 1
-    if verbose and processed_files % 100 == 0:
-        print(f"Processed {processed_files} cache files...")
     if not rows:
         print("No valid training data found in cache files")
         return False
@@ -159,7 +210,7 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
 
 def train_simple_model(model_out=H2H_MODEL_PATH):
     """Create a simple model based on implied probability conversion"""
-
+    # Using SimpleOddsModel defined at module level
     model = SimpleOddsModel()
     model_path = Path(model_out)
     model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,48 +222,6 @@ def train_simple_model(model_out=H2H_MODEL_PATH):
     return True
 
 
-def train_new_model_from_api(
-    sport_key="baseball_mlb", days=30, model_out=H2H_MODEL_PATH
-):
-    """Train a new model by fetching data from the API"""
-    from datetime import datetime, timedelta
-
-    end_date = datetime.utcnow().strftime("%Y-%m-%d")
-    start_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
-
-    print(f"Training model with data from {start_date} to {end_date}")
-
-    try:
-        df = build_h2h_dataset_from_api(
-            sport_key, start_date, end_date, verbose=True
-        )
-
-        X = df[["price1", "price2"]]
-        y = df["team1_win"]
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
-
-        model = LogisticRegression(max_iter=1000)
-        model.fit(X_train, y_train)
-
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds)
-        print(f"Model validation accuracy: {acc:.3f}")
-
-        model_path = Path(model_out)
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(model_path, "wb") as f:
-            pickle.dump(model, f)
-
-        print(f"Model successfully saved to {model_path}")
-        return True
-    except Exception as e:
-        print(f"Error training model from API: {e}")
-        return False
-
-
 if __name__ == "__main__":
     import argparse
 
@@ -222,36 +231,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-cache", action="store_true", help="Try to use cached data first"
     )
-    parser.add_argument("--examine-cache", action="store_true", help="Examine cache files to debug")
     parser.add_argument(
-        "--api-days",
-        type=int,
-        default=30,
-        help="Days of history to fetch from API (default: 30)",
+        "--examine-cache", action="store_true", help="Examine cache files to debug"
     )
-    parser.add_argument("--sport", default="baseball_mlb", help="Sport key")
     parser.add_argument(
         "--simple", action="store_true", help="Create a simple odds conversion model"
     )
     parser.add_argument(
         "--model-out", default=str(H2H_MODEL_PATH), help="Output model path"
     )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Show verbose output"
+    )
 
     args = parser.parse_args()
+
     if args.examine_cache:
-        examine_cache_files()
+        examine_cache_files(max_files=10)
         sys.exit(0)
 
     success = False
 
     if args.use_cache:
-        success = train_from_cache(model_out=args.model_out)
-
-    if not success and not args.simple:
-        print("Attempting to train model from API data...")
-        success = train_new_model_from_api(
-            sport_key=args.sport, days=args.api_days, model_out=args.model_out
-        )
+        success = train_from_cache(model_out=args.model_out, verbose=args.verbose)
 
     if not success or args.simple:
         print("Creating a simple odds conversion model...")
