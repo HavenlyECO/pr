@@ -63,7 +63,10 @@ def create_simple_fallback_model(model_path):
 
     print(f"{Fore.GREEN}Simple fallback model created at {model_path}" if Fore else f"Simple fallback model created at {model_path}")
     print("Note: This is a very basic model based on odds conversion. For better results, train with real data:")
-    print("python ml.py --sport baseball_mlb --start-date 2023-05-01 --end-date 2023-06-01 --verbose --once")
+    print(
+        "python ml.py --sport baseball_mlb --start-date 2023-05-01 "
+        "--end-date 2023-06-01 --verbose"
+    )
 
     return model
 
