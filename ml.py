@@ -33,6 +33,13 @@ if not API_KEY:
 
 MAX_HISTORICAL_DAYS = 365
 
+# Time helper
+def to_pst_iso8601(date_obj: datetime) -> str:
+    """Return ISO-8601 date string in PST (UTC-8) without DST adjustment."""
+
+    # Always use PST (UTC-8), no daylight adjustment
+    return date_obj.strftime("%Y-%m-%dT00:00:00-08:00")
+
 # --------- Simple File Cache -----------#
 
 def _safe_cache_key(*args) -> str:
