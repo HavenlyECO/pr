@@ -66,6 +66,20 @@ def _cache_save(cache_dir: Path, key: str, data):
 CACHE_DIR = ROOT_DIR / "api_cache"
 
 
+def implied_probability(price: float | int | None) -> float | None:
+    """Return implied probability from American odds price."""
+    if price is None:
+        return None
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        return None
+    if price >= 0:
+        return 100.0 / (price + 100.0)
+    else:
+        return -price / (-price + 100.0)
+
+
 def build_pitcher_ks_url(
     sport_key: str,
     event_id: str,

@@ -64,6 +64,13 @@ To display projected strikeout prop odds using a trained model, run:
 python main.py projected_ks_props
 ```
 
+To display projected strikeout props with machine learning probability
+evaluation based on moneyline odds, run:
+
+```bash
+python main.py projected_ks_ml_eval
+```
+
 To display outrights (futures) odds, run:
 
 ```bash
