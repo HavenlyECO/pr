@@ -227,6 +227,70 @@ def print_projections_table(projections: list) -> None:
         print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
 
+def print_event_odds(
+    sport_key: str,
+    event_id: str,
+    markets: str,
+    regions: str,
+    odds_format: str,
+    date_format: str,
+    player_props: bool,
+) -> None:
+    """Fetch odds for a single event and print the raw JSON."""
+
+    game_odds = fetch_event_odds(
+        sport_key,
+        event_id,
+        markets=markets,
+        regions=regions,
+        odds_format=odds_format,
+        date_format=date_format,
+        player_props=player_props,
+    )
+    print(json.dumps(game_odds, indent=2))
+
+
+def list_market_keys(
+    sport_key: str,
+    markets: str,
+    regions: str,
+    odds_format: str,
+    date_format: str,
+    player_props: bool,
+    game_period_markets: str | None = None,
+) -> None:
+    """List all market keys available for upcoming games."""
+
+    events = fetch_events(sport_key, regions=regions)
+    if not events:
+        print("No upcoming events found.")
+        return
+
+    req_markets = markets
+    if game_period_markets:
+        req_markets = f"{markets},{game_period_markets}" if markets else game_period_markets
+
+    for event in events:
+        event_id = event.get("id")
+        game_odds = fetch_event_odds(
+            sport_key,
+            event_id,
+            markets=req_markets,
+            regions=regions,
+            odds_format=odds_format,
+            date_format=date_format,
+            player_props=player_props,
+        )
+        print(json.dumps(game_odds, indent=2))
+        if isinstance(game_odds, list):
+            for game in game_odds:
+                for book in game.get("bookmakers", []):
+                    for market in book.get("markets", []):
+                        print(
+                            f"Market key: {market.get('key')}, desc: {market.get('description')}"
+                        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description='Display projected batter strikeout props for tomorrow (autofetch event IDs).'
@@ -234,12 +298,50 @@ def main() -> None:
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
     parser.add_argument('--model', default='pitcher_ks_classifier.pkl', help='Path to trained ML model')
+    parser.add_argument('--markets', default='batter_strikeouts', help='Comma separated market keys')
+    parser.add_argument('--odds-format', default='american', help='Odds format')
+    parser.add_argument('--date-format', default='iso', help='Date format')
+    parser.add_argument('--event-id', help='Event ID for event odds request')
+    parser.add_argument('--event-odds', action='store_true', help='Print raw odds for the given event ID and exit')
+    parser.add_argument('--list-market-keys', action='store_true', help='List market keys for upcoming events and exit')
+    parser.add_argument('--game-period-markets', help='Comma separated game period market keys to include')
+    parser.add_argument('--no-player-props', action='store_true', help='Exclude player prop markets')
     parser.add_argument(
         '--list-events',
         action='store_true',
         help='List upcoming events for the given sport and exit'
     )
     args = parser.parse_args()
+
+    if args.event_odds:
+        if not args.event_id:
+            print('--event-id is required with --event-odds')
+            return
+        req_markets = args.markets
+        if args.game_period_markets:
+            req_markets = f"{args.markets},{args.game_period_markets}" if args.markets else args.game_period_markets
+        print_event_odds(
+            args.sport,
+            args.event_id,
+            req_markets,
+            regions=args.regions,
+            odds_format=args.odds_format,
+            date_format=args.date_format,
+            player_props=not args.no_player_props,
+        )
+        return
+
+    if args.list_market_keys:
+        list_market_keys(
+            args.sport,
+            args.markets,
+            regions=args.regions,
+            odds_format=args.odds_format,
+            date_format=args.date_format,
+            player_props=not args.no_player_props,
+            game_period_markets=args.game_period_markets,
+        )
+        return
 
     if args.list_events:
         events = fetch_events(args.sport, regions=args.regions)
