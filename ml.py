@@ -80,6 +80,119 @@ def implied_probability(price: float | int | None) -> float | None:
         return -price / (-price + 100.0)
 
 
+def build_h2h_url(
+    sport_key: str,
+    event_id: str,
+    *,
+    regions: str = "us",
+    date_format: str = "iso",
+    odds_format: str = "american",
+    date: str | None = None,
+) -> str:
+    base_url = (
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds"
+    )
+    params = {
+        "apiKey": API_KEY,
+        "regions": regions,
+        "markets": "h2h",
+        "oddsFormat": odds_format,
+        "dateFormat": date_format,
+    }
+    if date:
+        params["date"] = date
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_h2h_props(
+    sport_key: str,
+    event_id: str,
+    *,
+    date: str,
+    regions: str = "us",
+    odds_format: str = "american",
+) -> list:
+    cache_key = _safe_cache_key("h2hprops", sport_key, event_id, date, regions, odds_format)
+    cached = _cache_load(CACHE_DIR, cache_key)
+    if cached is not None:
+        return cached
+
+    url = build_h2h_url(
+        sport_key,
+        event_id,
+        regions=regions,
+        odds_format=odds_format,
+        date=date,
+    )
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+            if isinstance(data, (list, dict)):
+                _cache_save(CACHE_DIR, cache_key, data)
+            return data
+    except Exception as e:
+        _cache_save(CACHE_DIR, cache_key, [])
+        print(f"Error fetching h2h props for event {event_id}: {e}")
+        return []
+
+
+def fetch_h2h_event_ids(
+    sport_key: str,
+    *,
+    date: str,
+    regions: str = "us",
+) -> list:
+    url = (
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+        f"?apiKey={API_KEY}&regions={regions}&date={date}&markets=h2h"
+    )
+    cache_key = _safe_cache_key("eventids", sport_key, date, regions, "h2h")
+    cached = _cache_load(CACHE_DIR, cache_key)
+    if cached is not None:
+        return cached
+    print(f"[DEBUG] Fetching event IDs URL: {url}")
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+
+            if isinstance(data, dict) and "data" in data:
+                games = data["data"]
+            else:
+                games = data
+
+            if not isinstance(games, list):
+                raise ValueError(f"Unexpected event ids response: {games!r}")
+
+            filtered_event_ids = []
+            for g in games:
+                if isinstance(g, dict) and g.get("id"):
+                    found = False
+                    for book in g.get("bookmakers", []):
+                        for market in book.get("markets", []):
+                            if market.get("key") == "h2h":
+                                found = True
+                                break
+                        if found:
+                            break
+                    if found:
+                        filtered_event_ids.append(g.get("id"))
+            _cache_save(CACHE_DIR, cache_key, filtered_event_ids)
+            return filtered_event_ids
+    except urllib.error.HTTPError as e:
+        print(f"[ERROR] HTTPError for event ids on {date}: {e.code} {e.reason}")
+        if hasattr(e, "read"):
+            error_body = e.read()
+            print(f"[ERROR] Error body: {error_body.decode(errors='replace')}")
+        print(f"[ERROR] URL was: {url}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
+    except Exception as e:
+        print(f"[ERROR] General error fetching event ids for {date}: {e}")
+        print(f"[ERROR] URL was: {url}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
+
+
 def build_pitcher_ks_url(
     sport_key: str,
     event_id: str,
@@ -266,6 +379,79 @@ def build_ks_dataset_from_api(
     return pd.DataFrame(rows)
 
 
+def build_h2h_dataset_from_api(
+    sport_key: str,
+    start_date: str,
+    end_date: str,
+    *,
+    regions: str = "us",
+    odds_format: str = "american",
+    verbose: bool = False,
+) -> pd.DataFrame:
+    start = datetime.fromisoformat(start_date)
+    end = datetime.fromisoformat(end_date)
+    rows: list[dict] = []
+    current = start
+    while current <= end:
+        date_str = to_pst_iso8601(current)
+        event_ids = fetch_h2h_event_ids(
+            sport_key,
+            date=date_str,
+            regions=regions,
+        )
+        if verbose:
+            print(f"Fetched {len(event_ids)} event ids for {date_str}")
+        for event_id in event_ids:
+            h2h_markets = fetch_h2h_props(
+                sport_key,
+                event_id,
+                date=date_str,
+                regions=regions,
+                odds_format=odds_format,
+            )
+            for book in h2h_markets:
+                if not isinstance(book, dict):
+                    continue
+                for market in book.get("markets", []):
+                    if market.get("key") != "h2h":
+                        continue
+                    team_odds = {}
+                    for outcome in market.get("outcomes", []):
+                        team = outcome.get("name")
+                        price = outcome.get("price")
+                        result = outcome.get("result")
+                        if team is not None and price is not None:
+                            team_odds[team] = {
+                                "price": price,
+                                "result": result,
+                            }
+                    if len(team_odds) == 2 and all(
+                        "result" in v and v["result"] in ("win", "loss") for v in team_odds.values()
+                    ):
+                        teams = list(team_odds.keys())
+                        prices = [team_odds[teams[0]]["price"], team_odds[teams[1]]["price"]]
+                        label = 1 if team_odds[teams[0]]["result"] == "win" else 0
+                        rows.append({
+                            "team1": teams[0],
+                            "team2": teams[1],
+                            "price1": prices[0],
+                            "price2": prices[1],
+                            "team1_win": label,
+                        })
+                    break
+        current += timedelta(days=1)
+
+    if not rows:
+        print(
+            "\nNo h2h data returned by Odds API for the selected date range.\n"
+            "Try an earlier date range within the last year.\n"
+        )
+        raise RuntimeError("No h2h data returned")
+    if verbose:
+        print(f"Built h2h dataset with {len(rows)} rows.")
+    return pd.DataFrame(rows)
+
+
 def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
@@ -305,6 +491,43 @@ def train_pitcher_ks_classifier(
     _train(X, y, model_out)
 
 
+def train_h2h_classifier(
+    sport_key: str,
+    start_date: str,
+    end_date: str,
+    *,
+    model_out: str = "h2h_classifier.pkl",
+    regions: str = "us",
+    odds_format: str = "american",
+    verbose: bool = False,
+) -> None:
+    df = build_h2h_dataset_from_api(
+        sport_key,
+        start_date,
+        end_date,
+        regions=regions,
+        odds_format=odds_format,
+        verbose=verbose,
+    )
+    if verbose:
+        print(df.head())
+    X = df[["price1", "price2"]]
+    y = df["team1_win"]
+    _train(X, y, model_out)
+
+
+def predict_h2h_probability(
+    model_path: str,
+    price1: float,
+    price2: float,
+) -> float:
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+    df = pd.DataFrame([{"price1": price1, "price2": price2}])
+    proba = model.predict_proba(df)[0][1]
+    return float(proba)
+
+
 def predict_pitcher_ks_over_probability(
     model_path: str,
     features: dict,
@@ -322,11 +545,12 @@ def _cli():
     import argparse
 
     parser = argparse.ArgumentParser(description="ML Odds Trainer")
+    parser.add_argument("--mode", choices=["ks", "h2h"], default="ks", help="Model type to train")
     parser.add_argument("--sport", default="baseball_mlb")
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", help="End date for training data (default: today)")
     parser.add_argument("--interval-hours", type=int, default=24)
-    parser.add_argument("--model-out", default="pitcher_ks_classifier.pkl")
+    parser.add_argument("--model-out")
     parser.add_argument("--once", action="store_true", help="Run only one training (not in a loop)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
@@ -337,21 +561,30 @@ def _cli():
     if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
         start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
 
+    model_out = args.model_out or (
+        "pitcher_ks_classifier.pkl" if args.mode == "ks" else "h2h_classifier.pkl"
+    )
+
+    if args.mode == "h2h":
+        train_func = train_h2h_classifier
+    else:
+        train_func = train_pitcher_ks_classifier
+
     if args.once:
-        train_pitcher_ks_classifier(
+        train_func(
             args.sport,
             start_dt.strftime("%Y-%m-%d"),
             end_date,
-            model_out=args.model_out,
+            model_out=model_out,
             verbose=args.verbose,
         )
     else:
         while True:
-            train_pitcher_ks_classifier(
+            train_func(
                 args.sport,
                 start_dt.strftime("%Y-%m-%d"),
                 end_date,
-                model_out=args.model_out,
+                model_out=model_out,
                 verbose=args.verbose,
             )
             print(f"Waiting {args.interval_hours} hours for next training run...")
