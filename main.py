@@ -51,6 +51,28 @@ def build_odds_url(
     return f"{base}?{urllib.parse.urlencode(params)}"
 
 
+def build_events_url(sport_key: str) -> str:
+    """Return the Odds API URL for upcoming events for a sport."""
+    return f"https://api.the-odds-api.com/v4/sports/{sport_key}/events?apiKey={API_KEY}"
+
+
+def fetch_events(sport_key: str) -> list:
+    """Fetch upcoming events for the given sport."""
+    url = build_events_url(sport_key)
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = ""
+        if hasattr(e, "read"):
+            try:
+                body = e.read().decode()
+            except Exception:
+                body = str(e.read())
+        error_msg = f"HTTPError fetching events: {e.code} {e.reason}\n{body}\nURL: {url}"
+        raise RuntimeError(error_msg) from e
+
+
 def fetch_odds(
     sport_key: str,
     *,
@@ -204,7 +226,17 @@ def main() -> None:
         '--event-id',
         help='Specific event ID to fetch odds for (optional)'
     )
+    parser.add_argument(
+        '--list-events',
+        action='store_true',
+        help='List upcoming events for the given sport and exit'
+    )
     args = parser.parse_args()
+
+    if args.list_events:
+        events = fetch_events(args.sport)
+        print(json.dumps(events, indent=2))
+        return
 
     projections = evaluate_tomorrows_strikeout_props(
         args.sport,
