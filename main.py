@@ -167,6 +167,54 @@ def format_moneyline(games: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def format_projected_ks_props(games: list[dict], model_path: str) -> str:
+    """Return strikeout prop odds with ML projected over probability."""
+    from ml import predict_pitcher_ks_over_probability
+
+    lines: list[str] = []
+    for idx, game in enumerate(games, 1):
+        lines.append(_format_header(idx, game))
+        for bookmaker in game.get("bookmakers", []):
+            bm_title = bookmaker.get("title", bookmaker.get("key", ""))
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != "player_strikeouts":
+                    continue
+                pitcher_lines: dict[tuple, dict] = {}
+                for outcome in market.get("outcomes", []):
+                    pitcher = outcome.get("name")
+                    line = outcome.get("line")
+                    desc = outcome.get("description", "").lower()
+                    if pitcher is None or line is None:
+                        continue
+                    key = (pitcher, line)
+                    if key not in pitcher_lines:
+                        pitcher_lines[key] = {
+                            "pitcher": pitcher,
+                            "line": line,
+                            "price_over": None,
+                            "price_under": None,
+                        }
+                    if desc.startswith("over"):
+                        pitcher_lines[key]["price_over"] = outcome.get("price")
+                    elif desc.startswith("under"):
+                        pitcher_lines[key]["price_under"] = outcome.get("price")
+                for props in pitcher_lines.values():
+                    if props["price_over"] is None or props["price_under"] is None:
+                        continue
+                    features = {
+                        "line": props["line"],
+                        "price_over": props["price_over"],
+                        "price_under": props["price_under"],
+                    }
+                    prob = predict_pitcher_ks_over_probability(model_path, features)
+                    lines.append(
+                        f"   {bm_title} {props['pitcher']} O{props['line']} "
+                        f"{prob:.3f} (O {props['price_over']} U {props['price_under']})"
+                    )
+        lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch and display odds")
     parser.add_argument(
@@ -182,6 +230,7 @@ def main() -> None:
             "team_totals",
             "alternate_team_totals",
             "player_props",
+            "projected_ks_props",
             "historical",
             "train_classifier",
             "predict_classifier",
@@ -272,6 +321,8 @@ def main() -> None:
         markets = "alternate_team_totals"
     elif args.command == "player_props":
         markets = "player_hits,player_home_runs,player_strikeouts"
+    elif args.command == "projected_ks_props":
+        markets = "player_strikeouts"
     elif args.command == "historical":
         if args.date is None:
             parser.error("--date is required for historical command")
@@ -327,6 +378,8 @@ def main() -> None:
         print(format_moneyline(games))
     elif args.command == "moneyline":
         print(format_moneyline(games))
+    elif args.command == "projected_ks_props":
+        print(format_projected_ks_props(games, args.model))
     else:
         print(json.dumps(games, indent=2))
 
