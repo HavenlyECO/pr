@@ -52,11 +52,12 @@ To display alternate team totals odds, run:
 python main.py alternate_team_totals
 ```
 
-To include player prop markets (hits, home runs, strikeouts and batter
-strikeouts) in the odds request, pass the ``--player-props`` flag:
+Player prop markets (hits, home runs, strikeouts and batter strikeouts)
+are included in the odds request by default. Pass the ``--no-player-props``
+flag to exclude them:
 
 ```bash
-python main.py --player-props
+python main.py --no-player-props
 ```
 
 To display projected pitcher strikeout props using the machine learning model,

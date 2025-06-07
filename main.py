@@ -28,10 +28,10 @@ def build_odds_url(
     *,
     event_id: str | None = None,
     regions: str = 'us',
-    markets: str = 'batter_strikeouts',
+    markets: str = '',
     odds_format: str = 'american',
     date_format: str = 'iso',
-    player_props: bool = False,
+    player_props: bool = True,
 ) -> str:
     """Return the Odds API URL for upcoming markets or a specific event."""
     if event_id:
@@ -81,10 +81,10 @@ def fetch_odds(
     *,
     event_id: str | None = None,
     regions: str = "us",
-    markets: str = "batter_strikeouts",
+    markets: str = "",
     odds_format: str = "american",
     date_format: str = "iso",
-    player_props: bool = False,
+    player_props: bool = True,
 ) -> list:
     """Fetch odds data from the API."""
     url = build_odds_url(
@@ -123,8 +123,8 @@ def evaluate_tomorrows_strikeout_props(
     *,
     event_id: str | None = None,
     regions: str = 'us',
-    markets: str = 'batter_strikeouts',
-    player_props: bool = False,
+    markets: str = '',
+    player_props: bool = True,
 ) -> list:
     """Return strikeout prop evaluations for games starting tomorrow.
 
@@ -227,8 +227,8 @@ def main() -> None:
     parser.add_argument('--model', default='pitcher_ks_classifier.pkl', help='Path to trained ML model')
     parser.add_argument(
         '--markets',
-        default='batter_strikeouts',
-        help='Comma separated markets (default: batter_strikeouts)'
+        default='',
+        help='Comma separated markets (empty for all)'
     )
     parser.add_argument(
         '--event-id',
@@ -236,7 +236,8 @@ def main() -> None:
     )
     parser.add_argument(
         '--player-props',
-        action='store_true',
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help='Include player props in the event odds request'
     )
     parser.add_argument(
