@@ -25,12 +25,19 @@ if not API_KEY:
 def build_odds_url(
     sport_key: str,
     *,
+    event_id: str | None = None,
     regions: str = 'us',
     markets: str = '',
     odds_format: str = 'american',
+    date_format: str = 'iso',
 ) -> str:
-    """Return the Odds API URL for upcoming markets."""
-    base = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+    """Return the Odds API URL for upcoming markets or a specific event."""
+    if event_id:
+        base = (
+            f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/odds"
+        )
+    else:
+        base = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         'apiKey': API_KEY,
         'regions': regions,
@@ -38,23 +45,28 @@ def build_odds_url(
     }
     if markets:
         params['markets'] = markets
+    if event_id:
+        params['dateFormat'] = date_format
     return f"{base}?{urllib.parse.urlencode(params)}"
 
 
 def fetch_odds(
     sport_key: str,
     *,
-    regions: str = 'us',
-    markets: str = '',
-    odds_format: str = 'american',
+    event_id: str | None = None,
+    regions: str = "us",
+    markets: str = "",
+    odds_format: str = "american",
+    date_format: str = "iso",
 ) -> list:
-    """Fetch upcoming odds data from the API."
-    """
+    """Fetch odds data from the API."""
     url = build_odds_url(
         sport_key,
+        event_id=event_id,
         regions=regions,
         markets=markets,
         odds_format=odds_format,
+        date_format=date_format,
     )
     with urllib.request.urlopen(url) as resp:
         return json.loads(resp.read().decode())
@@ -69,6 +81,7 @@ def evaluate_tomorrows_strikeout_props(
     sport_key: str,
     model_path: str,
     *,
+    event_id: str | None = None,
     regions: str = 'us',
     markets: str = '',
 ) -> list:
@@ -79,7 +92,12 @@ def evaluate_tomorrows_strikeout_props(
     """
     from ml import predict_pitcher_ks_over_probability
 
-    odds = fetch_odds(sport_key, regions=regions, markets=markets)
+    odds = fetch_odds(
+        sport_key,
+        event_id=event_id,
+        regions=regions,
+        markets=markets,
+    )
     print("RAW ODDS DATA:", json.dumps(odds, indent=2))
     target_date = tomorrow_iso()
     results = []
@@ -87,7 +105,7 @@ def evaluate_tomorrows_strikeout_props(
 
     for game in odds:
         commence = game.get('commence_time', '')
-        if not commence.startswith(target_date):
+        if event_id is None and not commence.startswith(target_date):
             continue
         found_any_game = True
         print(
@@ -169,11 +187,16 @@ def main() -> None:
         default='',
         help='Comma separated markets (default: all markets; leave blank for general)'
     )
+    parser.add_argument(
+        '--event-id',
+        help='Specific event ID to fetch odds for (optional)'
+    )
     args = parser.parse_args()
 
     projections = evaluate_tomorrows_strikeout_props(
         args.sport,
         args.model,
+        event_id=args.event_id,
         regions=args.regions,
         markets=args.markets,
     )
