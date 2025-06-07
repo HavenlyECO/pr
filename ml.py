@@ -113,22 +113,9 @@ def fetch_pitcher_ks_props(
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
-
-            # The response is expected to be a list of bookmaker objects. In
-            # some error cases the API has returned a string or wrapped data in
-            # a ``data`` key. Normalize these variants so the caller always
-            # receives a list of dicts.
-            if isinstance(data, dict) and "data" in data:
-                books = data["data"]
-            else:
-                books = data
-
-            if not isinstance(books, list):
-                raise ValueError(f"Unexpected K's props response: {books!r}")
-
-            books = [b for b in books if isinstance(b, dict)]
-            _cache_save(CACHE_DIR, cache_key, books)
-            return books
+            if isinstance(data, (list, dict)):
+                _cache_save(CACHE_DIR, cache_key, data)
+            return data
     except Exception as e:
         _cache_save(CACHE_DIR, cache_key, [])
         print(f"Error fetching pitcher K's props for event {event_id}: {e}")
