@@ -67,6 +67,12 @@ run:
 python main.py --model=pitcher_ks_classifier.pkl
 ```
 
+To display projected head-to-head win probabilities with the moneyline model, run:
+
+```bash
+python main.py --h2h --model=h2h_classifier.pkl
+```
+
 By default the script requests only the ``batter_strikeouts`` market and
 evaluates those props. Pass the ``--markets`` option to request different or
 additional markets.
