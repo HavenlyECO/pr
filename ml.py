@@ -208,7 +208,16 @@ def build_h2h_dataset_from_api(
             logger.debug(f"h2h_markets for event_id={event_id}: {h2h_markets}")
             if not h2h_markets:
                 logger.warning(f"No h2h_markets for event_id={event_id} on {date_str}")
-            for book in h2h_markets:
+
+            bookmakers = []
+            if isinstance(h2h_markets, dict) and "data" in h2h_markets and "bookmakers" in h2h_markets["data"]:
+                bookmakers = h2h_markets["data"]["bookmakers"]
+            elif isinstance(h2h_markets, list):
+                bookmakers = h2h_markets
+            elif isinstance(h2h_markets, dict) and "bookmakers" in h2h_markets:
+                bookmakers = h2h_markets["bookmakers"]
+
+            for book in bookmakers:
                 if not isinstance(book, dict):
                     logger.warning(f"Book is not dict: {book}")
                     continue
