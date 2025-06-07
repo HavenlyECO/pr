@@ -1,6 +1,6 @@
 import os
-import pickle
 import json
+import pickle
 import time
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -19,13 +19,10 @@ try:
 except ImportError:
     raise ImportError("python-dotenv is required. Install it with 'pip install python-dotenv'")
 
-# Always load .env from the project root
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if DOTENV_PATH.exists():
     load_dotenv(DOTENV_PATH)
-else:
-    print(f"Warning: .env file not found at {DOTENV_PATH}")
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 if not API_KEY:
@@ -33,15 +30,17 @@ if not API_KEY:
 
 MAX_HISTORICAL_DAYS = 365
 
-# Time helper
-def to_pst_iso8601(date_obj: datetime) -> str:
-    """Return ISO-8601 date string at 12:00 UTC (``Z``)."""
+H2H_DATA_DIR = ROOT_DIR / "h2h_data"
+H2H_DATA_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR = H2H_DATA_DIR / "api_cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
 
-    # Use a fixed noon UTC timestamp which avoids timezone issues when the API
-    # expects a full ISO 8601 date/time.
+
+def to_pst_iso8601(date_obj: datetime) -> str:
+    """Return ISO-8601 date string at 12:00 UTC."""
     return date_obj.strftime("%Y-%m-%dT12:00:00Z")
 
-# --------- Simple File Cache -----------#
 
 def _safe_cache_key(*args) -> str:
     str_key = "-".join(str(x) for x in args)
@@ -56,32 +55,11 @@ def _cache_load(cache_dir: Path, key: str):
     return None
 
 
-def _cache_save(cache_dir: Path, key: str, data):
+def _cache_save(cache_dir: Path, key: str, data) -> None:
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{key}.pkl"
     with open(cache_path, "wb") as f:
         pickle.dump(data, f)
-
-
-H2H_DATA_DIR = ROOT_DIR / "h2h_data"
-H2H_DATA_DIR.mkdir(parents=True, exist_ok=True)
-CACHE_DIR = H2H_DATA_DIR / "api_cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
-
-
-def implied_probability(price: float | int | None) -> float | None:
-    """Return implied probability from American odds price."""
-    if price is None:
-        return None
-    try:
-        price = float(price)
-    except (TypeError, ValueError):
-        return None
-    if price >= 0:
-        return 100.0 / (price + 100.0)
-    else:
-        return -price / (-price + 100.0)
 
 
 def build_h2h_url(
@@ -135,8 +113,8 @@ def fetch_h2h_props(
                 _cache_save(CACHE_DIR, cache_key, data)
             return data
     except Exception as e:
-        _cache_save(CACHE_DIR, cache_key, [])
         print(f"Error fetching h2h props for event {event_id}: {e}")
+        _cache_save(CACHE_DIR, cache_key, [])
         return []
 
 
@@ -154,233 +132,32 @@ def fetch_h2h_event_ids(
     cached = _cache_load(CACHE_DIR, cache_key)
     if cached is not None:
         return cached
-    print(f"[DEBUG] Fetching event IDs URL: {url}")
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
 
-            if isinstance(data, dict) and "data" in data:
-                games = data["data"]
-            else:
-                games = data
+        games = data.get("data") if isinstance(data, dict) and "data" in data else data
+        if not isinstance(games, list):
+            raise ValueError(f"Unexpected event ids response: {games!r}")
 
-            if not isinstance(games, list):
-                raise ValueError(f"Unexpected event ids response: {games!r}")
-
-            filtered_event_ids = []
-            for g in games:
-                if isinstance(g, dict) and g.get("id"):
-                    found = False
-                    for book in g.get("bookmakers", []):
-                        for market in book.get("markets", []):
-                            if market.get("key") == "h2h":
-                                found = True
-                                break
-                        if found:
-                            break
-                    if found:
-                        filtered_event_ids.append(g.get("id"))
-            _cache_save(CACHE_DIR, cache_key, filtered_event_ids)
-            return filtered_event_ids
-    except urllib.error.HTTPError as e:
-        print(f"[ERROR] HTTPError for event ids on {date}: {e.code} {e.reason}")
-        if hasattr(e, "read"):
-            error_body = e.read()
-            print(f"[ERROR] Error body: {error_body.decode(errors='replace')}")
-        print(f"[ERROR] URL was: {url}")
-        _cache_save(CACHE_DIR, cache_key, [])
-        return []
-    except Exception as e:
-        print(f"[ERROR] General error fetching event ids for {date}: {e}")
-        print(f"[ERROR] URL was: {url}")
-        _cache_save(CACHE_DIR, cache_key, [])
-        return []
-
-
-def build_pitcher_ks_url(
-    sport_key: str,
-    event_id: str,
-    *,
-    regions: str = "us",
-    date_format: str = "iso",
-    odds_format: str = "american",
-    date: str | None = None,
-) -> str:
-    base_url = (
-        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/events/{event_id}/odds"
-    )
-    params = {
-        "apiKey": API_KEY,
-        "regions": regions,
-        "markets": "pitcher_strikeouts",
-        "oddsFormat": odds_format,
-        "dateFormat": date_format,
-    }
-    if date:
-        params["date"] = date
-    return f"{base_url}?{urllib.parse.urlencode(params)}"
-
-
-def fetch_pitcher_ks_props(
-    sport_key: str,
-    event_id: str,
-    *,
-    date: str,
-    regions: str = "us",
-    odds_format: str = "american",
-) -> list:
-    cache_key = _safe_cache_key("ksprops", sport_key, event_id, date, regions, odds_format)
-    cached = _cache_load(CACHE_DIR, cache_key)
-    if cached is not None:
-        return cached
-
-    url = build_pitcher_ks_url(
-        sport_key,
-        event_id,
-        regions=regions,
-        odds_format=odds_format,
-        date=date,
-    )
-    try:
-        with urllib.request.urlopen(url) as resp:
-            data = json.loads(resp.read().decode())
-            if isinstance(data, (list, dict)):
-                _cache_save(CACHE_DIR, cache_key, data)
-            return data
-    except Exception as e:
-        _cache_save(CACHE_DIR, cache_key, [])
-        print(f"Error fetching pitcher K's props for event {event_id}: {e}")
-        return []
-
-
-def fetch_all_event_ids(
-    sport_key: str,
-    *,
-    date: str,
-    regions: str = "us",
-) -> list:
-    url = (
-        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
-        f"?apiKey={API_KEY}&regions={regions}&date={date}&markets=pitcher_strikeouts"
-    )
-    cache_key = _safe_cache_key("eventids", sport_key, date, regions, "pitcher_strikeouts")
-    cached = _cache_load(CACHE_DIR, cache_key)
-    if cached is not None:
-        return cached
-    print(f"[DEBUG] Fetching event IDs URL: {url}")
-    try:
-        with urllib.request.urlopen(url) as resp:
-            data = json.loads(resp.read().decode())
-
-            # The historical odds API should return a list of event objects, but
-            # in the wild we've seen strings or dicts when an error occurs. Make
-            # sure ``data`` is a list of dicts before processing.
-            if isinstance(data, dict) and "data" in data:
-                games = data["data"]
-            else:
-                games = data
-
-            if not isinstance(games, list):
-                raise ValueError(f"Unexpected event ids response: {games!r}")
-
-            event_ids = [g.get("id") for g in games if isinstance(g, dict) and g.get("id")]
-            _cache_save(CACHE_DIR, cache_key, event_ids)
-            return event_ids
-    except urllib.error.HTTPError as e:
-        print(f"[ERROR] HTTPError for event ids on {date}: {e.code} {e.reason}")
-        if hasattr(e, "read"):
-            error_body = e.read()
-            print(f"[ERROR] Error body: {error_body.decode(errors='replace')}")
-        print(f"[ERROR] URL was: {url}")
-        _cache_save(CACHE_DIR, cache_key, [])
-        return []
-    except Exception as e:
-        print(f"[ERROR] General error fetching event ids for {date}: {e}")
-        print(f"[ERROR] URL was: {url}")
-        _cache_save(CACHE_DIR, cache_key, [])
-        return []
-
-
-def build_ks_dataset_from_api(
-    sport_key: str,
-    start_date: str,
-    end_date: str,
-    *,
-    regions: str = "us",
-    odds_format: str = "american",
-    verbose: bool = False,
-) -> pd.DataFrame:
-    start = datetime.fromisoformat(start_date)
-    end = datetime.fromisoformat(end_date)
-    rows: list[dict] = []
-    current = start
-    while current <= end:
-        date_str = to_pst_iso8601(current)
-        event_ids = fetch_all_event_ids(
-            sport_key,
-            date=date_str,
-            regions=regions,
-        )
-        if verbose:
-            print(f"Fetched {len(event_ids)} event ids for {date_str}")
-        for event_id in event_ids:
-            ks_markets = fetch_pitcher_ks_props(
-                sport_key,
-                event_id,
-                date=date_str,
-                regions=regions,
-                odds_format=odds_format,
-            )
-            for book in ks_markets:
-                if not isinstance(book, dict):
-                    continue  # Skip if book is not a dict
+        event_ids: list[str] = []
+        for g in games:
+            if not isinstance(g, dict) or not g.get("id"):
+                continue
+            for book in g.get("bookmakers", []):
                 for market in book.get("markets", []):
-                    if market.get("key") == "pitcher_strikeouts":
-                        pitcher_lines: dict[tuple, dict] = {}
-                        for outcome in market.get("outcomes", []):
-                            pitcher = outcome.get("name")
-                            line = outcome.get("line")
-                            description = outcome.get("description", "").lower()
-                            if pitcher is None or line is None:
-                                continue
-                            key = (pitcher, line)
-                            if key not in pitcher_lines:
-                                pitcher_lines[key] = {
-                                    "pitcher": pitcher,
-                                    "line": line,
-                                    "price_over": None,
-                                    "price_under": None,
-                                    "over_hit": None,
-                                }
-                            if description.startswith("over"):
-                                pitcher_lines[key]["price_over"] = outcome.get("price")
-                                pitcher_lines[key]["over_hit"] = (
-                                    1
-                                    if outcome.get("result") == "win"
-                                    else 0
-                                    if outcome.get("result") == "loss"
-                                    else None
-                                )
-                            elif description.startswith("under"):
-                                pitcher_lines[key]["price_under"] = outcome.get("price")
-                        for props in pitcher_lines.values():
-                            if (
-                                props["price_over"] is not None
-                                and props["price_under"] is not None
-                                and props["over_hit"] is not None
-                            ):
-                                rows.append(props)
-        current += timedelta(days=1)
-
-    if not rows:
-        print(
-            "\nNo K's O/U data returned by Odds API for the selected date range.\n"
-            "Try an earlier date range within the last year.\n"
-        )
-        raise RuntimeError("No K's O/U data returned")
-    if verbose:
-        print(f"Built K's O/U dataset with {len(rows)} rows.")
-    return pd.DataFrame(rows)
+                    if market.get("key") == "h2h":
+                        event_ids.append(g["id"])
+                        break
+                else:
+                    continue
+                break
+        _cache_save(CACHE_DIR, cache_key, event_ids)
+        return event_ids
+    except Exception as e:
+        print(f"Error fetching event ids for {date}: {e}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
 
 
 def build_h2h_dataset_from_api(
@@ -419,37 +196,29 @@ def build_h2h_dataset_from_api(
                 for market in book.get("markets", []):
                     if market.get("key") != "h2h":
                         continue
-                    team_odds = {}
-                    for outcome in market.get("outcomes", []):
-                        team = outcome.get("name")
-                        price = outcome.get("price")
-                        result = outcome.get("result")
-                        if team is not None and price is not None:
-                            team_odds[team] = {
-                                "price": price,
-                                "result": result,
-                            }
-                    if len(team_odds) == 2 and all(
-                        "result" in v and v["result"] in ("win", "loss") for v in team_odds.values()
-                    ):
-                        teams = list(team_odds.keys())
-                        prices = [team_odds[teams[0]]["price"], team_odds[teams[1]]["price"]]
-                        label = 1 if team_odds[teams[0]]["result"] == "win" else 0
-                        rows.append({
-                            "team1": teams[0],
-                            "team2": teams[1],
-                            "price1": prices[0],
-                            "price2": prices[1],
-                            "team1_win": label,
-                        })
+                    outcomes = market.get("outcomes", [])
+                    if len(outcomes) != 2:
+                        continue
+                    team1 = outcomes[0].get("name")
+                    team2 = outcomes[1].get("name")
+                    price1 = outcomes[0].get("price")
+                    price2 = outcomes[1].get("price")
+                    result1 = outcomes[0].get("result")
+                    result2 = outcomes[1].get("result")
+                    if None in (team1, team2, price1, price2, result1, result2):
+                        continue
+                    label = 1 if result1 == "win" else 0
+                    rows.append({
+                        "team1": team1,
+                        "team2": team2,
+                        "price1": price1,
+                        "price2": price2,
+                        "team1_win": label,
+                    })
                     break
         current += timedelta(days=1)
 
     if not rows:
-        print(
-            "\nNo h2h data returned by Odds API for the selected date range.\n"
-            "Try an earlier date range within the last year.\n"
-        )
         raise RuntimeError("No h2h data returned")
     if verbose:
         print(f"Built h2h dataset with {len(rows)} rows.")
@@ -470,31 +239,6 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     with open(out_path, "wb") as f:
         pickle.dump(model, f)
     print(f"Model saved to {out_path}")
-
-
-def train_pitcher_ks_classifier(
-    sport_key: str,
-    start_date: str,
-    end_date: str,
-    *,
-    model_out: str = "pitcher_ks_classifier.pkl",
-    regions: str = "us",
-    odds_format: str = "american",
-    verbose: bool = False,
-) -> None:
-    df = build_ks_dataset_from_api(
-        sport_key,
-        start_date,
-        end_date,
-        regions=regions,
-        odds_format=odds_format,
-        verbose=verbose,
-    )
-    if verbose:
-        print(df.head())
-    X = df[["line", "price_over", "price_under"]]
-    y = df["over_hit"]
-    _train(X, y, model_out)
 
 
 def train_h2h_classifier(
@@ -534,29 +278,17 @@ def predict_h2h_probability(
     return float(proba)
 
 
-def predict_pitcher_ks_over_probability(
-    model_path: str,
-    features: dict,
-) -> float:
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-    df = pd.DataFrame([features])
-    proba = model.predict_proba(df)[0][1]
-    return float(proba)
-
-
 # ==================== CLI entrypoint ====================
 
 def _cli():
     import argparse
 
-    parser = argparse.ArgumentParser(description="ML Odds Trainer")
-    parser.add_argument("--mode", choices=["ks", "h2h"], default="ks", help="Model type to train")
+    parser = argparse.ArgumentParser(description="Train a head-to-head classifier")
     parser.add_argument("--sport", default="baseball_mlb")
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", help="End date for training data (default: today)")
     parser.add_argument("--interval-hours", type=int, default=24)
-    parser.add_argument("--model-out")
+    parser.add_argument("--model-out", default=str(H2H_MODEL_PATH))
     parser.add_argument("--once", action="store_true", help="Run only one training (not in a loop)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args()
@@ -567,32 +299,21 @@ def _cli():
     if (end_dt - start_dt).days > MAX_HISTORICAL_DAYS:
         start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
 
-    model_out = args.model_out or (
-        "pitcher_ks_classifier.pkl"
-        if args.mode == "ks"
-        else str(H2H_MODEL_PATH)
-    )
-
-    if args.mode == "h2h":
-        train_func = train_h2h_classifier
-    else:
-        train_func = train_pitcher_ks_classifier
-
     if args.once:
-        train_func(
+        train_h2h_classifier(
             args.sport,
             start_dt.strftime("%Y-%m-%d"),
             end_date,
-            model_out=model_out,
+            model_out=args.model_out,
             verbose=args.verbose,
         )
     else:
         while True:
-            train_func(
+            train_h2h_classifier(
                 args.sport,
                 start_dt.strftime("%Y-%m-%d"),
                 end_date,
-                model_out=model_out,
+                model_out=args.model_out,
                 verbose=args.verbose,
             )
             print(f"Waiting {args.interval_hours} hours for next training run...")
