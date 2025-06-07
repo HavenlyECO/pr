@@ -111,34 +111,56 @@ def evaluate_batter_strikeouts_all_tomorrow(
     target_date = tomorrow_iso()
     results = []
 
+    print(f"DEBUG: {len(events)} events returned by API")
     for event in events:
         commence = event.get('commence_time', '')
-        if not commence.startswith(target_date):
-            continue
         event_id = event.get('id')
         home = event.get('home_team')
         away = event.get('away_team')
+        print(f"\nEVENT: {event_id} | {away} at {home} | {commence}")
+
+        if not commence.startswith(target_date):
+            print("  Skipped: does not match target date")
+            continue
+
         game_odds = fetch_event_odds(
             sport_key,
             event_id,
             markets="batter_strikeouts",
             regions=regions
         )
+        print(f"  Raw odds for event {event_id}:")
+        print(json.dumps(game_odds, indent=2))
+
         # Handle if the API returns a single dict (with 'bookmakers') or a list
         if isinstance(game_odds, dict) and 'bookmakers' in game_odds:
             game_odds = [game_odds]
         elif not isinstance(game_odds, list):
-            print(f"Skipping event {event_id}, unexpected odds format: {game_odds}")
+            print(f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}")
             continue
+
         for game in game_odds:
             if not isinstance(game, dict):
+                print(f"  Skipped: game is not a dict: {game}")
                 continue
             if not game.get('bookmakers'):
+                print(f"  Skipped: no bookmakers in game {game.get('id')} for this event")
                 continue  # no props posted for this event
+            print(f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers',[])]}")
+
             for book in game.get('bookmakers', []):
                 book_name = book.get('title') or book.get('key')
+                print(f"    Bookmaker: {book_name}")
+                if not book.get('markets'):
+                    print("      Skipped: no markets in this bookmaker")
+                    continue
                 for market in book.get('markets', []):
+                    print(f"      Market key: {market.get('key')}, desc: {market.get('description')}")
                     if market.get('key') != 'batter_strikeouts':
+                        print("        Skipped: not a batter_strikeouts market")
+                        continue
+                    if not market.get('outcomes'):
+                        print("        Skipped: no outcomes in market")
                         continue
                     line_map = {}
                     for outcome in market.get('outcomes', []):
@@ -146,6 +168,7 @@ def evaluate_batter_strikeouts_all_tomorrow(
                         line = outcome.get('line')
                         desc = outcome.get('description', '').lower()
                         if player is None or line is None:
+                            print(f"        Skipped outcome: missing player or line: {outcome}")
                             continue
                         key = (player, line)
                         if key not in line_map:
@@ -161,6 +184,7 @@ def evaluate_batter_strikeouts_all_tomorrow(
                             line_map[key]['price_under'] = outcome.get('price')
                     for props in line_map.values():
                         if props['price_over'] is None or props['price_under'] is None:
+                            print(f"        Skipped: missing price_over or price_under for {props}")
                             continue
                         features = {
                             'line': props['line'],
@@ -168,6 +192,9 @@ def evaluate_batter_strikeouts_all_tomorrow(
                             'price_under': props['price_under'],
                         }
                         prob = predict_pitcher_ks_over_probability(model_path, features)
+                        print(
+                            f"        EVAL: {props['player']} line={props['line']} over={props['price_over']} under={props['price_under']} prob={prob}"
+                        )
                         results.append({
                             'game': f"{home} vs {away}",
                             'bookmaker': book_name,
@@ -178,6 +205,7 @@ def evaluate_batter_strikeouts_all_tomorrow(
                             'event_id': event_id,
                             'projected_over_probability': prob,
                         })
+    print(f"DEBUG: Total evaluated props: {len(results)}")
     return results
 
 
