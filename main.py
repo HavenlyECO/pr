@@ -124,13 +124,13 @@ def evaluate_batter_strikeouts_all_tomorrow(
             print(f"  Skipped: invalid commence_time format {commence} ({e})")
             continue
 
-        tomorrow_dt = datetime.utcnow() + timedelta(days=1)
-        start_dt = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day)
-        end_dt = start_dt + timedelta(days=1)
+        today = datetime.utcnow()
+        start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
+        end_dt = start_dt + timedelta(hours=14)  # 16:00 today to 06:00 tomorrow
 
         if not (start_dt <= commence_dt < end_dt):
             print(
-                f"  Skipped: commence_time {commence_dt} not in tomorrow UTC window {start_dt} to {end_dt}"
+                f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
             )
             continue
 
