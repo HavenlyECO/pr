@@ -178,26 +178,22 @@ def build_h2h_dataset_from_api(
     odds_format: str = "american",
     verbose: bool = False,
 ) -> pd.DataFrame:
+    import collections
     start = datetime.fromisoformat(start_date)
     end = datetime.fromisoformat(end_date)
     rows: list[dict] = []
+    missing_results = collections.defaultdict(list)  # event_id -> [(teams, date, outcomes)]
     current = start
-    logger.info(f"Building h2h dataset for {sport_key} from {start_date} to {end_date}")
     while current <= end:
         date_str = to_pst_iso8601(current)
-        logger.debug(f"Fetching event ids for date {date_str}")
         event_ids = fetch_h2h_event_ids(
             sport_key,
             date=date_str,
             regions=regions,
         )
-        logger.debug(f"Fetched event_ids ({len(event_ids)}): {event_ids}")
-        if not event_ids:
-            logger.warning(
-                f"No event_ids found for {date_str} (sport={sport_key}, regions={regions})"
-            )
+        if verbose:
+            print(f"Fetched {len(event_ids)} event ids for {date_str}")
         for event_id in event_ids:
-            logger.debug(f"Fetching h2h props for event_id={event_id} date={date_str}")
             h2h_markets = fetch_h2h_props(
                 sport_key,
                 event_id,
@@ -205,21 +201,8 @@ def build_h2h_dataset_from_api(
                 regions=regions,
                 odds_format=odds_format,
             )
-            logger.debug(f"h2h_markets for event_id={event_id}: {h2h_markets}")
-            if not h2h_markets:
-                logger.warning(f"No h2h_markets for event_id={event_id} on {date_str}")
-
-            bookmakers = []
-            if isinstance(h2h_markets, dict) and "data" in h2h_markets and "bookmakers" in h2h_markets["data"]:
-                bookmakers = h2h_markets["data"]["bookmakers"]
-            elif isinstance(h2h_markets, list):
-                bookmakers = h2h_markets
-            elif isinstance(h2h_markets, dict) and "bookmakers" in h2h_markets:
-                bookmakers = h2h_markets["bookmakers"]
-
-            for book in bookmakers:
+            for book in h2h_markets:
                 if not isinstance(book, dict):
-                    logger.warning(f"Book is not dict: {book}")
                     continue
                 for market in book.get("markets", []):
                     if market.get("key") != "h2h":
@@ -233,22 +216,39 @@ def build_h2h_dataset_from_api(
                     price2 = outcomes[1].get("price")
                     result1 = outcomes[0].get("result")
                     result2 = outcomes[1].get("result")
-                    if None in (team1, team2, price1, price2, result1, result2):
-                        print(f"Full outcomes for debugging: {outcomes}")
+                    if None in (result1, result2):
+                        if event_id not in missing_results:
+                            missing_results[event_id].append(
+                                (f"{team1} vs {team2}", date_str, outcomes)
+                            )
+                        break
+                    if None in (team1, team2, price1, price2):
                         continue
                     label = 1 if result1 == "win" else 0
-                    rows.append({
-                        "team1": team1,
-                        "team2": team2,
-                        "price1": price1,
-                        "price2": price2,
-                        "team1_win": label,
-                    })
+                    rows.append(
+                        {
+                            "team1": team1,
+                            "team2": team2,
+                            "price1": price1,
+                            "price2": price2,
+                            "team1_win": label,
+                        }
+                    )
                     break
         current += timedelta(days=1)
 
+    if missing_results:
+        print("\nSummary of events with missing results (not used for training):")
+        for event_id, infos in missing_results.items():
+            for (teams, date_str, outcomes) in infos:
+                print(f"  - Event {event_id} | {teams} | Date: {date_str}")
+                print(f"    Outcomes: {json.dumps(outcomes, indent=2)}")
+        print(f"Total events with missing results: {len(missing_results)}\n")
+
     if not rows:
-        logger.error("No h2h data returned. Debug info above.")
+        print(
+            "[ERROR] No h2h data returned. All events are missing results fields. Try querying a range of dates with only historical/settled games."
+        )
         raise RuntimeError("No h2h data returned")
     if verbose:
         print(f"Built h2h dataset with {len(rows)} rows.")
