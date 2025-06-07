@@ -95,7 +95,7 @@ def build_pitcher_ks_url(
     params = {
         "apiKey": API_KEY,
         "regions": regions,
-        "markets": "batter_strikeouts",
+        "markets": "pitcher_strikeouts",
         "oddsFormat": odds_format,
         "dateFormat": date_format,
     }
@@ -144,9 +144,9 @@ def fetch_all_event_ids(
 ) -> list:
     url = (
         f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
-        f"?apiKey={API_KEY}&regions={regions}&date={date}"
+        f"?apiKey={API_KEY}&regions={regions}&date={date}&markets=pitcher_strikeouts"
     )
-    cache_key = _safe_cache_key("eventids", sport_key, date, regions)
+    cache_key = _safe_cache_key("eventids", sport_key, date, regions, "pitcher_strikeouts")
     cached = _cache_load(CACHE_DIR, cache_key)
     if cached is not None:
         return cached
@@ -218,7 +218,7 @@ def build_ks_dataset_from_api(
                 if not isinstance(book, dict):
                     continue  # Skip if book is not a dict
                 for market in book.get("markets", []):
-                    if market.get("key") == "batter_strikeouts":
+                    if market.get("key") == "pitcher_strikeouts":
                         pitcher_lines: dict[tuple, dict] = {}
                         for outcome in market.get("outcomes", []):
                             pitcher = outcome.get("name")
