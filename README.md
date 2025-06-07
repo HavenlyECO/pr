@@ -58,18 +58,16 @@ To display player props odds (hits, home runs, strikeouts and batter strikeouts)
 python main.py player_props
 ```
 
-To display projected strikeout prop odds using a trained model, run:
+To display projected pitcher strikeout props using the machine learning model,
+run:
 
 ```bash
-python main.py projected_ks_props
+python main.py --model=pitcher_ks_classifier.pkl
 ```
 
-To display projected strikeout props with machine learning probability
-evaluation based on moneyline odds, run:
-
-```bash
-python main.py projected_ks_ml_eval
-```
+By default the script requests all markets and filters for strikeout props
+locally. Pass the ``--markets`` option to limit the API request to specific
+markets.
 
 To display outrights (futures) odds, run:
 
