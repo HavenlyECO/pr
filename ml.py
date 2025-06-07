@@ -64,7 +64,10 @@ def _cache_save(cache_dir: Path, key: str, data):
 
 
 H2H_DATA_DIR = ROOT_DIR / "h2h_data"
+H2H_DATA_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR = H2H_DATA_DIR / "api_cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
 
 
 def implied_probability(price: float | int | None) -> float | None:
@@ -499,7 +502,7 @@ def train_h2h_classifier(
     start_date: str,
     end_date: str,
     *,
-    model_out: str = str(H2H_DATA_DIR / "h2h_classifier.pkl"),
+    model_out: str = str(H2H_MODEL_PATH),
     regions: str = "us",
     odds_format: str = "american",
     verbose: bool = False,
@@ -567,7 +570,7 @@ def _cli():
     model_out = args.model_out or (
         "pitcher_ks_classifier.pkl"
         if args.mode == "ks"
-        else str(H2H_DATA_DIR / "h2h_classifier.pkl")
+        else str(H2H_MODEL_PATH)
     )
 
     if args.mode == "h2h":

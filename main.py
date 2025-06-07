@@ -7,6 +7,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import argparse
 
+from ml import H2H_MODEL_PATH
+
 # For improved table and color output
 try:
     from tabulate import tabulate
@@ -351,7 +353,7 @@ def main() -> None:
     )
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
-    parser.add_argument('--model', default='h2h_classifier.pkl', help='Path to trained ML model')
+    parser.add_argument('--model', default=str(H2H_MODEL_PATH), help='Path to trained ML model')
     parser.add_argument('--markets', default='h2h', help='Comma separated market keys')
     parser.add_argument('--odds-format', default='american', help='Odds format')
     parser.add_argument('--date-format', default='iso', help='Date format')
