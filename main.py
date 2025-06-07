@@ -124,12 +124,17 @@ def evaluate_batter_strikeouts_all_tomorrow(
             markets="batter_strikeouts",
             regions=regions
         )
-        if not isinstance(game_odds, list):
+        # Handle if the API returns a single dict (with 'bookmakers') or a list
+        if isinstance(game_odds, dict) and 'bookmakers' in game_odds:
+            game_odds = [game_odds]
+        elif not isinstance(game_odds, list):
             print(f"Skipping event {event_id}, unexpected odds format: {game_odds}")
             continue
         for game in game_odds:
             if not isinstance(game, dict):
                 continue
+            if not game.get('bookmakers'):
+                continue  # no props posted for this event
             for book in game.get('bookmakers', []):
                 book_name = book.get('title') or book.get('key')
                 for market in book.get('markets', []):
