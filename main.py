@@ -66,7 +66,7 @@ def fetch_events(sport_key: str, regions: str = "us") -> list:
 def build_event_odds_url(
     sport_key: str,
     event_id: str,
-    markets: str = "batter_strikeouts",
+    markets: str = "h2h",
     regions: str = "us",
     odds_format: str = "american",
     date_format: str = "iso",
@@ -88,7 +88,7 @@ def build_event_odds_url(
 def fetch_event_odds(
     sport_key: str,
     event_id: str,
-    markets: str = "batter_strikeouts",
+    markets: str = "h2h",
     regions: str = "us",
     odds_format: str = "american",
     date_format: str = "iso",
@@ -121,246 +121,6 @@ def fetch_event_odds(
         )
         return []
 
-
-def evaluate_batter_strikeouts_all_tomorrow(
-    sport_key: str,
-    model_path: str,
-    regions: str = "us"
-) -> list:
-    from ml import predict_pitcher_ks_over_probability
-
-    events = fetch_events(sport_key, regions=regions)
-    results = []
-
-    print(
-        Fore.CYAN + f"DEBUG: {len(events)} events returned by API"
-        if Fore
-        else f"DEBUG: {len(events)} events returned by API"
-    )
-    for event in events:
-        commence = event.get('commence_time', '')
-        event_id = event.get('id')
-        home = event.get('home_team')
-        away = event.get('away_team')
-        print(
-            f"\n{Style.BRIGHT if Style else ''}EVENT: {event_id} | {away} at {home} | {commence}"
-        )
-
-        try:
-            commence_dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
-        except Exception as e:
-            print(
-                Fore.YELLOW + f"  Skipped: invalid commence_time format {commence} ({e})"
-                if Fore
-                else f"  Skipped: invalid commence_time format {commence} ({e})"
-            )
-            continue
-
-        today = datetime.utcnow()
-        start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
-        end_dt = start_dt + timedelta(hours=14)  # 16:00 today to 06:00 tomorrow
-
-        if not (start_dt <= commence_dt < end_dt):
-            print(
-                Fore.YELLOW
-                + f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
-                if Fore
-                else f"  Skipped: commence_time {commence_dt} not in extended window {start_dt} to {end_dt}"
-            )
-            continue
-
-        game_odds = fetch_event_odds(
-            sport_key,
-            event_id,
-            markets="batter_strikeouts",
-            regions=regions,
-        )
-
-        # Debug: show all bookmaker keys available for this event (even if no markets are present)
-        all_bookmaker_keys = []
-        if isinstance(game_odds, dict) and 'bookmakers' in game_odds:
-            all_bookmaker_keys = [b.get('key') for b in game_odds['bookmakers']]
-            game_odds = [game_odds]
-        elif isinstance(game_odds, list):
-            for game in game_odds:
-                all_bookmaker_keys.extend([b.get('key') for b in game.get('bookmakers', [])])
-        print(
-            Fore.MAGENTA + f"  Bookmaker keys in event odds: {sorted(set(all_bookmaker_keys))}"
-            if Fore
-            else f"  Bookmaker keys in event odds: {sorted(set(all_bookmaker_keys))}"
-        )
-
-        if not isinstance(game_odds, list):
-            print(
-                Fore.RED
-                + f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}"
-                if Fore
-                else f"  Skipped: unexpected odds format: {type(game_odds)} {game_odds}"
-            )
-            continue
-
-        for game in game_odds:
-            if not isinstance(game, dict):
-                print(
-                    Fore.RED + f"  Skipped: game is not a dict: {game}"
-                    if Fore
-                    else f"  Skipped: game is not a dict: {game}"
-                )
-                continue
-            if not game.get('bookmakers'):
-                print(
-                    Fore.YELLOW
-                    + f"  Skipped: no bookmakers in game {game.get('id')} for this event"
-                    if Fore
-                    else f"  Skipped: no bookmakers in game {game.get('id')} for this event"
-                )
-                continue  # no props posted for this event
-            print(
-                Fore.GREEN
-                + f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers',[])]}"
-                if Fore
-                else f"  Bookmakers found: {[b.get('title') or b.get('key') for b in game.get('bookmakers',[])]}"
-            )
-
-            for book in game.get('bookmakers', []):
-                book_name = book.get('title') or book.get('key')
-                print(f"    Bookmaker: {book_name}")
-                if not book.get('markets'):
-                    print(
-                        Fore.YELLOW + "      Skipped: no markets in this bookmaker"
-                        if Fore
-                        else "      Skipped: no markets in this bookmaker"
-                    )
-                    continue
-                for market in book.get('markets', []):
-                    print(
-                        f"      Market key: {market.get('key')}, desc: {market.get('description')}"
-                    )
-                    if market.get('key') != 'batter_strikeouts':
-                        print(
-                            Fore.YELLOW + "        Skipped: not a batter_strikeouts market"
-                            if Fore
-                            else "        Skipped: not a batter_strikeouts market"
-                        )
-                        continue
-                    if not market.get('outcomes'):
-                        print(
-                            Fore.YELLOW + "        Skipped: no outcomes in market"
-                            if Fore
-                            else "        Skipped: no outcomes in market"
-                        )
-                        continue
-                    line_map = {}
-                    for outcome in market.get('outcomes', []):
-                        player = outcome.get('name')
-                        line = outcome.get('line')
-                        desc = outcome.get('description', '').lower()
-                        if player is None or line is None:
-                            print(
-                                Fore.RED
-                                + f"        Skipped outcome: missing player or line: {outcome}"
-                                if Fore
-                                else f"        Skipped outcome: missing player or line: {outcome}"
-                            )
-                            continue
-                        key = (player, line)
-                        if key not in line_map:
-                            line_map[key] = {
-                                'player': player,
-                                'line': line,
-                                'price_over': None,
-                                'price_under': None,
-                            }
-                        if desc.startswith('over'):
-                            line_map[key]['price_over'] = outcome.get('price')
-                        elif desc.startswith('under'):
-                            line_map[key]['price_under'] = outcome.get('price')
-                    for props in line_map.values():
-                        if props['price_over'] is None or props['price_under'] is None:
-                            print(
-                                Fore.YELLOW
-                                + f"        Skipped: missing price_over or price_under for {props}"
-                                if Fore
-                                else f"        Skipped: missing price_over or price_under for {props}"
-                            )
-                            continue
-                        features = {
-                            'line': props['line'],
-                            'price_over': props['price_over'],
-                            'price_under': props['price_under'],
-                        }
-                        prob = predict_pitcher_ks_over_probability(model_path, features)
-                        prob_str = (
-                            Fore.GREEN + f"{prob*100:.1f}%"
-                            if Fore and prob is not None and prob > 0.6
-                            else (
-                                Fore.RED + f"{prob*100:.1f}%"
-                                if Fore and prob is not None and prob < 0.4
-                                else f"{prob*100:.1f}%" if prob is not None else "N/A"
-                            )
-                        )
-                        print(
-                            f"        EVAL: {props['player']} line={props['line']} over={props['price_over']} under={props['price_under']} prob={prob_str}"
-                        )
-                        results.append({
-                            'game': f"{home} vs {away}",
-                            'bookmaker': book_name,
-                            'player': props['player'],
-                            'line': props['line'],
-                            'price_over': props['price_over'],
-                            'price_under': props['price_under'],
-                            'event_id': event_id,
-                            'projected_over_probability': prob,
-                        })
-    print(
-        Fore.CYAN + f"DEBUG: Total evaluated props: {len(results)}"
-        if Fore
-        else f"DEBUG: Total evaluated props: {len(results)}"
-    )
-    return results
-
-
-def print_projections_table(projections: list) -> None:
-    if not projections:
-        print(
-            Fore.YELLOW + "No projection data available." if Fore else "No projection data available."
-        )
-        return
-
-    headers = ["GAME", "BOOK", "PLAYER", "LINE", "OVER", "UNDER", "P(OVER)"]
-    table = []
-    for row in projections:
-        prob = row.get("projected_over_probability")
-        prob_val = f"{prob*100:.1f}%" if prob is not None else "N/A"
-        # Colorize probability
-        if Fore and prob is not None:
-            if prob > 0.6:
-                prob_str = Fore.GREEN + prob_val + Style.RESET_ALL
-            elif prob < 0.4:
-                prob_str = Fore.RED + prob_val + Style.RESET_ALL
-            else:
-                prob_str = Fore.YELLOW + prob_val + Style.RESET_ALL
-        else:
-            prob_str = prob_val
-        table.append([
-            row.get("game", ""),
-            row.get("bookmaker", ""),
-            row.get("player", ""),
-            row.get("line", ""),
-            row.get("price_over", ""),
-            row.get("price_under", ""),
-            prob_str,
-        ])
-    if tabulate:
-        print(tabulate(table, headers, tablefmt="fancy_grid"))
-    else:
-        # Fallback: Plain text
-        col_widths = [max(len(str(x)) for x in [h] + [row[i] for row in table]) for i, h in enumerate(headers)]
-        header_line = " | ".join(h.ljust(col_widths[i]) for i, h in enumerate(headers))
-        print(header_line)
-        print("-" * len(header_line))
-        for row in table:
-            print(" | ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
 
 
 def evaluate_h2h_all_tomorrow(
@@ -587,12 +347,12 @@ def list_market_keys(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Display projected batter strikeout props or head-to-head win probabilities for tomorrow (autofetch event IDs).'
+        description='Display projected head-to-head win probabilities for tomorrow (autofetch event IDs).'
     )
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
-    parser.add_argument('--model', default='pitcher_ks_classifier.pkl', help='Path to trained ML model')
-    parser.add_argument('--markets', default='batter_strikeouts', help='Comma separated market keys')
+    parser.add_argument('--model', default='h2h_classifier.pkl', help='Path to trained ML model')
+    parser.add_argument('--markets', default='h2h', help='Comma separated market keys')
     parser.add_argument('--odds-format', default='american', help='Odds format')
     parser.add_argument('--date-format', default='iso', help='Date format')
     parser.add_argument('--event-id', help='Event ID for event odds request')
@@ -600,7 +360,6 @@ def main() -> None:
     parser.add_argument('--list-market-keys', action='store_true', help='List market keys for upcoming events and exit')
     parser.add_argument('--game-period-markets', help='Comma separated game period market keys to include')
     parser.add_argument('--no-player-props', action='store_true', help='Exclude player prop markets')
-    parser.add_argument('--h2h', action='store_true', help='Evaluate head-to-head win probabilities')
     parser.add_argument(
         '--list-events',
         action='store_true',
@@ -659,22 +418,12 @@ def main() -> None:
             print(f"{commence} - {away} at {home} ({event_id})")
         return
 
-    if args.h2h:
-        if args.model == 'pitcher_ks_classifier.pkl':
-            args.model = 'h2h_classifier.pkl'
-        projections = evaluate_h2h_all_tomorrow(
-            args.sport,
-            args.model,
-            regions=args.regions,
-        )
-        print_h2h_projections_table(projections)
-    else:
-        projections = evaluate_batter_strikeouts_all_tomorrow(
-            args.sport,
-            args.model,
-            regions=args.regions,
-        )
-        print_projections_table(projections)
+    projections = evaluate_h2h_all_tomorrow(
+        args.sport,
+        args.model,
+        regions=args.regions,
+    )
+    print_h2h_projections_table(projections)
 
 
 if __name__ == '__main__':
