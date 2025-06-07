@@ -108,7 +108,6 @@ def evaluate_batter_strikeouts_all_tomorrow(
     from ml import predict_pitcher_ks_over_probability
 
     events = fetch_events(sport_key, regions=regions)
-    target_date = tomorrow_iso()
     results = []
 
     print(f"DEBUG: {len(events)} events returned by API")
@@ -119,8 +118,20 @@ def evaluate_batter_strikeouts_all_tomorrow(
         away = event.get('away_team')
         print(f"\nEVENT: {event_id} | {away} at {home} | {commence}")
 
-        if not commence.startswith(target_date):
-            print("  Skipped: does not match target date")
+        try:
+            commence_dt = datetime.strptime(commence, "%Y-%m-%dT%H:%M:%SZ")
+        except Exception as e:
+            print(f"  Skipped: invalid commence_time format {commence} ({e})")
+            continue
+
+        tomorrow_dt = datetime.utcnow() + timedelta(days=1)
+        start_dt = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day)
+        end_dt = start_dt + timedelta(days=1)
+
+        if not (start_dt <= commence_dt < end_dt):
+            print(
+                f"  Skipped: commence_time {commence_dt} not in tomorrow UTC window {start_dt} to {end_dt}"
+            )
             continue
 
         game_odds = fetch_event_odds(
