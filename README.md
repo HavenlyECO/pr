@@ -104,6 +104,12 @@ pass them via the ``--game-period-markets`` option:
 python main.py --game-period-markets=first_half_totals
 ```
 
+To list all market keys and descriptions available for upcoming games, run:
+
+```bash
+python main.py --list-market-keys
+```
+
 ## Moneyline Classifier
 
 

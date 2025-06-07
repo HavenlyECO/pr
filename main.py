@@ -221,6 +221,35 @@ def evaluate_tomorrows_strikeout_props(
     return results
 
 
+def collect_market_keys(
+    sport_key: str,
+    *,
+    event_id: str | None = None,
+    regions: str = "us",
+    markets: str = "",
+    player_props: bool = True,
+) -> list[tuple[str | None, str | None]]:
+    """Return unique market (key, description) pairs for upcoming games."""
+    odds = fetch_odds(
+        sport_key,
+        event_id=event_id,
+        regions=regions,
+        markets=markets,
+        player_props=player_props,
+    )
+    pairs: set[tuple[str | None, str | None]] = set()
+    for game in odds:
+        for book in game.get("bookmakers", []):
+            for market in book.get("markets", []):
+                pairs.add(
+                    (
+                        market.get("key"),
+                        market.get("description"),
+                    )
+                )
+    return sorted(pairs)
+
+
 def print_projections_table(projections: list) -> None:
     """Display projection results in a compact table."""
     if not projections:
@@ -296,11 +325,31 @@ def main() -> None:
         action='store_true',
         help='List upcoming events for the given sport and exit'
     )
+    parser.add_argument(
+        '--list-market-keys',
+        action='store_true',
+        help='List unique market keys/descriptions for upcoming games and exit'
+    )
     args = parser.parse_args()
 
     if args.list_events:
         events = fetch_events(args.sport)
         print(json.dumps(events, indent=2))
+        return
+
+    if args.list_market_keys:
+        pairs = collect_market_keys(
+            args.sport,
+            event_id=args.event_id,
+            regions=args.regions,
+            markets=args.markets,
+            player_props=args.player_props,
+        )
+        for key, desc in pairs:
+            if desc:
+                print(f"{key} - {desc}")
+            else:
+                print(key)
         return
 
     projections = evaluate_tomorrows_strikeout_props(
