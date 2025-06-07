@@ -3,6 +3,7 @@ import os
 import sys
 import pickle
 from pathlib import Path
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -11,6 +12,60 @@ from sklearn.metrics import accuracy_score
 # Import from your ml.py module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from ml import H2H_DATA_DIR, H2H_MODEL_PATH, CACHE_DIR, build_h2h_dataset_from_api
+
+
+class SimpleOddsModel:
+    """A model that converts American odds to implied probability."""
+
+    def predict_proba(self, X):
+        price1 = X["price1"].values[0]
+        if price1 > 0:
+            prob = 100 / (price1 + 100)
+        else:
+            prob = abs(price1) / (abs(price1) + 100)
+        return np.array([[1 - prob, prob]])
+
+
+def examine_cache_files(cache_dir=CACHE_DIR, max_files=5):
+    """Examine what's in the cache files to help debug training issues"""
+    cache_files = list(cache_dir.glob("*.pkl"))
+    if not cache_files:
+        print(f"No cache files found in {cache_dir}")
+        return
+
+    print(f"Examining first {min(max_files, len(cache_files))} cache files:")
+
+    for i, cache_file in enumerate(cache_files[:max_files]):
+        try:
+            with open(cache_file, "rb") as f:
+                data = pickle.load(f)
+
+            print(f"\nFile {i+1}: {cache_file.name}")
+
+            if isinstance(data, list):
+                print(f"  Contains a list of {len(data)} items")
+                if data and isinstance(data[0], dict):
+                    print(f"  First item keys: {list(data[0].keys())}")
+                    if "markets" in data[0]:
+                        markets = data[0]["markets"]
+                        print(f"  Markets count: {len(markets)}")
+                        for market in markets:
+                            print(f"    Market key: {market.get('key')}")
+                            if market.get("key") == "h2h":
+                                outcomes = market.get("outcomes", [])
+                                print(f"    H2H outcomes: {len(outcomes)}")
+                                if outcomes:
+                                    has_results = "result" in outcomes[0]
+                                    print(f"    Has results: {has_results}")
+                                    print(f"    Sample outcome: {outcomes[0]}")
+            elif isinstance(data, dict):
+                print(f"  Contains a dictionary with keys: {list(data.keys())}")
+            else:
+                print(f"  Contains data of type: {type(data)}")
+        except Exception as e:
+            print(f"  Error examining file {cache_file}: {e}")
+
+    print("\nCache examination complete.")
 
 
 def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True):
@@ -27,6 +82,7 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
         print(f"Found {len(cache_files)} cache files")
 
     rows = []
+    processed_files = 0
     for cache_file in cache_files:
         try:
             with open(cache_file, "rb") as f:
@@ -65,6 +121,9 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
                 print(f"Error processing cache file {cache_file}: {e}")
             continue
 
+    processed_files += 1
+    if verbose and processed_files % 100 == 0:
+        print(f"Processed {processed_files} cache files...")
     if not rows:
         print("No valid training data found in cache files")
         return False
@@ -100,18 +159,6 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
 
 def train_simple_model(model_out=H2H_MODEL_PATH):
     """Create a simple model based on implied probability conversion"""
-    import numpy as np
-
-    class SimpleOddsModel:
-        """A model that converts American odds to implied probability."""
-
-        def predict_proba(self, X):
-            price1 = X["price1"].values[0]
-            if price1 > 0:
-                prob = 100 / (price1 + 100)
-            else:
-                prob = abs(price1) / (abs(price1) + 100)
-            return np.array([[1 - prob, prob]])
 
     model = SimpleOddsModel()
     model_path = Path(model_out)
@@ -175,6 +222,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-cache", action="store_true", help="Try to use cached data first"
     )
+    parser.add_argument("--examine-cache", action="store_true", help="Examine cache files to debug")
     parser.add_argument(
         "--api-days",
         type=int,
@@ -190,6 +238,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if args.examine_cache:
+        examine_cache_files()
+        sys.exit(0)
 
     success = False
 
