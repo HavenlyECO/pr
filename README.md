@@ -99,6 +99,15 @@ python main.py --list-events
 The region defaults to ``us``. Pass ``--regions`` with a comma-separated list to
 see events available in other regions.
 
+To fetch all odds for a single event and print the raw JSON response, supply the
+event ID and ``--event-odds``:
+
+```bash
+python main.py --event-id=<event id> --event-odds
+```
+You can also customize the ``--markets``, ``--odds-format`` and ``--date-format``
+options when using this endpoint.
+
 To include game period markets (e.g. quarters or innings) in the API request,
 pass them via the ``--game-period-markets`` option:
 

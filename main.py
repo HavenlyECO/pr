@@ -114,6 +114,29 @@ def fetch_odds(
         raise RuntimeError(error_msg) from e
 
 
+def fetch_event_odds(
+    sport_key: str,
+    event_id: str,
+    *,
+    regions: str = "us",
+    markets: str = "",
+    odds_format: str = "american",
+    date_format: str = "iso",
+    player_props: bool = True,
+) -> list:
+    """Fetch odds for a specific event using the event odds endpoint."""
+
+    return fetch_odds(
+        sport_key,
+        event_id=event_id,
+        regions=regions,
+        markets=markets,
+        odds_format=odds_format,
+        date_format=date_format,
+        player_props=player_props,
+    )
+
+
 def evaluate_strikeout_props(
     sport_key: str,
     model_path: str,
@@ -313,6 +336,21 @@ def main() -> None:
         help='Specific event ID to fetch odds for (optional)'
     )
     parser.add_argument(
+        '--odds-format',
+        default='american',
+        help='Odds format (default: american)'
+    )
+    parser.add_argument(
+        '--date-format',
+        default='iso',
+        help='Date format for event odds (default: iso)'
+    )
+    parser.add_argument(
+        '--event-odds',
+        action='store_true',
+        help='Display raw odds for a specific event and exit'
+    )
+    parser.add_argument(
         '--player-props',
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -348,6 +386,21 @@ def main() -> None:
                 print(f"{key} - {desc}")
             else:
                 print(key)
+        return
+
+    if args.event_odds:
+        if not args.event_id:
+            parser.error('--event-odds requires --event-id')
+        odds = fetch_event_odds(
+            args.sport,
+            args.event_id,
+            regions=args.regions,
+            markets=args.markets,
+            odds_format=args.odds_format,
+            date_format=args.date_format,
+            player_props=args.player_props,
+        )
+        print(json.dumps(odds, indent=2))
         return
 
     projections = evaluate_strikeout_props(
