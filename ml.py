@@ -169,6 +169,20 @@ def fetch_h2h_event_ids(
         return []
 
 
+def print_h2h_props_for_date(sport_key: str, date: str) -> None:
+    """Print all head-to-head outcomes for the given date."""
+    date_str = to_pst_iso8601(datetime.fromisoformat(date))
+    event_ids = fetch_h2h_event_ids(sport_key, date=date_str)
+    for event_id in event_ids:
+        markets = fetch_h2h_props(sport_key, event_id, date=date_str)
+        print(f"Event {event_id}:")
+        for book in markets:
+            for market in book.get("markets", []):
+                outcomes = market.get("outcomes", [])
+                for outcome in outcomes:
+                    print(outcome)
+
+
 def build_h2h_dataset_from_api(
     sport_key: str,
     start_date: str,
