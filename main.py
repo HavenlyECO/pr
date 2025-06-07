@@ -26,7 +26,7 @@ def build_odds_url(
     sport_key: str,
     *,
     regions: str = 'us',
-    markets: str = 'player_props',
+    markets: str = '',
     odds_format: str = 'american',
 ) -> str:
     """Return the Odds API URL for upcoming markets."""
@@ -34,9 +34,10 @@ def build_odds_url(
     params = {
         'apiKey': API_KEY,
         'regions': regions,
-        'markets': markets,
         'oddsFormat': odds_format,
     }
+    if markets:
+        params['markets'] = markets
     return f"{base}?{urllib.parse.urlencode(params)}"
 
 
@@ -44,11 +45,17 @@ def fetch_odds(
     sport_key: str,
     *,
     regions: str = 'us',
-    markets: str = 'player_props',
+    markets: str = '',
     odds_format: str = 'american',
 ) -> list:
-    """Fetch upcoming odds data from the API."""
-    url = build_odds_url(sport_key, regions=regions, markets=markets, odds_format=odds_format)
+    """Fetch upcoming odds data from the API."
+    """
+    url = build_odds_url(
+        sport_key,
+        regions=regions,
+        markets=markets,
+        odds_format=odds_format,
+    )
     with urllib.request.urlopen(url) as resp:
         return json.loads(resp.read().decode())
 
@@ -58,16 +65,21 @@ def tomorrow_iso() -> str:
     return (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
 
 
-def evaluate_tomorrows_player_strikeouts(
+def evaluate_tomorrows_strikeout_props(
     sport_key: str,
     model_path: str,
     *,
     regions: str = 'us',
+    markets: str = '',
 ) -> list:
-    """Return strikeout prop evaluations for games starting tomorrow."""
+    """Return strikeout prop evaluations for games starting tomorrow.
+
+    This fetches odds for tomorrow's games, filters for strikeout props, and
+    evaluates the probability of the over using the ML model.
+    """
     from ml import predict_pitcher_ks_over_probability
 
-    odds = fetch_odds(sport_key, regions=regions, markets='player_props')
+    odds = fetch_odds(sport_key, regions=regions, markets=markets)
     target_date = tomorrow_iso()
     results = []
 
@@ -123,17 +135,23 @@ def evaluate_tomorrows_player_strikeouts(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description='Display projected player strikeout props for tomorrow.'
+        description='Display projected pitcher strikeout props for tomorrow.'
     )
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
     parser.add_argument('--model', default='pitcher_ks_classifier.pkl', help='Path to trained ML model')
+    parser.add_argument(
+        '--markets',
+        default='',
+        help='Comma separated markets (default: all markets; leave blank for general)'
+    )
     args = parser.parse_args()
 
-    projections = evaluate_tomorrows_player_strikeouts(
+    projections = evaluate_tomorrows_strikeout_props(
         args.sport,
         args.model,
         regions=args.regions,
+        markets=args.markets,
     )
     print(json.dumps(projections, indent=2))
 
