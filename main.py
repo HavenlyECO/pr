@@ -231,6 +231,7 @@ def main() -> None:
             "alternate_team_totals",
             "player_props",
             "projected_ks_props",
+            "projected_ks_ml_eval",
             "historical",
             "train_classifier",
             "predict_classifier",
@@ -379,6 +380,99 @@ def main() -> None:
             print(
                 f"{r['game']} | {r['bookmaker']} | {r['pitcher']} O/U {r['line']} "
                 f"(O: {r['price_over']}, U: {r['price_under']})"
+            )
+        return
+
+    # ---- Projected K's O/U Props w/ ML Model Evaluation ----
+    if args.command == "projected_ks_ml_eval":
+        from ml import predict_pitcher_ks_over_probability, implied_probability
+        from datetime import datetime, timedelta
+
+        # Use today by default, or --date if provided
+        if args.date:
+            target_date = args.date
+        else:
+            target_date = (datetime.utcnow()).strftime("%Y-%m-%d")
+
+        url = build_odds_url(
+            args.sport,
+            markets="batter_strikeouts",
+            odds_format="american"
+        )
+        print(f"Fetching pitcher K's O/U props for {args.sport} on {target_date}...\n{url}\n")
+        odds = fetch_odds(
+            args.sport,
+            markets="batter_strikeouts",
+            odds_format="american"
+        )
+
+        results = []
+        for game in odds:
+            commence_time = game.get("commence_time", "")
+            game_date = commence_time[:10] if commence_time else ""
+            if game_date != target_date:
+                continue
+            home = game.get("home_team")
+            away = game.get("away_team")
+            h2h_home, h2h_away = None, None
+            # Find moneyline odds for implied win prob
+            for bookmaker in game.get("bookmakers", []):
+                for market in bookmaker.get("markets", []):
+                    if market.get("key") == "h2h":
+                        for outcome in market.get("outcomes", []):
+                            if outcome.get("name") == home:
+                                h2h_home = outcome.get("price")
+                            elif outcome.get("name") == away:
+                                h2h_away = outcome.get("price")
+            for bookmaker in game.get("bookmakers", []):
+                book_name = bookmaker.get("title") or bookmaker.get("key")
+                for market in bookmaker.get("markets", []):
+                    if market.get("key") != "batter_strikeouts":
+                        continue
+                    pitcher_lines = {}
+                    for outcome in market.get("outcomes", []):
+                        pitcher = outcome.get("name")
+                        line = outcome.get("line")
+                        description = outcome.get("description", "").lower()
+                        if pitcher is None or line is None:
+                            continue
+                        key = (pitcher, line)
+                        if key not in pitcher_lines:
+                            pitcher_lines[key] = {"pitcher": pitcher, "line": line, "price_over": None, "price_under": None}
+                        if description.startswith("over"):
+                            pitcher_lines[key]["price_over"] = outcome.get("price")
+                        elif description.startswith("under"):
+                            pitcher_lines[key]["price_under"] = outcome.get("price")
+                    for (pitcher, line), props in pitcher_lines.items():
+                        # Find implied win prob (matching home/away to pitcher if possible, else None)
+                        implied_win_prob = None
+                        if pitcher and home and pitcher in home:
+                            implied_win_prob = implied_probability(h2h_home) if h2h_home is not None else None
+                        elif pitcher and away and pitcher in away:
+                            implied_win_prob = implied_probability(h2h_away) if h2h_away is not None else None
+                        if props["price_over"] is not None and props["price_under"] is not None and implied_win_prob is not None:
+                            features = {
+                                "line": line,
+                                "price_over": props["price_over"],
+                                "price_under": props["price_under"],
+                                "implied_win_prob": implied_win_prob
+                            }
+                            ml_prob = predict_pitcher_ks_over_probability(args.model, features)
+                            results.append({
+                                "game": f"{home} vs {away}",
+                                "bookmaker": book_name,
+                                "pitcher": pitcher,
+                                "line": line,
+                                "price_over": props["price_over"],
+                                "price_under": props["price_under"],
+                                "ml_prob": ml_prob,
+                            })
+
+        print(f"Found {len(results)} pitcher K's O/U props for {target_date} with ML projections")
+        for r in results:
+            print(
+                f"{r['game']} | {r['bookmaker']} | {r['pitcher']} O/U {r['line']} "
+                f"(O: {r['price_over']}, U: {r['price_under']}) | ML Prob Over: {r['ml_prob']:.3f}"
             )
         return
 
