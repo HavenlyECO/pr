@@ -179,10 +179,23 @@ def build_h2h_dataset_from_api(
         if verbose:
             print(f"Fetched {len(event_ids)} event ids for {date_str}")
         for event_id in event_ids:
-            bookmakers = fetch_h2h_props_historical(
-                sport_key, event_id, date=date_str, regions=regions, odds_format=odds_format
+            h2h_markets = fetch_h2h_props(
+                sport_key,
+                event_id,
+                date=date_str,
+                regions=regions,
+                odds_format=odds_format,
             )
-            for book in bookmakers:
+            # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+            # DEBUG: Print the full API response for this event/date
+            print("="*60)
+            print(f"[API DEBUG] Event ID: {event_id} | Date: {date_str}")
+            print(json.dumps(h2h_markets, indent=2))
+            print("="*60)
+            # Exit after first print to focus on one example
+            import sys; sys.exit(0)
+            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            for book in h2h_markets:
                 if not isinstance(book, dict):
                     continue
                 for market in book.get("markets", []):
