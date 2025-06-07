@@ -170,7 +170,7 @@ def build_ks_dataset_from_api(
     rows: list[dict] = []
     current = start
     while current <= end:
-        date_str = current.strftime("%Y-%m-%d")
+        date_str = to_pst_iso8601(current)
         event_ids = fetch_all_event_ids(
             sport_key,
             date=date_str,
