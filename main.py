@@ -31,6 +31,7 @@ def build_odds_url(
     markets: str = 'batter_strikeouts',
     odds_format: str = 'american',
     date_format: str = 'iso',
+    player_props: bool = False,
 ) -> str:
     """Return the Odds API URL for upcoming markets or a specific event."""
     if event_id:
@@ -48,6 +49,8 @@ def build_odds_url(
         params['markets'] = markets
     if event_id:
         params['dateFormat'] = date_format
+    if player_props:
+        params['playerProps'] = 'true'
     return f"{base}?{urllib.parse.urlencode(params)}"
 
 
@@ -81,6 +84,7 @@ def fetch_odds(
     markets: str = "batter_strikeouts",
     odds_format: str = "american",
     date_format: str = "iso",
+    player_props: bool = False,
 ) -> list:
     """Fetch odds data from the API."""
     url = build_odds_url(
@@ -90,6 +94,7 @@ def fetch_odds(
         markets=markets,
         odds_format=odds_format,
         date_format=date_format,
+        player_props=player_props,
     )
     try:
         with urllib.request.urlopen(url) as resp:
@@ -119,11 +124,13 @@ def evaluate_tomorrows_strikeout_props(
     event_id: str | None = None,
     regions: str = 'us',
     markets: str = 'batter_strikeouts',
+    player_props: bool = False,
 ) -> list:
     """Return strikeout prop evaluations for games starting tomorrow.
 
     This fetches odds for tomorrow's games, filters for strikeout props, and
-    evaluates the probability of the over using the ML model.
+    evaluates the probability of the over using the ML model. If ``player_props``
+    is ``True`` the request includes player prop markets.
     """
     from ml import predict_pitcher_ks_over_probability
 
@@ -132,6 +139,7 @@ def evaluate_tomorrows_strikeout_props(
         event_id=event_id,
         regions=regions,
         markets=markets,
+        player_props=player_props,
     )
     print("RAW ODDS DATA:", json.dumps(odds, indent=2))
     target_date = tomorrow_iso()
@@ -227,6 +235,11 @@ def main() -> None:
         help='Specific event ID to fetch odds for (optional)'
     )
     parser.add_argument(
+        '--player-props',
+        action='store_true',
+        help='Include player props in the event odds request'
+    )
+    parser.add_argument(
         '--list-events',
         action='store_true',
         help='List upcoming events for the given sport and exit'
@@ -244,6 +257,7 @@ def main() -> None:
         event_id=args.event_id,
         regions=args.regions,
         markets=args.markets,
+        player_props=args.player_props,
     )
     print(json.dumps(projections, indent=2))
 
