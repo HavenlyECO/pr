@@ -307,6 +307,81 @@ def main() -> None:
         )
         return
 
+    if args.command == "projected_ks_props":
+        from datetime import datetime, timedelta
+
+        if args.date:
+            target_date = args.date
+        else:
+            target_date = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        url = build_odds_url(
+            args.sport,
+            markets="batter_strikeouts",
+            odds_format="american",
+        )
+        print(
+            f"Fetching pitcher K's O/U props for {args.sport} on {target_date}...\n{url}\n"
+        )
+        odds = fetch_odds(
+            args.sport,
+            markets="batter_strikeouts",
+            odds_format="american",
+        )
+
+        results = []
+        for game in odds:
+            commence_time = game.get("commence_time", "")
+            game_date = commence_time[:10] if commence_time else ""
+            if game_date != target_date:
+                continue
+            home = game.get("home_team")
+            away = game.get("away_team")
+            for bookmaker in game.get("bookmakers", []):
+                book_name = bookmaker.get("title") or bookmaker.get("key")
+                for market in bookmaker.get("markets", []):
+                    if market.get("key") != "batter_strikeouts":
+                        continue
+                    pitcher_lines = {}
+                    for outcome in market.get("outcomes", []):
+                        pitcher = outcome.get("name")
+                        line = outcome.get("line")
+                        description = outcome.get("description", "").lower()
+                        if pitcher is None or line is None:
+                            continue
+                        key = (pitcher, line)
+                        if key not in pitcher_lines:
+                            pitcher_lines[key] = {
+                                "pitcher": pitcher,
+                                "line": line,
+                                "price_over": None,
+                                "price_under": None,
+                            }
+                        if description.startswith("over"):
+                            pitcher_lines[key]["price_over"] = outcome.get("price")
+                        elif description.startswith("under"):
+                            pitcher_lines[key]["price_under"] = outcome.get("price")
+                    for (pitcher, line), props in pitcher_lines.items():
+                        if props["price_over"] is not None and props["price_under"] is not None:
+                            results.append(
+                                {
+                                    "game": f"{home} vs {away}",
+                                    "bookmaker": book_name,
+                                    "pitcher": pitcher,
+                                    "line": line,
+                                    "price_over": props["price_over"],
+                                    "price_under": props["price_under"],
+                                }
+                            )
+
+        print(f"Found {len(results)} pitcher K's O/U props for {target_date}")
+        for r in results:
+            print(
+                f"{r['game']} | {r['bookmaker']} | {r['pitcher']} O/U {r['line']} "
+                f"(O: {r['price_over']}, U: {r['price_under']})"
+            )
+        return
+
     # Odds viewing commands
     markets = "h2h,spreads,totals"
     if args.command == "outrights":
@@ -321,8 +396,6 @@ def main() -> None:
         markets = "alternate_team_totals"
     elif args.command == "player_props":
         markets = "player_hits,player_home_runs,player_strikeouts"
-    elif args.command == "projected_ks_props":
-        markets = "player_strikeouts"
     elif args.command == "historical":
         if args.date is None:
             parser.error("--date is required for historical command")
@@ -378,8 +451,6 @@ def main() -> None:
         print(format_moneyline(games))
     elif args.command == "moneyline":
         print(format_moneyline(games))
-    elif args.command == "projected_ks_props":
-        print(format_projected_ks_props(games, args.model))
     else:
         print(json.dumps(games, indent=2))
 
