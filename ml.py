@@ -108,6 +108,56 @@ def fetch_event_ids_historical(
         _cache_save(CACHE_DIR, cache_key, [])
         return []
 
+
+def build_historical_odds_url(
+    sport_key: str,
+    date: str,
+    *,
+    regions: str = "us",
+    odds_format: str = "american",
+) -> str:
+    base_url = (
+        f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+    )
+    params = {
+        "apiKey": API_KEY,
+        "regions": regions,
+        "markets": "h2h",
+        "date": date,
+        "oddsFormat": odds_format,
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_historical_h2h_odds(
+    sport_key: str,
+    date: str,
+    *,
+    regions: str = "us",
+    odds_format: str = "american",
+) -> list:
+    """Return all h2h odds for a sport and date."""
+    url = build_historical_odds_url(
+        sport_key, date, regions=regions, odds_format=odds_format
+    )
+    cache_key = _safe_cache_key(
+        "historicalodds", sport_key, date, regions, odds_format
+    )
+    cached = _cache_load(CACHE_DIR, cache_key)
+    if cached is not None:
+        return cached
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+        if not isinstance(data, list):
+            raise ValueError(f"Unexpected historical odds response: {data!r}")
+        _cache_save(CACHE_DIR, cache_key, data)
+        return data
+    except Exception as e:
+        print(f"Error fetching historical odds for {date}: {e}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
+
 def build_h2h_url_historical(
     sport_key: str,
     event_id: str,
@@ -173,38 +223,22 @@ def build_h2h_dataset_from_api(
     current = start
     while current <= end:
         date_str = to_fixed_utc(current)
-        event_ids = fetch_event_ids_historical(
-            sport_key, date=date_str, regions=regions
+        events = fetch_historical_h2h_odds(
+            sport_key,
+            date_str,
+            regions=regions,
+            odds_format=odds_format,
         )
         if verbose:
-            print(f"Fetched {len(event_ids)} event ids for {date_str}")
-        for event_id in event_ids:
-            h2h_markets = fetch_h2h_props(
-                sport_key,
-                event_id,
-                date=date_str,
-                regions=regions,
-                odds_format=odds_format,
-            )
-            # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-            # DEBUG: Print the full API response for this event/date
-            print("="*60)
-            print(f"[API DEBUG] Event ID: {event_id} | Date: {date_str}")
-            print(json.dumps(h2h_markets, indent=2))
-            print("="*60)
-            # Exit after first print to focus on one example
-            import sys; sys.exit(0)
-            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            for book in h2h_markets:
-                if not isinstance(book, dict):
-                    continue
+            print(f"Fetched {len(events)} events for {date_str}")
+        for game in events:
+            if not isinstance(game, dict):
+                continue
+            for book in game.get("bookmakers", []):
                 for market in book.get("markets", []):
                     if market.get("key") != "h2h":
                         continue
                     outcomes = market.get("outcomes", [])
-                    print(
-                        f"DEBUG EVENT {event_id}: outcomes={json.dumps(outcomes, indent=2)}"
-                    )
                     if len(outcomes) != 2:
                         continue
                     team1 = outcomes[0].get("name")
@@ -213,12 +247,12 @@ def build_h2h_dataset_from_api(
                     price2 = outcomes[1].get("price")
                     result1 = outcomes[0].get("result")
                     result2 = outcomes[1].get("result")
+                    if None in (team1, team2, price1, price2, result1, result2):
+                        continue
                     if verbose:
                         print(
                             f"DEBUG: {team1} vs {team2} | price1={price1}, price2={price2}, result1={result1}, result2={result2}"
                         )
-                    if None in (team1, team2, price1, price2, result1, result2):
-                        continue
                     label = 1 if result1 == "win" else 0
                     rows.append({
                         "team1": team1,
