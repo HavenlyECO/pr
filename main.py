@@ -503,7 +503,7 @@ def main() -> None:
     elif args.command == "alternate_team_totals":
         markets = "alternate_team_totals"
     elif args.command == "player_props":
-        markets = "player_hits,player_home_runs,player_strikeouts"
+        markets = "player_hits,player_home_runs,player_strikeouts,batter_strikeouts"
     elif args.command == "historical":
         if args.date is None:
             parser.error("--date is required for historical command")
