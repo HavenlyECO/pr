@@ -214,6 +214,8 @@ def build_ks_dataset_from_api(
                 odds_format=odds_format,
             )
             for book in ks_markets:
+                if not isinstance(book, dict):
+                    continue  # Skip if book is not a dict
                 for market in book.get("markets", []):
                     if market.get("key") == "batter_strikeouts":
                         pitcher_lines: dict[tuple, dict] = {}
