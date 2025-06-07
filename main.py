@@ -400,10 +400,24 @@ def main() -> None:
             odds_format="american"
         )
         print(f"Fetching pitcher K's O/U props for {args.sport} on {target_date}...\n{url}\n")
-        odds = fetch_odds(
-            args.sport,
-            markets="batter_strikeouts",
-            odds_format="american"
+
+        # --- DEBUG PRINT FOR URL ---
+        print(f"[DEBUG] Requesting odds from: {url}")
+
+        try:
+            odds = fetch_odds(
+                args.sport,
+                markets="batter_strikeouts",
+                odds_format="american"
+            )
+        except Exception as e:
+            print(f"[DEBUG] Exception while fetching odds: {e}")
+            odds = []
+
+        # --- DEBUG PRINT FOR API RESPONSE ---
+        print(f"[DEBUG] Response type: {type(odds)}")
+        print(
+            f"[DEBUG] Raw odds response: {json.dumps(odds, indent=2) if isinstance(odds, (dict, list)) else odds}"
         )
 
         results = []
