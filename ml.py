@@ -226,9 +226,6 @@ def build_h2h_dataset_from_api(
                         continue
                     outcomes = market.get("outcomes", [])
                     if len(outcomes) != 2:
-                        logger.warning(
-                            f"Unexpected number of outcomes ({len(outcomes)}) for event_id={event_id}, market={market}"
-                        )
                         continue
                     team1 = outcomes[0].get("name")
                     team2 = outcomes[1].get("name")
@@ -237,27 +234,17 @@ def build_h2h_dataset_from_api(
                     result1 = outcomes[0].get("result")
                     result2 = outcomes[1].get("result")
                     if None in (team1, team2, price1, price2, result1, result2):
-                        logger.warning(
-                            "Missing fields: team1=%s, team2=%s, price1=%s, price2=%s, result1=%s, result2=%s",
-                            team1,
-                            team2,
-                            price1,
-                            price2,
-                            result1,
-                            result2,
-                        )
+                        print(f"Full outcomes for debugging: {outcomes}")
                         continue
                     label = 1 if result1 == "win" else 0
-                    row = {
+                    rows.append({
                         "team1": team1,
                         "team2": team2,
                         "price1": price1,
                         "price2": price2,
                         "team1_win": label,
-                    }
-                    logger.debug(f"Appending row: {row}")
-                    rows.append(row)
-                    break  # Only take one h2h market per book
+                    })
+                    break
         current += timedelta(days=1)
 
     if not rows:
