@@ -36,7 +36,7 @@ def build_odds_url(
     game_period_markets: str | None = None,
 ) -> str:
     """Return fully qualified odds API URL."""
-    base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds"
+    base_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
     params = {
         "apiKey": API_KEY,
         "regions": regions,
