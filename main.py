@@ -80,18 +80,35 @@ def evaluate_tomorrows_strikeout_props(
     from ml import predict_pitcher_ks_over_probability
 
     odds = fetch_odds(sport_key, regions=regions, markets=markets)
+    print("RAW ODDS DATA:", json.dumps(odds, indent=2))
     target_date = tomorrow_iso()
     results = []
+    found_any_game = False
 
     for game in odds:
         commence = game.get('commence_time', '')
         if not commence.startswith(target_date):
             continue
+        found_any_game = True
+        print(
+            "Found game:",
+            game.get('home_team'),
+            "vs",
+            game.get('away_team'),
+            "at",
+            commence,
+        )
         home = game.get('home_team')
         away = game.get('away_team')
         for book in game.get('bookmakers', []):
             book_name = book.get('title') or book.get('key')
             for market in book.get('markets', []):
+                print(
+                    "MARKET KEY:",
+                    market.get('key'),
+                    "| DESC:",
+                    market.get('description', ''),
+                )
                 is_strikeout_market = (
                     'strikeout' in market.get('key', '').lower()
                     or 'strikeout' in market.get('description', '').lower()
@@ -107,7 +124,12 @@ def evaluate_tomorrows_strikeout_props(
                         continue
                     key = (player, line)
                     if key not in line_map:
-                        line_map[key] = {'player': player, 'line': line, 'price_over': None, 'price_under': None}
+                        line_map[key] = {
+                            'player': player,
+                            'line': line,
+                            'price_over': None,
+                            'price_under': None,
+                        }
                     if desc.startswith('over'):
                         line_map[key]['price_over'] = outcome.get('price')
                     elif desc.startswith('under'):
@@ -130,6 +152,8 @@ def evaluate_tomorrows_strikeout_props(
                         'price_under': props['price_under'],
                         'projected_over_probability': prob,
                     })
+    if not found_any_game:
+        print("No games found for tomorrow.")
     return results
 
 
