@@ -234,7 +234,25 @@ def main() -> None:
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
     parser.add_argument('--model', default='pitcher_ks_classifier.pkl', help='Path to trained ML model')
+    parser.add_argument(
+        '--list-events',
+        action='store_true',
+        help='List upcoming events for the given sport and exit'
+    )
     args = parser.parse_args()
+
+    if args.list_events:
+        events = fetch_events(args.sport, regions=args.regions)
+        if not events:
+            print('No upcoming events found.')
+            return
+        for event in events:
+            commence = event.get('commence_time', 'N/A')
+            home = event.get('home_team', '')
+            away = event.get('away_team', '')
+            event_id = event.get('id', '')
+            print(f"{commence} - {away} at {home} ({event_id})")
+        return
 
     projections = evaluate_batter_strikeouts_all_tomorrow(
         args.sport,
