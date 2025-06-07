@@ -72,6 +72,55 @@ def fetch_odds(
         return []
 
 
+def build_event_odds_url(
+    sport_key: str,
+    event_id: str,
+    *,
+    regions: str = "us",
+    markets: str = "h2h",
+    date_format: str = "iso",
+    odds_format: str = "american",
+) -> str:
+    """Return fully qualified event odds API URL."""
+    base_url = (
+        f"https://api.the-odds-api.com/v4/sports/{sport_key}/events/{event_id}/odds"
+    )
+    params = {
+        "apiKey": API_KEY,
+        "regions": regions,
+        "markets": markets,
+        "dateFormat": date_format,
+        "oddsFormat": odds_format,
+    }
+    return f"{base_url}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_event_odds(
+    sport_key: str,
+    event_id: str,
+    *,
+    regions: str = "us",
+    markets: str = "h2h",
+    date_format: str = "iso",
+    odds_format: str = "american",
+):
+    """Fetch odds for a specific event."""
+    url = build_event_odds_url(
+        sport_key,
+        event_id,
+        regions=regions,
+        markets=markets,
+        date_format=date_format,
+        odds_format=odds_format,
+    )
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        print(f"Error fetching event odds: {e}")
+        return {}
+
+
 def build_historical_odds_url(
     sport_key: str,
     *,
@@ -177,7 +226,7 @@ def format_projected_ks_props(games: list[dict], model_path: str) -> str:
         for bookmaker in game.get("bookmakers", []):
             bm_title = bookmaker.get("title", bookmaker.get("key", ""))
             for market in bookmaker.get("markets", []):
-                if market.get("key") != "batter_strikeouts":
+                if market.get("key") != "pitcher_strikeouts":
                     continue
                 pitcher_lines: dict[tuple, dict] = {}
                 for outcome in market.get("outcomes", []):
@@ -232,6 +281,7 @@ def main() -> None:
             "player_props",
             "projected_ks_props",
             "projected_ks_ml_eval",
+            "event_odds",
             "historical",
             "train_classifier",
             "predict_classifier",
@@ -251,6 +301,7 @@ def main() -> None:
     parser.add_argument("--model", default="moneyline_classifier.pkl", help="Path to a trained classifier for prediction")
     parser.add_argument("--features", default=None, help="JSON string of feature values for prediction")
     parser.add_argument("--date", default=None, help="Date for historical odds in YYYY-MM-DD format")
+    parser.add_argument("--event-id", default=None, help="Event ID for event_odds command")
     parser.add_argument("--start-date", default=None, help="Start date for training data in YYYY-MM-DD format")
     parser.add_argument("--end-date", default=None, help="End date for training data in YYYY-MM-DD format")
     parser.add_argument(
@@ -318,7 +369,7 @@ def main() -> None:
 
         url = build_odds_url(
             args.sport,
-            markets="batter_strikeouts",
+            markets="pitcher_strikeouts",
             odds_format="american",
         )
         print(
@@ -326,7 +377,7 @@ def main() -> None:
         )
         odds = fetch_odds(
             args.sport,
-            markets="batter_strikeouts",
+            markets="pitcher_strikeouts",
             odds_format="american",
         )
 
@@ -341,7 +392,7 @@ def main() -> None:
             for bookmaker in game.get("bookmakers", []):
                 book_name = bookmaker.get("title") or bookmaker.get("key")
                 for market in bookmaker.get("markets", []):
-                    if market.get("key") != "batter_strikeouts":
+                    if market.get("key") != "pitcher_strikeouts":
                         continue
                     pitcher_lines = {}
                     for outcome in market.get("outcomes", []):
@@ -396,7 +447,7 @@ def main() -> None:
 
         url = build_odds_url(
             args.sport,
-            markets="batter_strikeouts",
+            markets="pitcher_strikeouts",
             odds_format="american"
         )
         print(f"Fetching pitcher K's O/U props for {args.sport} on {target_date}...\n{url}\n")
@@ -407,7 +458,7 @@ def main() -> None:
         try:
             odds = fetch_odds(
                 args.sport,
-                markets="batter_strikeouts",
+                markets="pitcher_strikeouts",
                 odds_format="american"
             )
         except Exception as e:
@@ -441,7 +492,7 @@ def main() -> None:
             for bookmaker in game.get("bookmakers", []):
                 book_name = bookmaker.get("title") or bookmaker.get("key")
                 for market in bookmaker.get("markets", []):
-                    if market.get("key") != "batter_strikeouts":
+                    if market.get("key") != "pitcher_strikeouts":
                         continue
                     pitcher_lines = {}
                     for outcome in market.get("outcomes", []):
@@ -490,6 +541,23 @@ def main() -> None:
             )
         return
 
+    if args.command == "event_odds":
+        if not args.event_id:
+            parser.error("--event-id is required for event_odds")
+        url = build_event_odds_url(
+            args.sport,
+            args.event_id,
+            markets="pitcher_strikeouts",
+        )
+        print(f"Fetching event odds for {args.event_id}...\n{url}\n")
+        odds = fetch_event_odds(
+            args.sport,
+            args.event_id,
+            markets="pitcher_strikeouts",
+        )
+        print(json.dumps(odds, indent=2))
+        return
+
     # Odds viewing commands
     markets = "h2h,spreads,totals"
     if args.command == "outrights":
@@ -503,7 +571,7 @@ def main() -> None:
     elif args.command == "alternate_team_totals":
         markets = "alternate_team_totals"
     elif args.command == "player_props":
-        markets = "player_hits,player_home_runs,player_strikeouts,batter_strikeouts"
+        markets = "player_hits,player_home_runs,player_strikeouts,pitcher_strikeouts"
     elif args.command == "historical":
         if args.date is None:
             parser.error("--date is required for historical command")
