@@ -54,7 +54,8 @@ python main.py alternate_team_totals
 
 The script now focuses solely on head-to-head matchups. Running it without
 extra options will print projected win probabilities using the trained
-``h2h_classifier.pkl`` model:
+``h2h_data/h2h_classifier.pkl`` model. The ``h2h_data`` directory is created
+automatically when training the model:
 
 ```bash
 python main.py
