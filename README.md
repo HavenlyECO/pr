@@ -52,7 +52,7 @@ To display alternate team totals odds, run:
 python main.py alternate_team_totals
 ```
 
-To display player props odds, run:
+To display player props odds (hits, home runs, strikeouts and batter strikeouts), run:
 
 ```bash
 python main.py player_props
