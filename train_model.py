@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+import os
+import sys
+import pickle
+from pathlib import Path
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+# Import from your ml.py module
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from ml import H2H_DATA_DIR, H2H_MODEL_PATH, CACHE_DIR, build_h2h_dataset_from_api
+
+
+def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True):
+    """Attempt to build a training dataset from cached API data"""
+    if verbose:
+        print(f"Looking for cached data in {cache_dir}")
+
+    cache_files = list(cache_dir.glob("*.pkl"))
+    if not cache_files:
+        print(f"No cache files found in {cache_dir}")
+        return False
+
+    if verbose:
+        print(f"Found {len(cache_files)} cache files")
+
+    rows = []
+    for cache_file in cache_files:
+        try:
+            with open(cache_file, "rb") as f:
+                data = pickle.load(f)
+
+            if isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    for market in item.get("markets", []):
+                        if market.get("key") != "h2h":
+                            continue
+                        outcomes = market.get("outcomes", [])
+                        if len(outcomes) != 2:
+                            continue
+                        team1 = outcomes[0].get("name")
+                        team2 = outcomes[1].get("name")
+                        price1 = outcomes[0].get("price")
+                        price2 = outcomes[1].get("price")
+                        result1 = outcomes[0].get("result")
+                        result2 = outcomes[1].get("result")
+                        if None in (team1, team2, price1, price2, result1, result2):
+                            continue
+                        label = 1 if result1 == "win" else 0
+                        rows.append(
+                            {
+                                "team1": team1,
+                                "team2": team2,
+                                "price1": price1,
+                                "price2": price2,
+                                "team1_win": label,
+                            }
+                        )
+        except Exception as e:
+            if verbose:
+                print(f"Error processing cache file {cache_file}: {e}")
+            continue
+
+    if not rows:
+        print("No valid training data found in cache files")
+        return False
+
+    df = pd.DataFrame(rows)
+
+    if verbose:
+        print(f"Successfully created dataset with {len(df)} rows")
+        print(df.head())
+
+    X = df[["price1", "price2"]]
+    y = df["team1_win"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    model = LogisticRegression(max_iter=1000)
+    model.fit(X_train, y_train)
+
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds)
+    print(f"Model validation accuracy: {acc:.3f}")
+
+    model_path = Path(model_out)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(model_path, "wb") as f:
+        pickle.dump(model, f)
+
+    print(f"Model successfully saved to {model_path}")
+    return True
+
+
+def train_simple_model(model_out=H2H_MODEL_PATH):
+    """Create a simple model based on implied probability conversion"""
+    import numpy as np
+
+    class SimpleOddsModel:
+        """A model that converts American odds to implied probability."""
+
+        def predict_proba(self, X):
+            price1 = X["price1"].values[0]
+            if price1 > 0:
+                prob = 100 / (price1 + 100)
+            else:
+                prob = abs(price1) / (abs(price1) + 100)
+            return np.array([[1 - prob, prob]])
+
+    model = SimpleOddsModel()
+    model_path = Path(model_out)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(model_path, "wb") as f:
+        pickle.dump(model, f)
+
+    print(f"Simple odds conversion model saved to {model_path}")
+    return True
+
+
+def train_new_model_from_api(
+    sport_key="baseball_mlb", days=30, model_out=H2H_MODEL_PATH
+):
+    """Train a new model by fetching data from the API"""
+    from datetime import datetime, timedelta
+
+    end_date = datetime.utcnow().strftime("%Y-%m-%d")
+    start_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    print(f"Training model with data from {start_date} to {end_date}")
+
+    try:
+        df = build_h2h_dataset_from_api(
+            sport_key, start_date, end_date, verbose=True
+        )
+
+        X = df[["price1", "price2"]]
+        y = df["team1_win"]
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+
+        model = LogisticRegression(max_iter=1000)
+        model.fit(X_train, y_train)
+
+        preds = model.predict(X_test)
+        acc = accuracy_score(y_test, preds)
+        print(f"Model validation accuracy: {acc:.3f}")
+
+        model_path = Path(model_out)
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(model_path, "wb") as f:
+            pickle.dump(model, f)
+
+        print(f"Model successfully saved to {model_path}")
+        return True
+    except Exception as e:
+        print(f"Error training model from API: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Train h2h model from cache or API"
+    )
+    parser.add_argument(
+        "--use-cache", action="store_true", help="Try to use cached data first"
+    )
+    parser.add_argument(
+        "--api-days",
+        type=int,
+        default=30,
+        help="Days of history to fetch from API (default: 30)",
+    )
+    parser.add_argument("--sport", default="baseball_mlb", help="Sport key")
+    parser.add_argument(
+        "--simple", action="store_true", help="Create a simple odds conversion model"
+    )
+    parser.add_argument(
+        "--model-out", default=str(H2H_MODEL_PATH), help="Output model path"
+    )
+
+    args = parser.parse_args()
+
+    success = False
+
+    if args.use_cache:
+        success = train_from_cache(model_out=args.model_out)
+
+    if not success and not args.simple:
+        print("Attempting to train model from API data...")
+        success = train_new_model_from_api(
+            sport_key=args.sport, days=args.api_days, model_out=args.model_out
+        )
+
+    if not success or args.simple:
+        print("Creating a simple odds conversion model...")
+        train_simple_model(model_out=args.model_out)
