@@ -214,10 +214,20 @@ def fetch_historical_h2h_odds(
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
-        if not isinstance(data, list):
+
+        if isinstance(data, list):
+            events = data
+        elif isinstance(data, dict) and "data" in data:
+            events = data["data"]
+            if not isinstance(events, list):
+                raise ValueError(
+                    f"Unexpected historical odds response: {data!r}"
+                )
+        else:
             raise ValueError(f"Unexpected historical odds response: {data!r}")
-        _cache_save(CACHE_DIR, cache_key, data)
-        return data
+
+        _cache_save(CACHE_DIR, cache_key, events)
+        return events
     except Exception as e:
         print(f"Error fetching historical odds for {date}: {e}")
         _cache_save(CACHE_DIR, cache_key, [])
@@ -262,10 +272,18 @@ def fetch_h2h_props_historical(
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
-            if isinstance(data, dict) and "bookmakers" in data:
-                out = data["bookmakers"]
+
+            out: list
+            if isinstance(data, dict):
+                if "bookmakers" in data:
+                    out = data["bookmakers"]
+                elif "data" in data and isinstance(data["data"], dict):
+                    out = data["data"].get("bookmakers", [])
+                else:
+                    out = []
             else:
                 out = []
+
             _cache_save(CACHE_DIR, cache_key, out)
             return out
     except Exception as e:
