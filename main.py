@@ -35,8 +35,18 @@ def build_events_url(sport_key: str, regions: str = "us") -> str:
 
 def fetch_events(sport_key: str, regions: str = "us") -> list:
     url = build_events_url(sport_key, regions=regions)
-    with urllib.request.urlopen(url) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = ""
+        if hasattr(e, "read"):
+            try:
+                body = e.read().decode()
+            except Exception:
+                body = str(e.read())
+        error_msg = f"HTTPError fetching events: {e.code} {e.reason}\n{body}\nURL: {url}"
+        raise RuntimeError(error_msg) from e
 
 
 def build_event_odds_url(
@@ -82,7 +92,11 @@ def fetch_event_odds(
     try:
         with urllib.request.urlopen(url) as resp:
             return json.loads(resp.read().decode())
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as e:
+        # Optionally handle/log errors here
+        return []
+    except Exception as e:
+        # Defensive: Return empty on any other error
         return []
 
 
@@ -110,7 +124,12 @@ def evaluate_batter_strikeouts_all_tomorrow(
             markets="batter_strikeouts",
             regions=regions
         )
+        if not isinstance(game_odds, list):
+            print(f"Skipping event {event_id}, unexpected odds format: {game_odds}")
+            continue
         for game in game_odds:
+            if not isinstance(game, dict):
+                continue
             for book in game.get('bookmakers', []):
                 book_name = book.get('title') or book.get('key')
                 for market in book.get('markets', []):
