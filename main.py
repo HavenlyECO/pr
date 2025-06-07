@@ -141,7 +141,10 @@ def evaluate_tomorrows_strikeout_props(
         markets=markets,
         player_props=player_props,
     )
-    print("RAW ODDS DATA:", json.dumps(odds, indent=2))
+    # The raw API response can be extremely verbose which makes it hard to
+    # view all player props on a single screen.  Comment the next line in when
+    # debugging to inspect the full JSON payload.
+    # print("RAW ODDS DATA:", json.dumps(odds, indent=2))
     target_date = tomorrow_iso()
     results = []
     found_any_game = False
@@ -218,6 +221,54 @@ def evaluate_tomorrows_strikeout_props(
     return results
 
 
+def print_projections_table(projections: list) -> None:
+    """Display projection results in a compact table."""
+    if not projections:
+        print("No projection data available.")
+        return
+
+    headers = [
+        "GAME",
+        "BOOK",
+        "PLAYER",
+        "LINE",
+        "OVER",
+        "UNDER",
+        "P(OVER)",
+    ]
+
+    # Determine column widths dynamically so most results fit on one line
+    def col_width(key, min_width):
+        return max(min_width, max(len(str(row.get(key, ""))) for row in projections))
+
+    widths = {
+        "GAME": col_width("game", 10),
+        "BOOK": col_width("bookmaker", 6),
+        "PLAYER": col_width("player", 8),
+        "LINE": col_width("line", 4),
+        "OVER": col_width("price_over", 4),
+        "UNDER": col_width("price_under", 5),
+        "P(OVER)": 7,
+    }
+
+    header_line = " ".join(h.ljust(widths[h]) for h in headers)
+    print(header_line)
+    print("-" * len(header_line))
+    for row in projections:
+        prob = row.get("projected_over_probability")
+        prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
+        values = [
+            row.get("game", ""),
+            row.get("bookmaker", ""),
+            row.get("player", ""),
+            row.get("line", ""),
+            row.get("price_over", ""),
+            row.get("price_under", ""),
+            prob_str,
+        ]
+        print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description='Display projected pitcher strikeout props for tomorrow.'
@@ -260,7 +311,7 @@ def main() -> None:
         markets=args.markets,
         player_props=args.player_props,
     )
-    print(json.dumps(projections, indent=2))
+    print_projections_table(projections)
 
 
 if __name__ == '__main__':
