@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import urllib.parse
 import urllib.request
+import urllib.error
 import hashlib
 
 import pandas as pd
@@ -126,14 +127,24 @@ def fetch_all_event_ids(
     cached = _cache_load(CACHE_DIR, cache_key)
     if cached is not None:
         return cached
+    print(f"[DEBUG] Fetching event IDs URL: {url}")
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
             event_ids = [game.get("id") for game in data if game.get("id")]
             _cache_save(CACHE_DIR, cache_key, event_ids)
             return event_ids
+    except urllib.error.HTTPError as e:
+        print(f"[ERROR] HTTPError for event ids on {date}: {e.code} {e.reason}")
+        if hasattr(e, "read"):
+            error_body = e.read()
+            print(f"[ERROR] Error body: {error_body.decode(errors='replace')}")
+        print(f"[ERROR] URL was: {url}")
+        _cache_save(CACHE_DIR, cache_key, [])
+        return []
     except Exception as e:
-        print(f"Error fetching event ids for {date}: {e}")
+        print(f"[ERROR] General error fetching event ids for {date}: {e}")
+        print(f"[ERROR] URL was: {url}")
         _cache_save(CACHE_DIR, cache_key, [])
         return []
 
