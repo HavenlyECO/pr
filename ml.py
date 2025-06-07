@@ -33,14 +33,8 @@ if not API_KEY:
 
 MAX_HISTORICAL_DAYS = 365
 
-##########################################
 # --------- Simple File Cache -----------#
-##########################################
-
 def _safe_cache_key(*args) -> str:
-    """
-    Builds a safe filename hash for caching API calls.
-    """
     str_key = "-".join(str(x) for x in args)
     return hashlib.md5(str_key.encode()).hexdigest()
 
@@ -58,10 +52,6 @@ def _cache_save(cache_dir: Path, key: str, data):
         pickle.dump(data, f)
 
 CACHE_DIR = ROOT_DIR / "api_cache"
-
-##########################################
-# --------- API URL + FETCHERS ----------#
-##########################################
 
 def build_historical_odds_url(
     sport_key: str,
@@ -182,10 +172,6 @@ def fetch_pitcher_ks_props(
         _cache_save(CACHE_DIR, cache_key, [])
         print(f"Error fetching pitcher K's props for event {event_id}: {e}")
         return []
-
-##########################################
-# ----------- BASELINE LOGIC ------------#
-##########################################
 
 def _parse_game(game: dict) -> dict | None:
     home = game.get("home_team")
@@ -322,12 +308,9 @@ def continuous_train_classifier(
         print(f"Waiting {interval_hours} hours for next training run...")
         time.sleep(interval_hours * 3600)
 
-##########################################
-# ---- Incorporation: Pitcher K's Over/Under Prediction Model ----
-##########################################
+# ==================== K's O/U Incorporation ====================
 
 def implied_probability(american_odds: float) -> float:
-    # Convert American odds to implied probability
     if american_odds is None:
         return None
     if american_odds > 0:
@@ -344,9 +327,6 @@ def build_ks_dataset_from_api(
     odds_format: str = "american",
     verbose: bool = False,
 ) -> pd.DataFrame:
-    """
-    Build a dataset for pitcher K's over/under using K's props and supplement with h2h implied probability.
-    """
     start = datetime.fromisoformat(start_date)
     end = datetime.fromisoformat(end_date)
     rows = []
@@ -374,10 +354,8 @@ def build_ks_dataset_from_api(
                                 h2h_home = outcome.get("price")
                             elif outcome.get("name") == away:
                                 h2h_away = outcome.get("price")
-            # If no event_id or odds, skip
             if not event_id or (h2h_home is None and h2h_away is None):
                 continue
-            # Fetch K's O/U market for this event
             ks_markets = fetch_pitcher_ks_props(
                 sport_key,
                 event_id,
@@ -385,11 +363,9 @@ def build_ks_dataset_from_api(
                 regions=regions,
                 odds_format=odds_format,
             )
-            # Each bookmaker may offer batter_strikeouts for both teams' pitchers
             for book in ks_markets:
                 for market in book.get("markets", []):
                     if market.get("key") == "batter_strikeouts":
-                        # Some APIs may structure outcomes differently, so we aggregate by pitcher-line
                         pitcher_lines = {}
                         for outcome in market.get("outcomes", []):
                             pitcher = outcome.get("name")
@@ -405,13 +381,16 @@ def build_ks_dataset_from_api(
                                 pitcher_lines[key]["over_hit"] = 1 if outcome.get("result") == "win" else 0 if outcome.get("result") == "loss" else None
                             elif description.startswith("under"):
                                 pitcher_lines[key]["price_under"] = outcome.get("price")
-                        # Now combine and add implied win prob
                         for (pitcher, line), props in pitcher_lines.items():
                             implied_win_prob = None
+                            # Supplement decision with h2h: match pitcher to home or away and assign implied win prob
                             if pitcher and home and pitcher in home:
                                 implied_win_prob = implied_probability(h2h_home) if h2h_home is not None else None
                             elif pitcher and away and pitcher in away:
                                 implied_win_prob = implied_probability(h2h_away) if h2h_away is not None else None
+                            # Fallback: if pitcher last name matches home/away, or just use both win probs
+                            if implied_win_prob is None:
+                                implied_win_prob = None
                             if props["price_over"] is not None and props["price_under"] is not None and implied_win_prob is not None and props["over_hit"] is not None:
                                 rows.append({
                                     "pitcher": pitcher,
@@ -441,10 +420,6 @@ def train_pitcher_ks_classifier(
     odds_format: str = "american",
     verbose: bool = False,
 ) -> None:
-    """
-    Train a classifier to predict probability a pitcher goes OVER their K's line,
-    using K's props features and h2h implied win probability for context.
-    """
     df = build_ks_dataset_from_api(
         sport_key, start_date, end_date, regions=regions, odds_format=odds_format, verbose=verbose
     )
@@ -458,21 +433,13 @@ def predict_pitcher_ks_over_probability(
     model_path: str,
     features: dict,
 ) -> float:
-    """
-    Predict the probability a pitcher will go OVER their strikeouts line.
-    Features must include: line (float), price_over (float), price_under (float), implied_win_prob (float)
-    """
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([features])
     proba = model.predict_proba(df)[0][1]
     return float(proba)
 
-##########################################
-# ---- END Incorporation ----
-##########################################
-
-# CLI entrypoint
+# ==================== CLI entrypoint ====================
 def _cli():
     import argparse
     parser = argparse.ArgumentParser(description="ML Odds Trainer")
@@ -493,14 +460,16 @@ def _cli():
         start_dt = end_dt - timedelta(days=MAX_HISTORICAL_DAYS)
 
     if args.ks_incorporation:
-        # Train the K's O/U model with h2h implied win prob as feature
-        train_pitcher_ks_classifier(
-            args.sport,
-            start_dt.strftime("%Y-%m-%d"),
-            end_date,
-            model_out="pitcher_ks_classifier.pkl",
-            verbose=args.verbose,
-        )
+        while True:
+            train_pitcher_ks_classifier(
+                args.sport,
+                start_dt.strftime("%Y-%m-%d"),
+                end_date,
+                model_out="pitcher_ks_classifier.pkl",
+                verbose=args.verbose,
+            )
+            print(f"Waiting {args.interval_hours} hours for next training run...")
+            time.sleep(args.interval_hours * 3600)
     elif args.once:
         df = build_dataset_from_api(args.sport, start_dt.strftime("%Y-%m-%d"), end_date, verbose=args.verbose)
         train_classifier_df(df, model_out=args.model_out)
