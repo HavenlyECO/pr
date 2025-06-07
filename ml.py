@@ -8,11 +8,20 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import hashlib
+import logging
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
+
 from sklearn.metrics import accuracy_score
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="[%(asctime)s] %(levelname)s %(funcName)s:%(lineno)d: %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+logger = logging.getLogger("ml_debug")
 
 try:
     from dotenv import load_dotenv
@@ -173,16 +182,22 @@ def build_h2h_dataset_from_api(
     end = datetime.fromisoformat(end_date)
     rows: list[dict] = []
     current = start
+    logger.info(f"Building h2h dataset for {sport_key} from {start_date} to {end_date}")
     while current <= end:
         date_str = to_pst_iso8601(current)
+        logger.debug(f"Fetching event ids for date {date_str}")
         event_ids = fetch_h2h_event_ids(
             sport_key,
             date=date_str,
             regions=regions,
         )
-        if verbose:
-            print(f"Fetched {len(event_ids)} event ids for {date_str}")
+        logger.debug(f"Fetched event_ids ({len(event_ids)}): {event_ids}")
+        if not event_ids:
+            logger.warning(
+                f"No event_ids found for {date_str} (sport={sport_key}, regions={regions})"
+            )
         for event_id in event_ids:
+            logger.debug(f"Fetching h2h props for event_id={event_id} date={date_str}")
             h2h_markets = fetch_h2h_props(
                 sport_key,
                 event_id,
@@ -190,14 +205,21 @@ def build_h2h_dataset_from_api(
                 regions=regions,
                 odds_format=odds_format,
             )
+            logger.debug(f"h2h_markets for event_id={event_id}: {h2h_markets}")
+            if not h2h_markets:
+                logger.warning(f"No h2h_markets for event_id={event_id} on {date_str}")
             for book in h2h_markets:
                 if not isinstance(book, dict):
+                    logger.warning(f"Book is not dict: {book}")
                     continue
                 for market in book.get("markets", []):
                     if market.get("key") != "h2h":
                         continue
                     outcomes = market.get("outcomes", [])
                     if len(outcomes) != 2:
+                        logger.warning(
+                            f"Unexpected number of outcomes ({len(outcomes)}) for event_id={event_id}, market={market}"
+                        )
                         continue
                     team1 = outcomes[0].get("name")
                     team2 = outcomes[1].get("name")
@@ -206,19 +228,31 @@ def build_h2h_dataset_from_api(
                     result1 = outcomes[0].get("result")
                     result2 = outcomes[1].get("result")
                     if None in (team1, team2, price1, price2, result1, result2):
+                        logger.warning(
+                            "Missing fields: team1=%s, team2=%s, price1=%s, price2=%s, result1=%s, result2=%s",
+                            team1,
+                            team2,
+                            price1,
+                            price2,
+                            result1,
+                            result2,
+                        )
                         continue
                     label = 1 if result1 == "win" else 0
-                    rows.append({
+                    row = {
                         "team1": team1,
                         "team2": team2,
                         "price1": price1,
                         "price2": price2,
                         "team1_win": label,
-                    })
-                    break
+                    }
+                    logger.debug(f"Appending row: {row}")
+                    rows.append(row)
+                    break  # Only take one h2h market per book
         current += timedelta(days=1)
 
     if not rows:
+        logger.error("No h2h data returned. Debug info above.")
         raise RuntimeError("No h2h data returned")
     if verbose:
         print(f"Built h2h dataset with {len(rows)} rows.")
