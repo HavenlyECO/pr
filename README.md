@@ -127,6 +127,8 @@ Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the
 other and avoid mixing the two, which can lead to data leakage.
+Any columns containing terms such as ``result`` or ``final`` are discarded
+automatically to prevent leaking post-game information into the model.
 
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 

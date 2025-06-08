@@ -502,11 +502,28 @@ def predict_h2h_probability(
 
 
 def split_feature_sets(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return separate pregame and live-game feature DataFrames."""
-    pregame_cols = [c for c in df.columns if c.startswith("pregame_")]
-    live_cols = [c for c in df.columns if c.startswith("live_")]
+    """Return separate pregame and live-game feature DataFrames.
 
-    other_cols = [c for c in df.columns if c not in pregame_cols + live_cols]
+    Any columns containing post-result information are discarded to avoid data
+    leakage when training or predicting.
+    """
+
+    disallow_keywords = {"result", "final", "post", "future"}
+
+    def allowed(col: str) -> bool:
+        c_lower = col.lower()
+        return not any(k in c_lower for k in disallow_keywords)
+
+    pregame_cols = [c for c in df.columns if c.startswith("pregame_") and allowed(c)]
+    live_cols = [c for c in df.columns if c.startswith("live_") and allowed(c)]
+
+    # Ignore any columns that might leak future information
+    other_cols = [
+        c
+        for c in df.columns
+        if c not in pregame_cols + live_cols and allowed(c)
+    ]
+
     pregame_df = df[pregame_cols + other_cols].copy()
     live_df = df[live_cols].copy()
     return pregame_df, live_df
