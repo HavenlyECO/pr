@@ -140,6 +140,9 @@ Continuous numeric features like ERA, SLG and line delta are automatically
 standardized during training to improve optimizer convergence.
 During training, probability quality is reported using AUC and Brier score
 rather than simple accuracy.
+When live-inning columns are available the validation set is also segmented into
+``pregame``, ``5th inning`` and ``7th inning`` windows to gauge how accuracy
+improves as more game context becomes available.
 
 The ``live_features.py`` module introduces an ``InningDifferentialTracker``
 utility for live play. It records the run differential at the end of each
