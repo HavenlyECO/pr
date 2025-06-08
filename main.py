@@ -46,6 +46,7 @@ from ml import (
     train_moneyline_classifier,
     predict_moneyline_probability,
     american_odds_to_prob,
+    american_odds_to_payout,
 )
 
 
@@ -291,11 +292,14 @@ def evaluate_h2h_all_tomorrow(
 
                     implied = american_odds_to_prob(price1)
                     edge = prob - implied
+                    payout = american_odds_to_payout(price1)
+                    ev = edge * payout
 
                     if verbose:
                         print(
                             f"        EVAL: {team1}({price1}) vs {team2}({price2}) "
-                            f"prob(team1 win)={prob} implied={implied} edge={edge}"
+                            f"prob={prob:.3f} implied={implied:.3f} edge={edge:.3f} "
+                            f"payout={payout:.3f} EV={ev:.4f}"
                         )
 
                     results.append({
@@ -309,6 +313,8 @@ def evaluate_h2h_all_tomorrow(
                         "event_id": event_id,
                         "projected_team1_win_probability": prob,
                         "edge": edge,
+                        "payout": payout,
+                        "expected_value": ev,
                     })
     
     if verbose:
@@ -333,6 +339,9 @@ def print_h2h_projections_table(projections: list) -> None:
             edge = row.get("edge")
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
 
+            ev = row.get("expected_value")
+            ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
+
             price1 = row.get("price1", 0)
             price2 = row.get("price2", 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
@@ -345,13 +354,14 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
+                ev_str,
                 row.get("bookmaker", ""),
             ])
 
         print(
             tabulate(
                 table_data,
-                headers=["Team 1", "Odds", "Team 2", "Odds", "Win Prob", "Edge", "Book"],
+                headers=["Team 1", "Odds", "Team 2", "Odds", "Win Prob", "Edge", "EV", "Book"],
                 tablefmt="pretty",
             )
         )
@@ -363,6 +373,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "PRICE2",
             "P(WIN)",
             "EDGE",
+            "EV",
             "BOOK",
         ]
 
@@ -376,6 +387,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "PRICE2": col_width("price2", 6),
             "P(WIN)": 8,
             "EDGE": 8,
+            "EV": 8,
             "BOOK": col_width("bookmaker", 8),
         }
 
@@ -388,6 +400,8 @@ def print_h2h_projections_table(projections: list) -> None:
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
             edge = row.get("edge")
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
+            ev = row.get("expected_value")
+            ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
             price1 = row.get("price1", 0)
             price2 = row.get("price2", 0)
@@ -401,6 +415,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
+                ev_str,
                 row.get("bookmaker", ""),
             ]
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))

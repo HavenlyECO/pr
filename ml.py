@@ -38,6 +38,12 @@ def american_odds_to_prob(odds: float) -> float:
         return 100 / (odds + 100)
     return abs(odds) / (abs(odds) + 100)
 
+def american_odds_to_payout(odds: float) -> float:
+    """Return the profit on a $1 bet for the given American odds."""
+    if odds > 0:
+        return odds / 100.0
+    return 100.0 / abs(odds)
+
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if DOTENV_PATH.exists():
