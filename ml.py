@@ -47,6 +47,11 @@ def american_odds_to_payout(odds: float) -> float:
         return odds / 100.0
     return 100.0 / abs(odds)
 
+
+def line_movement_delta(closing_odds: float, opening_odds: float) -> float:
+    """Return the change in odds from open to close."""
+    return closing_odds - opening_odds
+
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if DOTENV_PATH.exists():
@@ -558,6 +563,15 @@ def train_moneyline_classifier(
     df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
+
+    # Automatically create a line movement feature if possible
+    if {
+        "opening_odds",
+        "closing_odds",
+    }.issubset(df.columns):
+        df["line_delta"] = df["closing_odds"] - df["opening_odds"]
+        if verbose:
+            print("Computed line_delta column from closing and opening odds")
 
     features_df = df.drop(columns=["home_team_win"])
     pregame_X, live_X = split_feature_sets(features_df)

@@ -123,6 +123,10 @@ endpoint. The dataset should contain a `home_team_win` column as the target
 along with feature columns such as team statistics, starting pitcher ratings,
 bullpen strength, park factor and injury indicators.
 
+If your CSV includes both ``opening_odds`` and ``closing_odds`` columns,
+``train_classifier`` will automatically create a ``line_delta`` feature
+representing ``closing_odds - opening_odds`` so steam moves can be tracked.
+
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the
