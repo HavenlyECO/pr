@@ -15,6 +15,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
 
 try:
     from dotenv import load_dotenv
@@ -451,17 +453,22 @@ def build_h2h_dataset_from_api(
     return pd.DataFrame(rows)
 
 def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
-    """Train a logistic regression model and calibrate probabilities."""
+    """Train a logistic regression model with feature normalization.
+
+    Continuous inputs are standardized using ``StandardScaler`` before
+    fitting to improve convergence. Probabilities are calibrated with
+    isotonic regression on a validation split.
+    """
 
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
 
-    base_model = LogisticRegression(max_iter=1000)
-    base_model.fit(X_train, y_train)
+    pipeline = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
+    pipeline.fit(X_train, y_train)
 
     # Calibrate using isotonic regression on the validation set
-    calibrator = CalibratedClassifierCV(base_model, method="isotonic", cv="prefit")
+    calibrator = CalibratedClassifierCV(pipeline, method="isotonic", cv="prefit")
     calibrator.fit(X_val, y_val)
 
     probas = calibrator.predict_proba(X_val)[:, 1]

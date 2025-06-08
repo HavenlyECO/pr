@@ -8,6 +8,8 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
 import json
 
 # Import from your ml.py module
@@ -193,7 +195,8 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
         X, y, test_size=0.2, random_state=42
     )
 
-    model = LogisticRegression(max_iter=1000)
+    # Standardize inputs then train logistic regression
+    model = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
     model.fit(X_train, y_train)
 
     probas = model.predict_proba(X_test)[:, 1]
