@@ -130,6 +130,9 @@ other and avoid mixing the two, which can lead to data leakage.
 Any columns containing terms such as ``result`` or ``final`` are discarded
 automatically to prevent leaking post-game information into the model.
 
+Continuous numeric features like ERA, SLG and line delta are automatically
+standardized during training to improve optimizer convergence.
+
 The ``live_features.py`` module introduces an ``InningDifferentialTracker``
 utility for live play. It records the run differential at the end of each
 inning and exposes them as ``live_inning_X_diff`` fields. By updating this
