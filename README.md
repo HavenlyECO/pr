@@ -130,6 +130,12 @@ other and avoid mixing the two, which can lead to data leakage.
 Any columns containing terms such as ``result`` or ``final`` are discarded
 automatically to prevent leaking post-game information into the model.
 
+The ``live_features.py`` module introduces an ``InningDifferentialTracker``
+utility for live play. It records the run differential at the end of each
+inning and exposes them as ``live_inning_X_diff`` fields. By updating this
+tracker with live scoring data you can feed time-aware inning-by-inning
+differentials directly into the classifier.
+
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
