@@ -10,6 +10,11 @@ import urllib.request
 import urllib.error
 import hashlib
 
+try:
+    import openai
+except ImportError:  # pragma: no cover - optional dependency
+    openai = None
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -88,6 +93,27 @@ def compute_recency_weights(dates: pd.Series, half_life_days: float = 30.0) -> p
     weights = 0.5 ** (age / float(half_life_days))
     return weights
 
+
+def llm_sharp_context_score(text: str) -> float:
+    """Return a score between 0 and 1 from OpenAI about sharp betting context."""
+    if openai is None or not OPENAI_API_KEY:
+        return 0.0
+    prompt = (
+        "Given the following context from news or social media, rate the likelihood "
+        "that professional sharp bettors are influencing the market on a 0-1 scale:\n"
+        f"{text}\nScore:"
+    )
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        reply = resp.choices[0].message["content"].strip()
+        return float(reply)
+    except Exception:
+        return 0.0
+
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if DOTENV_PATH.exists():
@@ -96,6 +122,10 @@ if DOTENV_PATH.exists():
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 if not API_KEY:
     raise RuntimeError("THE_ODDS_API_KEY environment variable is not set (check your .env file)")
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if openai is not None:
+    openai.api_key = OPENAI_API_KEY
 
 MAX_HISTORICAL_DAYS = 365
 
@@ -665,6 +695,24 @@ Modeling is done in regression mode first. You can later apply a probability thr
             print(
                 "Computed line_delta and line_movement_delta from opening and closing odds"
             )
+
+    # Create sharp money features when handle/ticket percentages are available
+    if {"handle_percent", "ticket_percent"}.issubset(df.columns):
+        delta = df["handle_percent"] - df["ticket_percent"]
+        df["sharp_money_delta"] = delta
+        df["sharp_action_flag"] = (delta > 20).astype(int)
+        df["sharp_money_score"] = delta / 100.0
+        if verbose:
+            print(
+                "Computed sharp_money_delta, sharp_action_flag and sharp_money_score from handle/ticket percentages"
+            )
+
+    # Generate LLM-based sharp context score if a context column exists
+    context_col = next((c for c in df.columns if "context" in c.lower()), None)
+    if context_col is not None:
+        df["sharp_context_score"] = df[context_col].apply(llm_sharp_context_score)
+        if verbose:
+            print(f"Computed sharp_context_score using OpenAI on column '{context_col}'")
 
     features_df = df.drop(columns=["home_team_win"])
     pregame_X, live_X = split_feature_sets(features_df)
