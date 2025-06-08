@@ -463,6 +463,7 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     Continuous inputs are standardized using ``StandardScaler`` before
     fitting to improve convergence. Probabilities are calibrated with
     isotonic regression on a validation split.
+    This approach keeps modeling in a regression setup so you can choose any probability threshold later for classification.
     """
 
     X_train, X_val, y_train, y_val = train_test_split(
@@ -569,7 +570,9 @@ def train_moneyline_classifier(
     features_type: str = "pregame",
     verbose: bool = False,
 ) -> None:
-    """Train a logistic regression model from a CSV with a home_team_win column."""
+    """Train a logistic regression model from a CSV with a home_team_win column.
+
+Modeling is done in regression mode first. You can later apply a probability threshold for classification if desired."""
     df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
