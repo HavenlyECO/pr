@@ -481,6 +481,16 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     acc = accuracy_score(y_val, preds)
     print(f"Validation accuracy: {acc:.3f}")
 
+    residuals_df = pd.DataFrame({
+        "true_label": y_val.reset_index(drop=True),
+        "model_prob": probas,
+    })
+    residuals_df["residual"] = residuals_df["true_label"] - residuals_df["model_prob"]
+
+    residuals_path = Path(model_out).with_suffix(".residuals.csv")
+    residuals_df.to_csv(residuals_path, index=False)
+    print(f"Residuals saved to {residuals_path}")
+
     out_path = Path(model_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "wb") as f:

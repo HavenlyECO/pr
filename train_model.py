@@ -204,6 +204,15 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
     acc = accuracy_score(y_test, preds)
     print(f"Model validation accuracy: {acc:.3f}")
 
+    residuals_df = pd.DataFrame({
+        "true_label": y_test.reset_index(drop=True),
+        "model_prob": probas,
+    })
+    residuals_df["residual"] = residuals_df["true_label"] - residuals_df["model_prob"]
+    residuals_path = model_path.with_suffix(".residuals.csv")
+    residuals_df.to_csv(residuals_path, index=False)
+    print(f"Residuals saved to {residuals_path}")
+
     model_path = Path(model_out)
     model_path.parent.mkdir(parents=True, exist_ok=True)
     with open(model_path, "wb") as f:
