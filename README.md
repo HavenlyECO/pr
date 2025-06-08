@@ -123,17 +123,23 @@ endpoint. The dataset should contain a `home_team_win` column as the target
 along with feature columns such as team statistics, starting pitcher ratings,
 bullpen strength, park factor and injury indicators.
 
+Columns prefixed with ``pregame_`` are treated as pregame features while those
+starting with ``live_`` are considered live-game inputs. Use the
+``--features-type`` option of ``train_classifier`` to train on one set or the
+other and avoid mixing the two, which can lead to data leakage.
+
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
-python main.py train_classifier --dataset=training_data.csv
+python main.py train_classifier --dataset=training_data.csv --features-type=pregame
 ```
 
 Or fetch historical data for a date range and train directly from it:
 
 ```bash
 python main.py train_classifier --sport=baseball_mlb \
-    --start-date=2024-04-01 --end-date=2024-04-07
+    --start-date=2024-04-01 --end-date=2024-04-07 \
+    --features-type=pregame
 ```
 
 To predict with a trained model supply feature values as a JSON string:
@@ -151,7 +157,8 @@ start date up to the current day and retrains the model on a fixed interval
 
 ```bash
 python main.py continuous_train_classifier --sport=baseball_mlb \
-    --start-date=2024-04-01 --interval-hours=24
+    --start-date=2024-04-01 --interval-hours=24 \
+    --features-type=pregame
 ```
 
 The process runs indefinitely until interrupted and writes the model to the path
