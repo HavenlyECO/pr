@@ -28,3 +28,49 @@ class InningDifferentialTracker:
     def cumulative_diff(self) -> int:
         """Return the cumulative run differential so far."""
         return sum(self._diff_by_inning.values())
+
+
+def build_win_probability_curve(
+    model_path: str,
+    inning_scores: list[tuple[int, int, int]],
+    base_features: Dict[str, int] | None = None,
+) -> list[dict]:
+    """Generate win probability after each inning.
+
+    Parameters
+    ----------
+    model_path:
+        Path to a trained moneyline classifier.
+    inning_scores:
+        Sequence of ``(inning, home_runs, away_runs)`` tuples representing the
+        score at the end of each inning.
+    base_features:
+        Additional features to include in every prediction (e.g. pregame stats).
+
+    Returns
+    -------
+    list of dict
+        Each entry contains ``inning``, ``timestamp`` and ``probability`` fields
+        that can be plotted over time.
+    """
+
+    from ml import predict_moneyline_probability
+
+    tracker = InningDifferentialTracker()
+    curve: list[dict] = []
+    extras = base_features or {}
+
+    for inning, home, away in inning_scores:
+        tracker.update(inning, home, away)
+        features = {**extras, **tracker.feature_dict()}
+        prob = predict_moneyline_probability(model_path, features)
+        timestamp = tracker._timestamp_by_inning[inning]
+        curve.append(
+            {
+                "inning": inning,
+                "timestamp": timestamp,
+                "probability": prob,
+            }
+        )
+
+    return curve
