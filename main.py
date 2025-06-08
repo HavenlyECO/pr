@@ -495,12 +495,19 @@ def train_classifier_cli(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description="Train moneyline classifier")
     parser.add_argument("--dataset", required=True, help="CSV file with training data")
     parser.add_argument("--model-out", default=str(MONEYLINE_MODEL_PATH))
+    parser.add_argument(
+        "--features-type",
+        choices=["pregame", "live"],
+        default="pregame",
+        help="Which feature set to use for training",
+    )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
     train_moneyline_classifier(
         args.dataset,
         model_out=args.model_out,
+        features_type=args.features_type,
         verbose=args.verbose,
     )
 

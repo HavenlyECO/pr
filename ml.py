@@ -501,10 +501,22 @@ def predict_h2h_probability(
     return float(proba)
 
 
+def split_feature_sets(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return separate pregame and live-game feature DataFrames."""
+    pregame_cols = [c for c in df.columns if c.startswith("pregame_")]
+    live_cols = [c for c in df.columns if c.startswith("live_")]
+
+    other_cols = [c for c in df.columns if c not in pregame_cols + live_cols]
+    pregame_df = df[pregame_cols + other_cols].copy()
+    live_df = df[live_cols].copy()
+    return pregame_df, live_df
+
+
 def train_moneyline_classifier(
     dataset_path: str,
     *,
     model_out: str = str(MONEYLINE_MODEL_PATH),
+    features_type: str = "pregame",
     verbose: bool = False,
 ) -> None:
     """Train a logistic regression model from a CSV with a home_team_win column."""
@@ -512,10 +524,17 @@ def train_moneyline_classifier(
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
 
-    X = df.drop(columns=["home_team_win"])
+    features_df = df.drop(columns=["home_team_win"])
+    pregame_X, live_X = split_feature_sets(features_df)
+    X = live_X if features_type == "live" else pregame_X
     y = df["home_team_win"]
     if verbose:
-        print(f"Training dataset with {len(df)} rows and {len(X.columns)} features")
+        print(
+            f"Training dataset with {len(df)} rows using {features_type} features ({len(X.columns)} columns)"
+        )
+
+    if X.empty:
+        raise ValueError(f"No columns found for feature type: {features_type}")
 
     _train(X, y, model_out)
 
