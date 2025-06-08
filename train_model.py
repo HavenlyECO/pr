@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 import json
@@ -200,9 +200,9 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
     model.fit(X_train, y_train)
 
     probas = model.predict_proba(X_test)[:, 1]
-    preds = (probas >= 0.5).astype(int)
-    acc = accuracy_score(y_test, preds)
-    print(f"Model validation accuracy: {acc:.3f}")
+    auc = roc_auc_score(y_test, probas)
+    brier = brier_score_loss(y_test, probas)
+    print(f"Model validation AUC: {auc:.3f}, Brier score: {brier:.3f}")
 
     residuals_df = pd.DataFrame({
         "true_label": y_test.reset_index(drop=True),
