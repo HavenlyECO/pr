@@ -48,6 +48,7 @@ H2H_DATA_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR = H2H_DATA_DIR / "api_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
+MONEYLINE_MODEL_PATH = ROOT_DIR / "moneyline_classifier.pkl"
 
 def to_fixed_utc(date_obj: datetime) -> str:
     """Return ISO-8601 string at fixed 12:00 UTC."""
@@ -483,6 +484,37 @@ def predict_h2h_probability(
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
+    proba = model.predict_proba(df)[0][1]
+    return float(proba)
+
+
+def train_moneyline_classifier(
+    dataset_path: str,
+    *,
+    model_out: str = str(MONEYLINE_MODEL_PATH),
+    verbose: bool = False,
+) -> None:
+    """Train a logistic regression model from a CSV with a home_team_win column."""
+    df = pd.read_csv(dataset_path)
+    if "home_team_win" not in df.columns:
+        raise ValueError("Dataset must include 'home_team_win' column")
+
+    X = df.drop(columns=["home_team_win"])
+    y = df["home_team_win"]
+    if verbose:
+        print(f"Training dataset with {len(df)} rows and {len(X.columns)} features")
+
+    _train(X, y, model_out)
+
+
+def predict_moneyline_probability(
+    model_path: str,
+    features: dict,
+) -> float:
+    """Predict win probability using a trained moneyline classifier."""
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+    df = pd.DataFrame([features])
     proba = model.predict_proba(df)[0][1]
     return float(proba)
 
