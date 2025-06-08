@@ -6,6 +6,7 @@ import urllib.error
 from pathlib import Path
 from datetime import datetime, timedelta
 import argparse
+import sys
 import numpy as np
 import pickle
 
@@ -38,7 +39,13 @@ if not API_KEY:
     raise RuntimeError('THE_ODDS_API_KEY environment variable is not set')
 
 # Import here to avoid circular imports
-from ml import H2H_MODEL_PATH, predict_h2h_probability
+from ml import (
+    H2H_MODEL_PATH,
+    MONEYLINE_MODEL_PATH,
+    predict_h2h_probability,
+    train_moneyline_classifier,
+    predict_moneyline_probability,
+)
 
 
 def create_simple_fallback_model(model_path):
@@ -449,7 +456,39 @@ def list_market_keys(
         print(f"Market key: {key}  {f'- {desc}' if desc else ''}")
 
 
+def train_classifier_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Train moneyline classifier")
+    parser.add_argument("--dataset", required=True, help="CSV file with training data")
+    parser.add_argument("--model-out", default=str(MONEYLINE_MODEL_PATH))
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    train_moneyline_classifier(
+        args.dataset,
+        model_out=args.model_out,
+        verbose=args.verbose,
+    )
+
+
+def predict_classifier_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Predict with moneyline classifier")
+    parser.add_argument("--model", default=str(MONEYLINE_MODEL_PATH))
+    parser.add_argument("--features", required=True, help="JSON encoded feature mapping")
+    args = parser.parse_args(argv)
+
+    features = json.loads(args.features)
+    prob = predict_moneyline_probability(args.model, features)
+    print(f"Home team win probability: {prob:.3f}")
+
+
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "train_classifier":
+        train_classifier_cli(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "predict_classifier":
+        predict_classifier_cli(sys.argv[2:])
+        return
+
     parser = argparse.ArgumentParser(
         description='Display projected head-to-head win probabilities for tomorrow (autofetch event IDs).'
     )
