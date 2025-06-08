@@ -14,6 +14,7 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from sklearn.calibration import CalibratedClassifierCV
 
 try:
     from dotenv import load_dotenv
@@ -450,19 +451,29 @@ def build_h2h_dataset_from_api(
     return pd.DataFrame(rows)
 
 def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
-    X_train, X_test, y_train, y_test = train_test_split(
+    """Train a logistic regression model and calibrate probabilities."""
+
+    X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    model = LogisticRegression(max_iter=1000)
-    model.fit(X_train, y_train)
-    probas = model.predict_proba(X_test)[:, 1]
+
+    base_model = LogisticRegression(max_iter=1000)
+    base_model.fit(X_train, y_train)
+
+    # Calibrate using isotonic regression on the validation set
+    calibrator = CalibratedClassifierCV(base_model, method="isotonic", cv="prefit")
+    calibrator.fit(X_val, y_val)
+
+    probas = calibrator.predict_proba(X_val)[:, 1]
     preds = (probas >= 0.5).astype(int)
-    acc = accuracy_score(y_test, preds)
+    acc = accuracy_score(y_val, preds)
     print(f"Validation accuracy: {acc:.3f}")
+
     out_path = Path(model_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "wb") as f:
-        pickle.dump(model, f)
+        pickle.dump(calibrator, f)
+
     print(f"Model saved to {out_path}")
 
 def train_h2h_classifier(
