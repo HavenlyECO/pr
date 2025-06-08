@@ -150,6 +150,11 @@ inning and exposes them as ``live_inning_X_diff`` fields. By updating this
 tracker with live scoring data you can feed time-aware inning-by-inning
 differentials directly into the classifier.
 
+The same module provides ``build_win_probability_curve`` to evaluate how the
+model's predicted win probability evolves throughout a game. Supply a list of
+inning scores and the path to your model and it returns timestamped
+probabilities suitable for plotting.
+
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
