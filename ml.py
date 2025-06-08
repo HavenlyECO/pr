@@ -482,6 +482,27 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     brier = brier_score_loss(y_val, probas)
     print(f"Validation AUC: {auc:.3f}, Brier score: {brier:.3f}")
 
+    def _report_segment_metrics() -> None:
+        if not any(col.startswith("live_inning_") for col in X_val.columns):
+            return
+
+        segments = {
+            "pregame": X_val[X_val.filter(like="live_inning_").isna().all(axis=1)],
+            "5th inning": X_val[X_val.get("live_inning_5_diff").notna()],
+            "7th inning": X_val[X_val.get("live_inning_7_diff").notna()],
+        }
+
+        for name, seg_X in segments.items():
+            if seg_X.empty:
+                continue
+            seg_y = y_val.loc[seg_X.index]
+            seg_proba = calibrator.predict_proba(seg_X)[:, 1]
+            seg_auc = roc_auc_score(seg_y, seg_proba)
+            seg_brier = brier_score_loss(seg_y, seg_proba)
+            print(f"  {name} AUC: {seg_auc:.3f}, Brier: {seg_brier:.3f}")
+
+    _report_segment_metrics()
+
     residuals_df = pd.DataFrame({
         "true_label": y_val.reset_index(drop=True),
         "model_prob": probas,
