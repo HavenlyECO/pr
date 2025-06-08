@@ -538,6 +538,15 @@ def train_classifier_cli(argv: list[str]) -> None:
         help="Which feature set to use for training",
     )
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--recent-half-life",
+        type=float,
+        help="Half-life in days for weighting recent games",
+    )
+    parser.add_argument(
+        "--date-column",
+        help="Column name containing game dates for recency weighting",
+    )
     args = parser.parse_args(argv)
 
     train_moneyline_classifier(
@@ -545,6 +554,8 @@ def train_classifier_cli(argv: list[str]) -> None:
         model_out=args.model_out,
         features_type=args.features_type,
         verbose=args.verbose,
+        recent_half_life=args.recent_half_life,
+        date_column=args.date_column,
     )
 
 

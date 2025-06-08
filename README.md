@@ -156,6 +156,10 @@ To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 python main.py train_classifier --dataset=training_data.csv --features-type=pregame
 ```
 
+Pass ``--recent-half-life`` to weight newer rows more heavily based on a date column
+(defaults to the first column containing ``date`` in its name). Use ``--date-column``
+to specify the exact column if needed.
+
 Or fetch historical data for a date range and train directly from it:
 
 ```bash

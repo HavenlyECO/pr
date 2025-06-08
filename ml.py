@@ -52,6 +52,22 @@ def line_movement_delta(closing_odds: float, opening_odds: float) -> float:
     """Return the change in odds from open to close."""
     return closing_odds - opening_odds
 
+def compute_recency_weights(dates: pd.Series, half_life_days: float = 30.0) -> pd.Series:
+    """Return exponentially decayed weights based on recency.
+
+    The most recent date receives weight 1.0 and each ``half_life_days`` offset
+    halves the weight. Missing dates result in uniform weight 1.0.
+    """
+    if dates.isnull().all():
+        return pd.Series(1.0, index=dates.index)
+    parsed = pd.to_datetime(dates, errors="coerce")
+    if parsed.isnull().all():
+        return pd.Series(1.0, index=dates.index)
+    latest = parsed.max()
+    age = (latest - parsed).dt.days.fillna(0)
+    weights = 0.5 ** (age / float(half_life_days))
+    return weights
+
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if DOTENV_PATH.exists():
@@ -448,6 +464,7 @@ def build_h2h_dataset_from_api(
                         "price2": price2,
                         "implied_prob": american_odds_to_prob(price1),
                         "team1_win": label,
+                        "event_date": current.date().isoformat(),
                     })
                     break
         current += timedelta(days=1)
@@ -457,7 +474,12 @@ def build_h2h_dataset_from_api(
         print(f"Built h2h dataset with {len(rows)} rows.")
     return pd.DataFrame(rows)
 
-def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
+def _train(
+    X: pd.DataFrame,
+    y: pd.Series,
+    model_out: str,
+    sample_weight: pd.Series | None = None,
+) -> None:
     """Train a logistic regression model with feature normalization.
 
     Continuous inputs are standardized using ``StandardScaler`` before
@@ -466,16 +488,27 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     This approach keeps modeling in a regression setup so you can choose any probability threshold later for classification.
     """
 
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    if sample_weight is not None:
+        X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
+            X, y, sample_weight, test_size=0.2, random_state=42
+        )
+    else:
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
 
     pipeline = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
-    pipeline.fit(X_train, y_train)
+    if sample_weight is not None:
+        pipeline.fit(X_train, y_train, sample_weight=w_train)
+    else:
+        pipeline.fit(X_train, y_train)
 
     # Calibrate using isotonic regression on the validation set
     calibrator = CalibratedClassifierCV(pipeline, method="isotonic", cv="prefit")
-    calibrator.fit(X_val, y_val)
+    if sample_weight is not None:
+        calibrator.fit(X_val, y_val, sample_weight=w_val)
+    else:
+        calibrator.fit(X_val, y_val)
 
     probas = calibrator.predict_proba(X_val)[:, 1]
     auc = roc_auc_score(y_val, probas)
@@ -529,6 +562,7 @@ def train_h2h_classifier(
     regions: str = "us",
     odds_format: str = "american",
     verbose: bool = False,
+    recent_half_life: float | None = None,
 ) -> None:
     df = build_h2h_dataset_from_api(
         sport_key,
@@ -542,7 +576,10 @@ def train_h2h_classifier(
         print(df.head())
     X = df[["price1", "price2"]]
     y = df["team1_win"]
-    _train(X, y, model_out)
+    weights = None
+    if recent_half_life is not None and "event_date" in df.columns:
+        weights = compute_recency_weights(df["event_date"], half_life_days=recent_half_life)
+    _train(X, y, model_out, sample_weight=weights)
 
 def predict_h2h_probability(
     model_path: str,
@@ -590,6 +627,8 @@ def train_moneyline_classifier(
     model_out: str = str(MONEYLINE_MODEL_PATH),
     features_type: str = "pregame",
     verbose: bool = False,
+    recent_half_life: float | None = None,
+    date_column: str | None = None,
 ) -> None:
     """Train a logistic regression model from a CSV with a home_team_win column.
 
@@ -619,7 +658,22 @@ Modeling is done in regression mode first. You can later apply a probability thr
     if X.empty:
         raise ValueError(f"No columns found for feature type: {features_type}")
 
-    _train(X, y, model_out)
+    weights = None
+    if recent_half_life is not None:
+        col = (
+            date_column
+            if date_column and date_column in df.columns
+            else next((c for c in df.columns if "date" in c.lower()), None)
+        )
+        if col is not None:
+            weights = compute_recency_weights(
+                pd.to_datetime(df[col], errors="coerce"),
+                half_life_days=recent_half_life,
+            )
+            if verbose:
+                print(f"Using column '{col}' for recency weighting")
+
+    _train(X, y, model_out, sample_weight=weights)
 
 
 def predict_moneyline_probability(
