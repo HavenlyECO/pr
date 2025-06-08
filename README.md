@@ -127,7 +127,9 @@ While the utility is called a classifier, the model is trained in regression mod
 
 If your CSV includes both ``opening_odds`` and ``closing_odds`` columns,
 ``train_classifier`` will automatically create a ``line_delta`` feature
-representing ``closing_odds - opening_odds`` so steam moves can be tracked.
+representing ``opening_odds - closing_odds``. When the absolute change
+exceeds 15 points an additional ``line_movement_delta`` flag is set to ``1``
+or ``-1`` depending on the direction of the move.
 
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the

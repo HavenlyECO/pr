@@ -48,9 +48,29 @@ def american_odds_to_payout(odds: float) -> float:
     return 100.0 / abs(odds)
 
 
-def line_movement_delta(closing_odds: float, opening_odds: float) -> float:
-    """Return the change in odds from open to close."""
-    return closing_odds - opening_odds
+LINE_MOVEMENT_THRESHOLD = 15
+
+def line_movement_delta(opening_odds: float, current_odds: float) -> float:
+    """Return ``opening_odds - current_odds``.
+
+    Positive values indicate the line has shortened (market confidence
+    increasing) while negative values show the odds have lengthened.
+    """
+    return opening_odds - current_odds
+
+
+def line_movement_flag(delta: float, threshold: float = LINE_MOVEMENT_THRESHOLD) -> int:
+    """Return 1, -1 or 0 depending on whether ``delta`` exceeds ``threshold``.
+
+    ``1`` means the line moved in the team's favour by at least ``threshold``
+    points, ``-1`` means it drifted against the team by that amount and ``0``
+    indicates no significant movement.
+    """
+    if delta >= threshold:
+        return 1
+    if delta <= -threshold:
+        return -1
+    return 0
 
 def compute_recency_weights(dates: pd.Series, half_life_days: float = 30.0) -> pd.Series:
     """Return exponentially decayed weights based on recency.
@@ -637,14 +657,14 @@ Modeling is done in regression mode first. You can later apply a probability thr
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
 
-    # Automatically create a line movement feature if possible
-    if {
-        "opening_odds",
-        "closing_odds",
-    }.issubset(df.columns):
-        df["line_delta"] = df["closing_odds"] - df["opening_odds"]
+    # Automatically create line movement features when possible
+    if {"opening_odds", "closing_odds"}.issubset(df.columns):
+        df["line_delta"] = line_movement_delta(df["opening_odds"], df["closing_odds"])
+        df["line_movement_delta"] = df["line_delta"].apply(line_movement_flag)
         if verbose:
-            print("Computed line_delta column from closing and opening odds")
+            print(
+                "Computed line_delta and line_movement_delta from opening and closing odds"
+            )
 
     features_df = df.drop(columns=["home_team_win"])
     pregame_X, live_X = split_feature_sets(features_df)
