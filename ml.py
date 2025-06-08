@@ -441,7 +441,8 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     )
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
-    preds = model.predict(X_test)
+    probas = model.predict_proba(X_test)[:, 1]
+    preds = (probas >= 0.5).astype(int)
     acc = accuracy_score(y_test, preds)
     print(f"Validation accuracy: {acc:.3f}")
     out_path = Path(model_out)

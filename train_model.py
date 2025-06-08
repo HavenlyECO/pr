@@ -195,7 +195,8 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
     model = LogisticRegression(max_iter=1000)
     model.fit(X_train, y_train)
 
-    preds = model.predict(X_test)
+    probas = model.predict_proba(X_test)[:, 1]
+    preds = (probas >= 0.5).astype(int)
     acc = accuracy_score(y_test, preds)
     print(f"Model validation accuracy: {acc:.3f}")
 
