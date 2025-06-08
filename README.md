@@ -138,6 +138,8 @@ automatically to prevent leaking post-game information into the model.
 
 Continuous numeric features like ERA, SLG and line delta are automatically
 standardized during training to improve optimizer convergence.
+During training, probability quality is reported using AUC and Brier score
+rather than simple accuracy.
 
 The ``live_features.py`` module introduces an ``InningDifferentialTracker``
 utility for live play. It records the run differential at the end of each

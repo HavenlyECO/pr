@@ -13,7 +13,7 @@ import hashlib
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
@@ -478,9 +478,9 @@ def _train(X: pd.DataFrame, y: pd.Series, model_out: str) -> None:
     calibrator.fit(X_val, y_val)
 
     probas = calibrator.predict_proba(X_val)[:, 1]
-    preds = (probas >= 0.5).astype(int)
-    acc = accuracy_score(y_val, preds)
-    print(f"Validation accuracy: {acc:.3f}")
+    auc = roc_auc_score(y_val, probas)
+    brier = brier_score_loss(y_val, probas)
+    print(f"Validation AUC: {auc:.3f}, Brier score: {brier:.3f}")
 
     residuals_df = pd.DataFrame({
         "true_label": y_val.reset_index(drop=True),
