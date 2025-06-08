@@ -32,6 +32,12 @@ class SimpleOddsModel:
             prob = abs(price1) / (abs(price1) + 100)
         return np.array([[1 - prob, prob]])
 
+def american_odds_to_prob(odds: float) -> float:
+    """Convert American odds to an implied win probability."""
+    if odds > 0:
+        return 100 / (odds + 100)
+    return abs(odds) / (abs(odds) + 100)
+
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if DOTENV_PATH.exists():
@@ -426,6 +432,7 @@ def build_h2h_dataset_from_api(
                         "team2": team2,
                         "price1": price1,
                         "price2": price2,
+                        "implied_prob": american_odds_to_prob(price1),
                         "team1_win": label,
                     })
                     break

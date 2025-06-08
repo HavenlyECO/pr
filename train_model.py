@@ -12,7 +12,7 @@ import json
 
 # Import from your ml.py module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from ml import H2H_DATA_DIR, H2H_MODEL_PATH, CACHE_DIR
+from ml import H2H_DATA_DIR, H2H_MODEL_PATH, CACHE_DIR, american_odds_to_prob
 
 # Define at module level (not inside a function) so it can be pickled
 class SimpleOddsModel:
@@ -161,6 +161,7 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
                                     "team2": team2,
                                     "price1": price1,
                                     "price2": price2,
+                                    "implied_prob": american_odds_to_prob(price1),
                                     "team1_win": label,
                                 })
                                 if verbose:

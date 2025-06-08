@@ -45,6 +45,7 @@ from ml import (
     predict_h2h_probability,
     train_moneyline_classifier,
     predict_moneyline_probability,
+    american_odds_to_prob,
 )
 
 
@@ -287,10 +288,10 @@ def evaluate_h2h_all_tomorrow(
                         continue
                     
                     prob = predict_h2h_probability(model_path, price1, price2)
-                    
+
                     if verbose:
                         print(f"        EVAL: {team1}({price1}) vs {team2}({price2}) prob(team1 win)={prob}")
-                    
+
                     results.append({
                         "game": f"{team1} vs {team2}",
                         "bookmaker": book_name,
@@ -298,6 +299,7 @@ def evaluate_h2h_all_tomorrow(
                         "team2": team2,
                         "price1": price1,
                         "price2": price2,
+                        "implied_team1_win_probability": american_odds_to_prob(price1),
                         "event_id": event_id,
                         "projected_team1_win_probability": prob,
                     })
