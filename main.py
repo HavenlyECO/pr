@@ -421,6 +421,42 @@ def print_h2h_projections_table(projections: list) -> None:
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
 
+def log_bet_recommendations(
+    projections: list,
+    *,
+    threshold: float = 0.0,
+    log_file: str = "bet_recommendations.log",
+) -> None:
+    """Append bet recommendations to a log file.
+
+    Rows with an implied edge greater than ``threshold`` are written to
+    ``log_file`` with the model probability, offered odds and edge.
+    """
+
+    lines: list[str] = []
+    for row in projections:
+        edge = row.get("edge")
+        prob = row.get("projected_team1_win_probability")
+        if edge is None or prob is None or edge <= threshold:
+            continue
+        team = row.get("team1", "")
+        odds = row.get("price1")
+        bookmaker = row.get("bookmaker", "")
+        timestamp = datetime.utcnow().isoformat()
+        line = (
+            f"{timestamp} - {team} @ {odds} ({bookmaker}) "
+            f"prob={prob:.3f} edge={edge:+.3f}"
+        )
+        lines.append(line)
+
+    if not lines:
+        return
+
+    with open(log_file, "a") as f:
+        for line in lines:
+            f.write(line + "\n")
+
+
 def print_event_odds(
     sport_key: str,
     event_id: str,
@@ -615,6 +651,7 @@ def main() -> None:
     
     print("\n===== PROJECTED WIN PROBABILITIES =====")
     print_h2h_projections_table(projections)
+    log_bet_recommendations(projections, threshold=0.0)
 
 
 if __name__ == '__main__':
