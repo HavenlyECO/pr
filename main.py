@@ -48,6 +48,7 @@ from ml import (
     american_odds_to_prob,
     american_odds_to_payout,
 )
+from bankroll import calculate_bet_size
 
 
 def create_simple_fallback_model(model_path):
@@ -425,12 +426,15 @@ def log_bet_recommendations(
     projections: list,
     *,
     threshold: float = 0.0,
+    bankroll: float | None = None,
+    kelly_fraction: float = 1.0,
     log_file: str = "bet_recommendations.log",
 ) -> None:
-    """Append bet recommendations to a log file.
+    """Append bet recommendations to ``log_file``.
 
-    Rows with an implied edge greater than ``threshold`` are written to
-    ``log_file`` with the model probability, offered odds and edge.
+    Rows with an implied edge greater than ``threshold`` are written with the
+    model probability, offered odds and edge. When ``bankroll`` is supplied the
+    recommended stake is calculated using ``calculate_bet_size``.
     """
 
     lines: list[str] = []
@@ -447,6 +451,9 @@ def log_bet_recommendations(
             f"{timestamp} - {team} @ {odds} ({bookmaker}) "
             f"prob={prob:.3f} edge={edge:+.3f}"
         )
+        if bankroll is not None:
+            stake = calculate_bet_size(bankroll, prob, odds, fraction=kelly_fraction)
+            line += f" stake={stake:.2f}"
         lines.append(line)
 
     if not lines:

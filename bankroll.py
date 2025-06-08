@@ -1,0 +1,39 @@
+"""Utilities for bankroll management and bet sizing."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from ml import american_odds_to_payout
+
+
+def kelly_bet_fraction(prob: float, odds: float) -> float:
+    """Return the Kelly bet fraction for the given probability and American odds."""
+    b = american_odds_to_payout(odds)
+    fraction = (prob * (b + 1) - 1) / b
+    return max(fraction, 0.0)
+
+
+def calculate_bet_size(
+    bankroll: float,
+    prob: float,
+    odds: float,
+    *,
+    fraction: float = 1.0,
+) -> float:
+    """Return recommended stake using Kelly criterion.
+
+    ``fraction`` scales the full Kelly stake (e.g. 0.5 for half-Kelly).
+    """
+    kelly_fraction = kelly_bet_fraction(prob, odds)
+    return bankroll * fraction * kelly_fraction
+
+
+# Simple bankroll update helper
+
+def update_bankroll(bankroll: float, stake: float, result: Literal["win", "loss"], odds: float) -> float:
+    """Return bankroll after applying bet result."""
+    if result == "win":
+        profit = stake * american_odds_to_payout(odds)
+        return bankroll + profit
+    return bankroll - stake
