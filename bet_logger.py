@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 
 from bankroll import calculate_bet_size
-from ml import american_odds_to_payout
+from ml import american_odds_to_payout, american_odds_to_prob
 
 
 def _load_logs(path: Path) -> list[dict]:
@@ -87,9 +87,16 @@ def update_bet_result(
     team: str,
     result: Literal["win", "loss"],
     *,
+    closing_odds: float | None = None,
+    closing_implied_prob: float | None = None,
     log_file: str = "bet_log.jsonl",
 ) -> None:
-    """Update the log entry for ``event_id`` and ``team`` with ``result``."""
+    """Update the log entry for ``event_id`` and ``team`` with ``result``.
+
+    When ``closing_odds`` or ``closing_implied_prob`` are supplied the function
+    records the closing line's implied probability and a ``deviation_score``
+    showing how far the model prediction deviated from the market at close.
+    """
     path = Path(log_file)
     logs = _load_logs(path)
     updated = False
@@ -107,6 +114,16 @@ def update_bet_result(
             roi = 0.0
             if stake:
                 roi = profit / stake
+
+            if closing_implied_prob is None and closing_odds is not None:
+                closing_implied_prob = american_odds_to_prob(closing_odds)
+            if closing_implied_prob is not None:
+                entry["closing_implied_prob"] = round(closing_implied_prob, 3)
+                predicted = entry.get("predicted_prob")
+                if predicted is not None:
+                    deviation = predicted - closing_implied_prob
+                    entry["deviation_score"] = round(deviation, 3)
+
             entry["outcome"] = result
             entry["payout"] = round(payout, 2)
             entry["roi"] = round(roi, 3)
