@@ -240,6 +240,60 @@ def llm_sharp_social_score(team: str, limit: int = 50) -> float:
     return llm_sharp_context_score(combined[:4000])
 
 
+def llm_managerial_signals(text: str) -> dict[str, int]:
+    """Return managerial move flags extracted from commentary text."""
+    if openai is None or not OPENAI_API_KEY:
+        return {
+            "early_pull_flag": 0,
+            "pinch_hit_flag": 0,
+            "matchup_move_flag": 0,
+        }
+    prompt = (
+        "Identify strategic baseball manager actions in the text. "
+        "Return JSON with keys early_pull_flag, pinch_hit_flag and "
+        "matchup_move_flag. Each value should be 1 when the text implies the "
+        "manager pulled the starter unusually early, used a pinch hitter for a "
+        "platoon advantage or made another matchup based substitution, "
+        "otherwise 0.\nText:\n" + text + "\nJSON:"
+    )
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        content = resp.choices[0].message["content"].strip()
+        data = json.loads(content)
+        return {
+            "early_pull_flag": int(bool(data.get("early_pull_flag"))),
+            "pinch_hit_flag": int(bool(data.get("pinch_hit_flag"))),
+            "matchup_move_flag": int(bool(data.get("matchup_move_flag"))),
+        }
+    except Exception:
+        return {
+            "early_pull_flag": 0,
+            "pinch_hit_flag": 0,
+            "matchup_move_flag": 0,
+        }
+
+
+def attach_managerial_signals(
+    df: pd.DataFrame,
+    column: str,
+    *,
+    verbose: bool = False,
+) -> None:
+    """Add managerial decision flags derived from commentary column."""
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in dataframe")
+    flags = df[column].fillna("").apply(llm_managerial_signals)
+    df["early_pull_flag"] = flags.apply(lambda d: d["early_pull_flag"])
+    df["pinch_hit_flag"] = flags.apply(lambda d: d["pinch_hit_flag"])
+    df["matchup_move_flag"] = flags.apply(lambda d: d["matchup_move_flag"])
+    if verbose:
+        print(f"Computed managerial signals using column '{column}'")
+
+
 def attach_social_scores(
     df: pd.DataFrame,
     team_column: str,
@@ -897,6 +951,24 @@ Modeling is done in regression mode first. You can later apply a probability thr
         df["sharp_context_score"] = df[context_col].apply(llm_sharp_context_score)
         if verbose:
             print(f"Computed sharp_context_score using OpenAI on column '{context_col}'")
+
+    commentary_col = next(
+        (
+            c
+            for c in df.columns
+            if any(k in c.lower() for k in ["manager", "commentary", "summary", "notes"])
+        ),
+        None,
+    )
+    if commentary_col is not None:
+        _flags = df[commentary_col].fillna("").apply(llm_managerial_signals)
+        df["early_pull_flag"] = _flags.apply(lambda d: d["early_pull_flag"])
+        df["pinch_hit_flag"] = _flags.apply(lambda d: d["pinch_hit_flag"])
+        df["matchup_move_flag"] = _flags.apply(lambda d: d["matchup_move_flag"])
+        if verbose:
+            print(
+                f"Computed managerial signals using OpenAI on column '{commentary_col}'"
+            )
 
     features_df = df.drop(columns=["home_team_win"])
     pregame_X, live_X = split_feature_sets(features_df)

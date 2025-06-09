@@ -144,6 +144,13 @@ betting patterns (urgency, insider tone, etc.). This numeric feature can be
 added alongside your regular statistics to capture non-price indicators of
 informed action.
 
+When beat-writer notes or insider chatter are available the
+:func:`attach_managerial_signals` helper can extract tactical cues from the
+text. It uses OpenAI to flag phrases such as "yanked the starter early" or
+"pinch hitter coming for the lefty" and outputs boolean features like
+``early_pull_flag`` and ``pinch_hit_flag``. These signals highlight managerial
+patterns that may influence late-game outcomes beyond the box score.
+
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
 for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
 enable this feature. ``OPENAI_API_KEY`` must also be configured.
