@@ -294,6 +294,39 @@ def llm_lineup_risk_social_score(team: str, limit: int = 50) -> float:
     return llm_lineup_risk_score(combined[:4000])
 
 
+def llm_hype_trend_score(text: str) -> float:
+    """Return a score between 0 and 1 quantifying hype and overexcitement."""
+    if openai is None or not OPENAI_API_KEY:
+        return 0.0
+    prompt = (
+        "Evaluate the following social chatter for excessive hype or viral "
+        "narratives about a team. Look for sudden surges in mentions or "
+        "statements like 'can't lose today'. Output a number from 0 to 1 "
+        "where 1 means the crowd is extremely overconfident.\nText:\n"
+        + text
+        + "\nScore:"
+    )
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        reply = resp.choices[0].message["content"].strip()
+        return float(reply)
+    except Exception:
+        return 0.0
+
+
+def llm_hype_trend_social_score(team: str, limit: int = 50) -> float:
+    """Return hype trend score from recent social chatter about ``team``."""
+    texts = gather_social_text(team, limit=limit)
+    if not texts:
+        return 0.0
+    combined = "\n".join(texts)
+    return llm_hype_trend_score(combined[:4000])
+
+
 def attach_managerial_signals(
     df: pd.DataFrame,
     column: str,
@@ -343,6 +376,23 @@ def attach_social_scores(
     )
     if verbose:
         print(f"Computed sharp_money_score_social using column '{team_column}'")
+
+
+def attach_hype_trend_scores(
+    df: pd.DataFrame,
+    team_column: str,
+    *,
+    limit: int = 50,
+    verbose: bool = False,
+) -> None:
+    """Add ``hype_trend_score`` column based on a team name column."""
+    if team_column not in df.columns:
+        raise ValueError(f"Column '{team_column}' not found in dataframe")
+    df["hype_trend_score"] = df[team_column].apply(
+        lambda t: llm_hype_trend_social_score(str(t), limit=limit)
+    )
+    if verbose:
+        print(f"Computed hype_trend_score using column '{team_column}'")
 
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
