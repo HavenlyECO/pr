@@ -605,6 +605,13 @@ MONEYLINE_MODEL_PATH = ROOT_DIR / "moneyline_classifier.pkl"
 DUAL_HEAD_MODEL_PATH = ROOT_DIR / "moneyline_dual_head.pkl"
 MARKET_MAKER_MIRROR_MODEL_PATH = ROOT_DIR / "market_maker_mirror.pkl"
 
+
+def sanitize_path(path: str) -> str:
+    """Return an absolute normalized form of ``path``."""
+    path = os.path.expanduser(path)
+    path = os.path.normpath(path)
+    return str(Path(path).resolve(strict=False))
+
 def to_fixed_utc(date_obj: datetime) -> str:
     """Return ISO-8601 string at fixed 12:00 UTC."""
     return date_obj.strftime("%Y-%m-%dT12:00:00Z")
@@ -1031,6 +1038,8 @@ def _train(
 ) -> None:
     """Train a logistic regression model with segment-specific calibration."""
 
+    model_out = sanitize_path(model_out)
+
     ctx = memory_usage("train_split") if profile_memory else nullcontext()
     with ctx:
         if sample_weight is not None:
@@ -1136,13 +1145,20 @@ def train_h2h_classifier(
     if recent_half_life is not None and "event_date" in df.columns:
         weights = compute_recency_weights(df["event_date"], half_life_days=recent_half_life)
     with memory_usage("train") if profile_memory else nullcontext():
-        _train(X, y, model_out, sample_weight=weights, profile_memory=profile_memory)
+        _train(
+            X,
+            y,
+            sanitize_path(model_out),
+            sample_weight=weights,
+            profile_memory=profile_memory,
+        )
 
 def predict_h2h_probability(
     model_path: str,
     price1: float,
     price2: float,
 ) -> float:
+    model_path = sanitize_path(model_path)
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
@@ -1216,6 +1232,8 @@ def train_moneyline_classifier(
     """Train a logistic regression model from a CSV with a home_team_win column.
 
 Modeling is done in regression mode first. You can later apply a probability threshold for classification if desired."""
+    dataset_path = sanitize_path(dataset_path)
+    model_out = sanitize_path(model_out)
     with memory_usage("read_csv") if profile_memory else nullcontext():
         df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
@@ -1351,6 +1369,8 @@ def train_dual_head_classifier(
 ) -> None:
     """Train separate pregame and live models and save a ``DualHeadModel``."""
 
+    dataset_path = sanitize_path(dataset_path)
+    model_out = sanitize_path(model_out)
     with memory_usage("read_csv") if profile_memory else nullcontext():
         df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
@@ -1428,6 +1448,8 @@ def train_market_maker_mirror_model(
 ) -> None:
     """Train a simple linear model that mirrors sharp bookmaker adjustments."""
 
+    dataset_path = sanitize_path(dataset_path)
+    model_out = sanitize_path(model_out)
     with memory_usage("read_csv") if profile_memory else nullcontext():
         df = pd.read_csv(dataset_path)
     required = [
@@ -1461,6 +1483,7 @@ def train_market_maker_mirror_model(
 
 def predict_market_maker_price(model_path: str, features: dict) -> float:
     """Predict the line a high efficiency book would offer."""
+    model_path = sanitize_path(model_path)
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     cols = ["opening_odds", "handle_percent", "ticket_percent", "volatility"]
@@ -1489,6 +1512,7 @@ def predict_moneyline_probability(
     features: dict,
 ) -> float:
     """Predict win probability using a trained moneyline classifier."""
+    model_path = sanitize_path(model_path)
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([features])
