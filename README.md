@@ -137,6 +137,17 @@ cases where the odds move away from the popular side (for example when the line
 shortens on a team receiving fewer bets). Such moves can indicate sharp action
 or internal risk adjustments that the public market has yet to fully price in.
 
+When Reddit, Twitter or Telegram chatter is accessible the :func:`attach_social_scores`
+helper can derive ``sharp_money_score_social``. It queries recent posts for each
+team and uses OpenAI to rate how closely the language matches historical sharp
+betting patterns (urgency, insider tone, etc.). This numeric feature can be
+added alongside your regular statistics to capture non-price indicators of
+informed action.
+
+Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
+for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
+enable this feature. ``OPENAI_API_KEY`` must also be configured.
+
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the

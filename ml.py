@@ -15,6 +15,21 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     openai = None
 
+try:  # Optional social media clients
+    import praw
+except ImportError:  # pragma: no cover - optional dependency
+    praw = None
+
+try:
+    import tweepy
+except ImportError:  # pragma: no cover - optional dependency
+    tweepy = None
+
+try:
+    from telethon import TelegramClient
+except ImportError:  # pragma: no cover - optional dependency
+    TelegramClient = None
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
@@ -138,6 +153,108 @@ def llm_sharp_context_score(text: str) -> float:
         return float(reply)
     except Exception:
         return 0.0
+
+
+def _fetch_reddit_posts(subreddit: str, query: str, limit: int = 50) -> list[str]:
+    """Return recent Reddit submissions matching ``query``."""
+    if praw is None:
+        return []
+    client_id = os.getenv("REDDIT_CLIENT_ID")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+    user_agent = os.getenv("REDDIT_USER_AGENT", "odds-fetcher")
+    if not client_id or not client_secret:
+        return []
+    try:
+        reddit = praw.Reddit(
+            client_id=client_id,
+            client_secret=client_secret,
+            user_agent=user_agent,
+            check_for_async=False,
+        )
+        posts = []
+        for sub in reddit.subreddit(subreddit).search(query, limit=limit):
+            posts.append(f"{sub.title}\n{sub.selftext}")
+        return posts
+    except Exception:
+        return []
+
+
+def _fetch_twitter_posts(query: str, limit: int = 50) -> list[str]:
+    """Return recent tweets containing ``query``."""
+    if tweepy is None:
+        return []
+    bearer = os.getenv("TWITTER_BEARER_TOKEN")
+    if not bearer:
+        return []
+    try:
+        client = tweepy.Client(bearer_token=bearer, wait_on_rate_limit=True)
+        posts = []
+        for tweet in tweepy.Paginator(
+            client.search_recent_tweets, query=query, max_results=100
+        ).flatten(limit=limit):
+            if hasattr(tweet, "text"):
+                posts.append(tweet.text)
+        return posts
+    except Exception:
+        return []
+
+
+def _fetch_telegram_messages(channel: str, limit: int = 50) -> list[str]:
+    """Return recent messages from a Telegram channel."""
+    if TelegramClient is None:
+        return []
+    api_id = os.getenv("TG_API_ID")
+    api_hash = os.getenv("TG_API_HASH")
+    session_name = os.getenv("TG_SESSION", "odds_fetcher")
+    if not api_id or not api_hash or not channel:
+        return []
+    client = TelegramClient(session_name, int(api_id), api_hash)
+    posts: list[str] = []
+    try:
+        with client:
+            for msg in client.iter_messages(channel, limit=limit):
+                if msg.text:
+                    posts.append(msg.text)
+    except Exception:
+        return posts
+    return posts
+
+
+def gather_social_text(team: str, limit: int = 50) -> list[str]:
+    """Collect posts from Reddit, Twitter and Telegram about ``team``."""
+    posts = []
+    posts += _fetch_reddit_posts("sportsbook", team, limit=limit)
+    posts += _fetch_twitter_posts(team, limit=limit)
+    tg_channel = os.getenv("TG_CHANNEL")
+    if tg_channel:
+        posts += _fetch_telegram_messages(tg_channel, limit=limit)
+    return posts
+
+
+def llm_sharp_social_score(team: str, limit: int = 50) -> float:
+    """Return a sharp money score from recent social chatter about ``team``."""
+    texts = gather_social_text(team, limit=limit)
+    if not texts:
+        return 0.0
+    combined = "\n".join(texts)
+    return llm_sharp_context_score(combined[:4000])
+
+
+def attach_social_scores(
+    df: pd.DataFrame,
+    team_column: str,
+    *,
+    limit: int = 50,
+    verbose: bool = False,
+) -> None:
+    """Add ``sharp_money_score_social`` column based on a team name column."""
+    if team_column not in df.columns:
+        raise ValueError(f"Column '{team_column}' not found in dataframe")
+    df["sharp_money_score_social"] = df[team_column].apply(
+        lambda t: llm_sharp_social_score(str(t), limit=limit)
+    )
+    if verbose:
+        print(f"Computed sharp_money_score_social using column '{team_column}'")
 
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
