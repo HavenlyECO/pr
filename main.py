@@ -38,6 +38,9 @@ API_KEY = os.getenv('THE_ODDS_API_KEY')
 if not API_KEY:
     raise RuntimeError('THE_ODDS_API_KEY environment variable is not set')
 
+# Minimum edge required for a bet to be recommended
+EDGE_THRESHOLD = 0.06
+
 # Import here to avoid circular imports
 from ml import (
     H2H_MODEL_PATH,
@@ -425,16 +428,17 @@ def print_h2h_projections_table(projections: list) -> None:
 def log_bet_recommendations(
     projections: list,
     *,
-    threshold: float = 0.0,
+    threshold: float = EDGE_THRESHOLD,
     bankroll: float | None = None,
     kelly_fraction: float = 1.0,
     log_file: str = "bet_recommendations.log",
 ) -> None:
     """Append bet recommendations to ``log_file``.
 
-    Rows with an implied edge greater than ``threshold`` are written with the
-    model probability, offered odds and edge. When ``bankroll`` is supplied the
-    recommended stake is calculated using ``calculate_bet_size``.
+    Bets are only logged when their edge exceeds ``threshold`` (defaults to
+    ``EDGE_THRESHOLD``). The edge is the model's predicted win probability minus
+    the implied probability from the offered odds. When ``bankroll`` is
+    supplied the recommended stake is calculated using ``calculate_bet_size``.
     """
 
     lines: list[str] = []
@@ -669,7 +673,7 @@ def main() -> None:
     
     print("\n===== PROJECTED WIN PROBABILITIES =====")
     print_h2h_projections_table(projections)
-    log_bet_recommendations(projections, threshold=0.0)
+    log_bet_recommendations(projections, threshold=EDGE_THRESHOLD)
 
 
 if __name__ == '__main__':
