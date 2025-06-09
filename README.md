@@ -320,8 +320,9 @@ allowed by the API.
 
 The project can log recommended bets to ``bet_log.jsonl``. Each entry records
 the team, odds, predicted win probability, the implied probability from the
-odds, the calculated edge and the timestamp when the bet was suggested. When a
-bankroll amount is provided the recommended stake is stored as well.
+odds, the calculated edge and the timestamp when the bet was suggested. The
+stake is stored as a number—``0.0`` when no bankroll is supplied—so later
+results can be evaluated consistently.
 
 After the game finishes call ``update_bet_result`` from the ``bet_logger``
 module to mark the bet as a win or loss. The function records the resulting

@@ -69,7 +69,8 @@ def log_bets(
     """Append qualifying bet recommendations to ``log_file``.
 
     Each entry records the team, odds, predicted probability, implied probability,
-    edge and optional stake. Outcome fields remain ``null`` until updated
+    edge and a stake amount. When no bankroll is supplied, ``stake`` is ``0.0``.
+    Outcome fields remain ``null`` until updated
     later via :func:`update_bet_result`.
     """
     path = Path(log_file)
@@ -101,7 +102,7 @@ def log_bets(
             "market_maker_mirror_score": row.get("market_maker_mirror_score"),
             "stale_line_flag": row.get("stale_line_flag", False),
             "bookmaker": bookmaker,
-            "stake": None,
+            "stake": 0.0,
             "outcome": None,
             "payout": None,
             "roi": None,
