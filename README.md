@@ -10,6 +10,9 @@ This script fetches odds from [The Odds API](https://the-odds-api.com/).
 export THE_ODDS_API_KEY=<your api key>
 ```
 
+If the variable is omitted the script runs in a limited *test mode* without
+making any API requests.
+
 2. Run the script (moneyline odds shown by default):
 
 ```bash

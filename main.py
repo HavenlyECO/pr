@@ -36,8 +36,10 @@ if DOTENV_PATH.exists():
     load_dotenv(DOTENV_PATH)
 
 API_KEY = os.getenv('THE_ODDS_API_KEY')
+TEST_MODE = False
 if not API_KEY:
-    raise RuntimeError('THE_ODDS_API_KEY environment variable is not set')
+    TEST_MODE = True
+    print('THE_ODDS_API_KEY environment variable is not set; running in test mode.')
 
 # Minimum edge required for a bet to be recommended
 EDGE_THRESHOLD = 0.06
@@ -148,6 +150,9 @@ def build_events_url(sport_key: str, regions: str = "us") -> str:
 
 
 def fetch_events(sport_key: str, regions: str = "us") -> list:
+    if TEST_MODE:
+        print("Test mode active: fetch_events returning empty list")
+        return []
     url = build_events_url(sport_key, regions=regions)
     try:
         with urllib.request.urlopen(url) as resp:
@@ -194,6 +199,9 @@ def fetch_event_odds(
     date_format: str = "iso",
     player_props: bool = True,
 ) -> list:
+    if TEST_MODE:
+        print("Test mode active: fetch_event_odds returning empty list")
+        return []
     url = build_event_odds_url(
         sport_key,
         event_id,
@@ -230,6 +238,9 @@ def build_ticket_sentiment_url(event_id: str) -> str:
 
 def fetch_ticket_sentiment(event_id: str) -> Optional[Dict[str, float]]:
     """Return mapping of team -> ticket percentage if available."""
+    if TEST_MODE:
+        print("Test mode active: fetch_ticket_sentiment returning None")
+        return None
 
     url = build_ticket_sentiment_url(event_id)
     try:
@@ -282,7 +293,7 @@ def evaluate_h2h_all_tomorrow(
         print(f"DEBUG: {len(events)} events returned by API")
     
     now = datetime.utcnow()
-    testing_mode = now.year >= 2025
+    testing_mode = TEST_MODE or now.year >= 2025
 
     for event in events:
         commence = event.get("commence_time", "")
