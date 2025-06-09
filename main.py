@@ -52,6 +52,7 @@ from ml import (
     american_odds_to_payout,
 )
 from bankroll import calculate_bet_size
+from bet_logger import log_bets
 
 
 def create_simple_fallback_model(model_path):
@@ -674,6 +675,8 @@ def main() -> None:
     print("\n===== PROJECTED WIN PROBABILITIES =====")
     print_h2h_projections_table(projections)
     log_bet_recommendations(projections, threshold=EDGE_THRESHOLD)
+    # Also log detailed bet information for later ROI analysis
+    log_bets(projections, threshold=EDGE_THRESHOLD)
 
 
 if __name__ == '__main__':

@@ -200,3 +200,15 @@ Note that The Odds API only provides historical results for roughly the last
 year. If the supplied ``--start-date`` is older than that window, the
 continuous training command automatically clamps it to the most recent date
 allowed by the API.
+
+## Bet Logging
+
+The project can log recommended bets to ``bet_log.jsonl``. Each entry records
+the team, odds, predicted win probability, the implied probability from the
+odds, the calculated edge and the timestamp when the bet was suggested. When a
+bankroll amount is provided the recommended stake is stored as well.
+
+After the game finishes call ``update_bet_result`` from the ``bet_logger``
+module to mark the bet as a win or loss. The function records the resulting
+payout and the ROI compared to the stake so you can track how profitable the
+model's edge is over time.
