@@ -157,6 +157,11 @@ model's predicted win probability evolves throughout a game. Supply a list of
 inning scores and the path to your model and it returns timestamped
 probabilities suitable for plotting.
 
+``WinProbabilitySwingTracker`` builds on this by recording the change in win
+probability after each update. It exposes features like
+``win_prob_delta_inning_X`` that capture sharp momentum swings from events such
+as a big inning or pitching change.
+
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
