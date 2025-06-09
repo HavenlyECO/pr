@@ -94,6 +94,12 @@ def compute_recency_weights(dates: pd.Series, half_life_days: float = 30.0) -> p
     return weights
 
 
+def public_fade_flag(ticket_percent: float, line_delta: float, *, threshold: float = 70.0) -> int:
+    """Return ``1`` when heavy public action and negative line movement align."""
+
+    return int(ticket_percent >= threshold and line_delta < 0)
+
+
 def llm_sharp_context_score(text: str) -> float:
     """Return a score between 0 and 1 from OpenAI about sharp betting context."""
     if openai is None or not OPENAI_API_KEY:
@@ -706,6 +712,14 @@ Modeling is done in regression mode first. You can later apply a probability thr
             print(
                 "Computed sharp_money_delta, sharp_action_flag and sharp_money_score from handle/ticket percentages"
             )
+
+    # Public betting fade signal when ticket percentage shows heavy bias
+    if {"ticket_percent", "line_delta"}.issubset(df.columns):
+        df["public_fade_flag"] = df.apply(
+            lambda r: public_fade_flag(r["ticket_percent"], r["line_delta"]), axis=1
+        )
+        if verbose:
+            print("Computed public_fade_flag from ticket_percent and line_delta")
 
     # Generate LLM-based sharp context score if a context column exists
     context_col = next((c for c in df.columns if "context" in c.lower()), None)
