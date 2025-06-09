@@ -142,6 +142,11 @@ sentiment coincides with a significant line shortening on the same team. This
 safeguard spots potential trap scenarios where books may be encouraging action
 on an overpriced favorite, signaling you to hold off placing the bet.
 
+``anti_correlation_flag`` extends this idea by firing whenever a team draws
+over 70% of tickets yet the line moves against them. Such reverse line moves
+suggest sportsbooks are welcoming public bets on a side they expect to lose,
+providing a data-driven cue to fade the favorite.
+
 When Reddit, Twitter or Telegram chatter is accessible the :func:`attach_social_scores`
 helper can derive ``sharp_money_score_social``. It queries recent posts for each
 team and uses OpenAI to rate how closely the language matches historical sharp
