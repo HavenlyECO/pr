@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TextIO
+
+if os.name == "nt":  # pragma: no cover - Windows only
+    import msvcrt
+else:  # pragma: no cover - POSIX
+    import fcntl
 
 from bankroll import calculate_bet_size
 from ml import american_odds_to_payout, american_odds_to_prob
@@ -18,11 +24,38 @@ def _load_logs(path: Path) -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
+def _lock_file(f: "TextIO") -> None:
+    """Acquire an exclusive lock on ``f``."""
+    if os.name == "nt":  # pragma: no cover - Windows only
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+    else:  # pragma: no cover - POSIX
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file(f: "TextIO") -> None:
+    """Release the lock on ``f``."""
+    if os.name == "nt":  # pragma: no cover - Windows only
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        except OSError:
+            pass
+    else:  # pragma: no cover - POSIX
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
 def _write_logs(path: Path, logs: list[dict]) -> None:
-    with open(path, "w") as f:
-        for entry in logs:
-            json.dump(entry, f)
-            f.write("\n")
+    """Write ``logs`` to ``path`` using an exclusive file lock."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+") as f:
+        _lock_file(f)
+        try:
+            f.seek(0)
+            f.truncate()
+            for entry in logs:
+                json.dump(entry, f)
+                f.write("\n")
+        finally:
+            _unlock_file(f)
 
 
 def log_bets(
