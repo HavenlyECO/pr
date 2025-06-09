@@ -174,6 +174,15 @@ team is reported as ``soft_book_spread`` while their midpoint forms the
 ``multi_book_edge_score``. Large spreads highlight pricing disagreements that
 can be exploited before the books adjust.
 
+``market_maker_mirror_score`` goes a step further by modeling how sharp
+bookmakers move their lines when money flow, volatility and public sentiment
+shift. Train the model with ``train_market_maker_mirror_model`` on a dataset
+containing opening/closing odds plus handle and ticket percentages. The model
+predicts a synthetic closing price representing what a highly efficient book
+would offer. Comparing that price to the current line yields the
+``market_maker_mirror_score``—positive values suggest the market line is longer
+than the mirrored price while negative values indicate shading.
+
 When monitoring betting exchanges directly, the ``volume_surge.py`` module
 offers a ``VolumeSurgeDetector`` utility. Provide it with a callback that
 returns the latest matched volume from Betfair or Matchbook and it maintains a

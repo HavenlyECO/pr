@@ -57,6 +57,8 @@ from ml import (
     predict_moneyline_probability,
     american_odds_to_prob,
     american_odds_to_payout,
+    MARKET_MAKER_MIRROR_MODEL_PATH,
+    market_maker_mirror_score,
 )
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
@@ -440,6 +442,20 @@ def evaluate_h2h_all_tomorrow(
             row["market_disagreement_score"] = diff
             row["soft_book_spread"] = soft_spread
             row["multi_book_edge_score"] = multi_book_edge
+            mm_features = {
+                "opening_odds": row.get("price1"),
+                "handle_percent": row.get("ticket_percent_team1", 0.0),
+                "ticket_percent": row.get("ticket_percent_team1", 0.0),
+                "volatility": diff * 100,
+            }
+            if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
+                row["market_maker_mirror_score"] = market_maker_mirror_score(
+                    str(MARKET_MAKER_MIRROR_MODEL_PATH),
+                    mm_features,
+                    row.get("price1"),
+                )
+            else:
+                row["market_maker_mirror_score"] = None
             weight = 1 + diff + (soft_spread or 0)
             if row.get("stale_line_flag"):
                 weight *= 1.1
@@ -499,6 +515,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 ev_str,
                 soft_spread_str,
                 mbedge_str,
+                f"{row.get('market_maker_mirror_score', 0.0)*100:+.1f}%" if row.get('market_maker_mirror_score') is not None else "N/A",
                 "FADE" if row.get("public_fade") else "",
                 "STALE" if row.get("stale_line_flag") else "",
                 row.get("bookmaker", ""),
@@ -516,12 +533,13 @@ def print_h2h_projections_table(projections: list) -> None:
                     "Edge",
                     "W.Edge",
                     "EV",
-                    "SoftSpr",
-                    "MB.Edge",
-                    "Fade",
-                    "Stale",
-                    "Book",
-                ],
+                "SoftSpr",
+                "MB.Edge",
+                "MM.Score",
+                "Fade",
+                "Stale",
+                "Book",
+            ],
                 tablefmt="pretty",
             )
         )
@@ -537,6 +555,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "EV",
             "SOFTSPR",
             "MB_EDGE",
+            "MM_SCORE",
             "FADE",
             "STALE",
             "BOOK",
@@ -556,6 +575,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "EV": 8,
             "SOFTSPR": 8,
             "MB_EDGE": 8,
+            "MM_SCORE": 8,
             "FADE": 6,
             "BOOK": col_width("bookmaker", 8),
             "STALE": 6,
@@ -599,6 +619,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 ev_str,
                 soft_spread_str,
                 mbedge_str,
+                f"{row.get('market_maker_mirror_score', 0.0)*100:+.1f}%" if row.get('market_maker_mirror_score') is not None else "N/A",
                 "FADE" if row.get("public_fade") else "",
                 "STALE" if row.get("stale_line_flag") else "",
                 row.get("bookmaker", ""),
