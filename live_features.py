@@ -62,8 +62,22 @@ class OffensivePressureTracker:
             self._risp_by_inning[inning] = home_risp - away_risp
 
     def _sum_last(self, data: Dict[int, float], n: int) -> float:
-        latest: Iterable[int] = sorted(data)[-n:]
-        return sum(data[i] for i in latest)
+        """Sum values from the last ``n`` sequential innings.
+
+        ``data`` is keyed by inning number. If innings are skipped or
+        misnumbered, simply taking the largest ``n`` keys could lead to
+        surprising results. Instead, determine the most recent inning and
+        sum over the preceding ``n`` innings (using ``0`` for missing
+        innings).
+        """
+
+        if not data or n <= 0:
+            return 0.0
+
+        last_inning = max(data)
+        start = max(1, last_inning - n + 1)
+        innings_range = range(start, last_inning + 1)
+        return sum(data.get(i, 0) for i in innings_range)
 
     def feature_dict(self, n: int = 2) -> Dict[str, float]:
         """Return mapping with momentum features for the last ``n`` innings."""
