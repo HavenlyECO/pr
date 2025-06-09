@@ -73,8 +73,29 @@ from bet_logger import log_bets
 _STALE_HISTORY: dict[str, dict[str, tuple[float, datetime]]] = {}
 
 
-def _check_stale_line(event_id: str, bookmaker: str, price: float, *, threshold: float = 10, stale_seconds: int = 120) -> bool:
-    """Return True if ``price`` appears stale compared to other books."""
+def _check_stale_line(
+    event_id: str,
+    bookmaker: str,
+    price: float,
+    *,
+    threshold: float = 10,
+    stale_seconds: int = 120,
+) -> bool:
+    """Return ``True`` when ``price`` is likely stale compared to other books.
+
+    A line is marked stale if it hasn't moved for ``stale_seconds`` and the
+    difference from the average of all other books is ``threshold`` or more.
+
+    Example
+    -------
+    >>> _check_stale_line("e1", "bookA", 100)
+    False
+    >>> _check_stale_line("e1", "bookB", 110)
+    False
+    # assume two minutes pass with bookA unchanged while bookB moves
+    >>> _check_stale_line("e1", "bookA", 100)
+    True
+    """
     now = datetime.utcnow()
     hist = _STALE_HISTORY.setdefault(event_id, {})
     last_price, last_time = hist.get(bookmaker, (None, None))
