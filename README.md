@@ -163,6 +163,11 @@ When live-inning columns are available the validation set is also segmented into
 ``pregame``, ``5th inning`` and ``7th inning`` windows to gauge how accuracy
 improves as more game context becomes available.
 
+Each segment is calibrated separately so a predicted 65% chance in the
+``7th inning`` truly reflects a historical 65% win rate. This segmentation
+uses isotonic regression on the validation split to align probabilities within
+each inning window, sharpening expected value calculations.
+
 The ``live_features.py`` module introduces an ``InningDifferentialTracker``
 utility for live play. It records the run differential at the end of each
 inning and exposes them as ``live_inning_X_diff`` fields. By updating this
