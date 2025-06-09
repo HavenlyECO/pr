@@ -31,11 +31,13 @@ class InningDifferentialTracker:
 
 
 class OffensivePressureTracker:
-    """Track recent hits and runners left on base."""
+    """Track recent hits, errors and scoring chances."""
 
     def __init__(self) -> None:
         self._hits_by_inning: Dict[int, int] = {}
         self._lob_by_inning: Dict[int, int] = {}
+        self._errors_by_inning: Dict[int, int] = {}
+        self._risp_by_inning: Dict[int, float] = {}
 
     def update(
         self,
@@ -44,23 +46,37 @@ class OffensivePressureTracker:
         away_hits: int,
         home_lob: int,
         away_lob: int,
+        *,
+        home_errors: int | None = None,
+        away_errors: int | None = None,
+        home_risp: float | None = None,
+        away_risp: float | None = None,
     ) -> None:
-        """Record hit and LOB differential for a completed inning."""
+        """Record offensive pressure metrics for a completed inning."""
 
         self._hits_by_inning[inning] = home_hits - away_hits
         self._lob_by_inning[inning] = home_lob - away_lob
+        if None not in (home_errors, away_errors):
+            self._errors_by_inning[inning] = home_errors - away_errors
+        if None not in (home_risp, away_risp):
+            self._risp_by_inning[inning] = home_risp - away_risp
 
-    def _sum_last(self, data: Dict[int, int], n: int) -> int:
+    def _sum_last(self, data: Dict[int, float], n: int) -> float:
         latest: Iterable[int] = sorted(data)[-n:]
         return sum(data[i] for i in latest)
 
-    def feature_dict(self, n: int = 2) -> Dict[str, int]:
+    def feature_dict(self, n: int = 2) -> Dict[str, float]:
         """Return mapping with momentum features for the last ``n`` innings."""
 
-        return {
+        feats: Dict[str, float] = {
             f"hits_last_{n}_innings": self._sum_last(self._hits_by_inning, n),
-            f"LOB_last_{n}_innings": self._sum_last(self._lob_by_inning, n),
+            f"LOB_last_{n}": self._sum_last(self._lob_by_inning, n),
         }
+        if self._errors_by_inning:
+            feats[f"errors_last_{n}"] = self._sum_last(self._errors_by_inning, n)
+        if self._risp_by_inning:
+            feats[f"RISP_last_{n}"] = self._sum_last(self._risp_by_inning, n)
+        return feats
 
 
 class WinProbabilitySwingTracker:
@@ -84,6 +100,10 @@ class WinProbabilitySwingTracker:
         away_hits: int | None = None,
         home_lob: int | None = None,
         away_lob: int | None = None,
+        home_errors: int | None = None,
+        away_errors: int | None = None,
+        home_risp: float | None = None,
+        away_risp: float | None = None,
     ) -> None:
         """Update win probability using latest score."""
 
@@ -92,7 +112,17 @@ class WinProbabilitySwingTracker:
         self._diff_tracker.update(inning, home_runs, away_runs)
         features = {**self.base_features, **self._diff_tracker.feature_dict()}
         if None not in (home_hits, away_hits, home_lob, away_lob):
-            self._pressure_tracker.update(inning, home_hits, away_hits, home_lob, away_lob)
+            self._pressure_tracker.update(
+                inning,
+                home_hits,
+                away_hits,
+                home_lob,
+                away_lob,
+                home_errors=home_errors,
+                away_errors=away_errors,
+                home_risp=home_risp,
+                away_risp=away_risp,
+            )
             features.update(self._pressure_tracker.feature_dict())
         prob = predict_moneyline_probability(self.model_path, features)
         prev_inning = max((i for i in self._prob_by_inning if i < inning), default=None)
@@ -129,7 +159,18 @@ def build_win_probability_curve(
     model_path: str,
     inning_scores: list[tuple[int, int, int]],
     base_features: Dict[str, int] | None = None,
-    offensive_stats: Iterable[tuple[int, int, int, int]] | None = None,
+    offensive_stats: Iterable[
+        tuple[
+            int,
+            int,
+            int,
+            int,
+            int | None,
+            int | None,
+            float | None,
+            float | None,
+        ]
+    ] | None = None,
 ) -> list[dict]:
     """Generate win probability after each inning.
 
@@ -142,6 +183,11 @@ def build_win_probability_curve(
         score at the end of each inning.
     base_features:
         Additional features to include in every prediction (e.g. pregame stats).
+    offensive_stats:
+        Iterable of per-inning stats. Each tuple should contain
+        ``(home_hits, away_hits, home_lob, away_lob, home_errors, away_errors,
+        home_risp, away_risp)``. The error and RISP values can be ``None`` if
+        unavailable.
 
     Returns
     -------
@@ -162,8 +208,31 @@ def build_win_probability_curve(
         tracker.update(inning, home, away)
         features = {**extras, **tracker.feature_dict()}
         if pressure is not None and stats_iter is not None:
-            h_hits, a_hits, h_lob, a_lob = next(stats_iter)
-            pressure.update(inning, h_hits, a_hits, h_lob, a_lob)
+            stats = next(stats_iter)
+            h_hits, a_hits, h_lob, a_lob = stats[:4]
+            extras_stats = {
+                "home_errors": None,
+                "away_errors": None,
+                "home_risp": None,
+                "away_risp": None,
+            }
+            if len(stats) >= 6:
+                extras_stats["home_errors"] = stats[4]
+                extras_stats["away_errors"] = stats[5]
+            if len(stats) == 8:
+                extras_stats["home_risp"] = stats[6]
+                extras_stats["away_risp"] = stats[7]
+            pressure.update(
+                inning,
+                h_hits,
+                a_hits,
+                h_lob,
+                a_lob,
+                home_errors=extras_stats["home_errors"],
+                away_errors=extras_stats["away_errors"],
+                home_risp=extras_stats["home_risp"],
+                away_risp=extras_stats["away_risp"],
+            )
             features.update(pressure.feature_dict())
         prob = predict_moneyline_probability(model_path, features)
         timestamp = tracker._timestamp_by_inning[inning]

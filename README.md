@@ -231,6 +231,11 @@ inning and exposes them as ``live_inning_X_diff`` fields. By updating this
 tracker with live scoring data you can feed time-aware inning-by-inning
 differentials directly into the classifier.
 
+``OffensivePressureTracker`` complements this by keeping rolling counts of
+errors, runners left on base and RISP% over the last two innings. It exposes
+features like ``errors_last_2`` and ``RISP_last_2`` that quantify recent
+pressure or missed opportunities.
+
 The same module provides ``build_win_probability_curve`` to evaluate how the
 model's predicted win probability evolves throughout a game. Supply a list of
 inning scores and the path to your model and it returns timestamped
