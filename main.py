@@ -9,6 +9,7 @@ import argparse
 import sys
 import numpy as np
 import pickle
+from typing import Optional, Dict
 
 # For improved table and color output
 try:
@@ -179,6 +180,48 @@ def fetch_event_odds(
         return []
 
 
+def build_ticket_sentiment_url(event_id: str) -> str:
+    base = f"https://api.the-odds-api.com/v4/events/{event_id}/consensus"
+    params = {"apiKey": API_KEY}
+    return f"{base}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_ticket_sentiment(event_id: str) -> Optional[Dict[str, float]]:
+    """Return mapping of team -> ticket percentage if available."""
+
+    url = build_ticket_sentiment_url(event_id)
+    try:
+        with urllib.request.urlopen(url) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        print(
+            Fore.RED + f"HTTPError fetching ticket sentiment: {e.code} {e.reason}" if Fore else f"HTTPError fetching ticket sentiment: {e.code} {e.reason}"
+        )
+        return None
+    except Exception as e:
+        print(
+            Fore.RED + f"Error fetching ticket sentiment: {e}" if Fore else f"Error fetching ticket sentiment: {e}"
+        )
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    markets = data.get("markets") or []
+    for market in markets:
+        if market.get("key") != "h2h":
+            continue
+        outcomes = market.get("outcomes", [])
+        percentages: Dict[str, float] = {}
+        for outcome in outcomes:
+            team = outcome.get("name")
+            pct = outcome.get("ticket_percentage")
+            if team is not None and pct is not None:
+                percentages[team] = pct
+        return percentages if percentages else None
+    return None
+
+
 def evaluate_h2h_all_tomorrow(
     sport_key: str,
     model_path: str,
@@ -300,6 +343,15 @@ def evaluate_h2h_all_tomorrow(
                     payout = american_odds_to_payout(price1)
                     ev = edge * payout
 
+                    sentiment = fetch_ticket_sentiment(event_id)
+                    team1_pct = team2_pct = None
+                    fade = False
+                    if sentiment:
+                        team1_pct = sentiment.get(team1)
+                        team2_pct = sentiment.get(team2)
+                        if team1_pct is not None and team1_pct >= 70 and edge < 0:
+                            fade = True
+
                     if verbose:
                         print(
                             f"        EVAL: {team1}({price1}) vs {team2}({price2}) "
@@ -320,6 +372,9 @@ def evaluate_h2h_all_tomorrow(
                         "edge": edge,
                         "payout": payout,
                         "expected_value": ev,
+                        "ticket_percent_team1": team1_pct,
+                        "ticket_percent_team2": team2_pct,
+                        "public_fade": fade,
                     })
     
     if verbose:
@@ -360,13 +415,14 @@ def print_h2h_projections_table(projections: list) -> None:
                 prob_str,
                 edge_str,
                 ev_str,
+                "FADE" if row.get("public_fade") else "",
                 row.get("bookmaker", ""),
             ])
 
         print(
             tabulate(
                 table_data,
-                headers=["Team 1", "Odds", "Team 2", "Odds", "Win Prob", "Edge", "EV", "Book"],
+                headers=["Team 1", "Odds", "Team 2", "Odds", "Win Prob", "Edge", "EV", "Fade", "Book"],
                 tablefmt="pretty",
             )
         )
@@ -379,6 +435,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "P(WIN)",
             "EDGE",
             "EV",
+            "FADE",
             "BOOK",
         ]
 
@@ -393,6 +450,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "P(WIN)": 8,
             "EDGE": 8,
             "EV": 8,
+            "FADE": 6,
             "BOOK": col_width("bookmaker", 8),
         }
 
@@ -421,6 +479,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 prob_str,
                 edge_str,
                 ev_str,
+                "FADE" if row.get("public_fade") else "",
                 row.get("bookmaker", ""),
             ]
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
