@@ -55,6 +55,26 @@ from ml import (
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
 
+# Track last seen moneyline for stale line detection
+_STALE_HISTORY: dict[str, dict[str, tuple[float, datetime]]] = {}
+
+
+def _check_stale_line(event_id: str, bookmaker: str, price: float, *, threshold: float = 10, stale_seconds: int = 120) -> bool:
+    """Return True if ``price`` appears stale compared to other books."""
+    now = datetime.utcnow()
+    hist = _STALE_HISTORY.setdefault(event_id, {})
+    last_price, last_time = hist.get(bookmaker, (None, None))
+    others = [p for b, (p, _) in hist.items() if b != bookmaker]
+    flagged = False
+    if others:
+        avg_others = sum(others) / len(others)
+        diff = abs(price - avg_others)
+        if diff >= threshold and last_price == price and last_time and (now - last_time).total_seconds() >= stale_seconds:
+            flagged = True
+    hist[bookmaker] = (price, now)
+    _STALE_HISTORY[event_id] = hist
+    return flagged
+
 
 def create_simple_fallback_model(model_path):
     """Create a simple model that directly converts odds to probabilities without ML"""
@@ -361,6 +381,8 @@ def evaluate_h2h_all_tomorrow(
                     if team1_pct is not None and team1_pct >= 70 and edge < 0:
                         fade = True
 
+                stale = _check_stale_line(event_id, book_name, price1)
+
                 if verbose:
                     print(
                         f"        EVAL: {team1}({price1}) vs {team2}({price2}) "
@@ -385,6 +407,7 @@ def evaluate_h2h_all_tomorrow(
                         "ticket_percent_team1": team1_pct,
                         "ticket_percent_team2": team2_pct,
                         "public_fade": fade,
+                        "stale_line_flag": stale,
                     }
                 )
                 implied_probs.append(implied)
@@ -395,8 +418,11 @@ def evaluate_h2h_all_tomorrow(
         diff = max(implied_probs) - min(implied_probs)
         for row in event_rows:
             row["market_disagreement_score"] = diff
-            row["weighted_edge"] = row["edge"] * (1 + diff)
-            row["weighted_expected_value"] = row["expected_value"] * (1 + diff)
+            weight = 1 + diff
+            if row.get("stale_line_flag"):
+                weight *= 1.1
+            row["weighted_edge"] = row["edge"] * weight
+            row["weighted_expected_value"] = row["expected_value"] * weight
             results.append(row)
     
     if verbose:
@@ -442,6 +468,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 w_edge_str,
                 ev_str,
                 "FADE" if row.get("public_fade") else "",
+                "STALE" if row.get("stale_line_flag") else "",
                 row.get("bookmaker", ""),
             ])
 
@@ -458,6 +485,7 @@ def print_h2h_projections_table(projections: list) -> None:
                     "W.Edge",
                     "EV",
                     "Fade",
+                    "Stale",
                     "Book",
                 ],
                 tablefmt="pretty",
@@ -474,6 +502,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "W_EDGE",
             "EV",
             "FADE",
+            "STALE",
             "BOOK",
         ]
 
@@ -491,6 +520,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "EV": 8,
             "FADE": 6,
             "BOOK": col_width("bookmaker", 8),
+            "STALE": 6,
         }
 
         header_line = " ".join(h.ljust(widths[h]) for h in headers)
@@ -522,6 +552,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 w_edge_str,
                 ev_str,
                 "FADE" if row.get("public_fade") else "",
+                "STALE" if row.get("stale_line_flag") else "",
                 row.get("bookmaker", ""),
             ]
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))

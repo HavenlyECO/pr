@@ -63,6 +63,7 @@ def log_bets(
             "edge": row.get("edge"),
             "weighted_edge": edge,
             "market_disagreement_score": row.get("market_disagreement_score"),
+            "stale_line_flag": row.get("stale_line_flag", False),
             "bookmaker": bookmaker,
             "stake": None,
             "outcome": None,
