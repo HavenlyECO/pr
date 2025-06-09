@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover - optional dependency
     TelegramClient = None
 
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.calibration import CalibratedClassifierCV
@@ -438,6 +438,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
 MONEYLINE_MODEL_PATH = ROOT_DIR / "moneyline_classifier.pkl"
 DUAL_HEAD_MODEL_PATH = ROOT_DIR / "moneyline_dual_head.pkl"
+MARKET_MAKER_MIRROR_MODEL_PATH = ROOT_DIR / "market_maker_mirror.pkl"
 
 def to_fixed_utc(date_obj: datetime) -> str:
     """Return ISO-8601 string at fixed 12:00 UTC."""
@@ -1206,6 +1207,68 @@ def train_dual_head_classifier(
 
     if verbose:
         print(f"Dual-head model saved to {out_path}")
+
+
+def train_market_maker_mirror_model(
+    dataset_path: str,
+    *,
+    model_out: str = str(MARKET_MAKER_MIRROR_MODEL_PATH),
+    verbose: bool = False,
+) -> None:
+    """Train a simple linear model that mirrors sharp bookmaker adjustments."""
+
+    df = pd.read_csv(dataset_path)
+    required = [
+        "opening_odds",
+        "handle_percent",
+        "ticket_percent",
+        "volatility",
+        "closing_odds",
+    ]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Dataset must include columns: {', '.join(missing)}"
+        )
+
+    X = df[["opening_odds", "handle_percent", "ticket_percent", "volatility"]].fillna(0)
+    y = df["closing_odds"]
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    out_path = Path(model_out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "wb") as f:
+        pickle.dump(model, f)
+
+    if verbose:
+        print(f"Market maker mirror model saved to {out_path}")
+
+
+def predict_market_maker_price(model_path: str, features: dict) -> float:
+    """Predict the line a high efficiency book would offer."""
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+    cols = ["opening_odds", "handle_percent", "ticket_percent", "volatility"]
+    df = pd.DataFrame([{c: features.get(c, 0.0) for c in cols}])
+    price = model.predict(df)[0]
+    return float(price)
+
+
+def market_maker_mirror_score(
+    model_path: str,
+    features: dict,
+    current_odds: float,
+) -> float:
+    """Return difference between mirrored implied probability and current odds."""
+    try:
+        mirror_price = predict_market_maker_price(model_path, features)
+    except Exception:
+        return 0.0
+    implied_mirror = american_odds_to_prob(mirror_price)
+    implied_current = american_odds_to_prob(current_odds)
+    return implied_mirror - implied_current
 
 
 def predict_moneyline_probability(
