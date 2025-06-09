@@ -9,6 +9,7 @@ history.
 
 import time
 import statistics
+import logging
 from collections import deque
 from typing import Callable, Deque, Tuple
 
@@ -39,7 +40,11 @@ class VolumeSurgeDetector:
 
     def update(self) -> float:
         """Fetch the latest volume and return the current surge score."""
-        volume = self.fetch_volume()
+        try:
+            volume = self.fetch_volume()
+        except Exception:  # pragma: no cover - passthrough for unexpected errors
+            logging.exception("fetch_volume callback failed")
+            raise
         self.history.append((time.time(), volume))
         self._trim_history()
         return self.volume_surge_score()
