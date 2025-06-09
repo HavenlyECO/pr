@@ -127,6 +127,9 @@ def update_bet_result(
 ) -> None:
     """Update the log entry for ``event_id`` and ``team`` with ``result``.
 
+    ``result`` must be ``"win"`` or ``"loss"``. Any other value raises
+    ``ValueError`` to prevent silent mistakes.
+
     When ``closing_odds`` or ``closing_implied_prob`` are supplied the function
     records the closing line's implied probability and a ``deviation_score``
     showing how far the model prediction deviated from the market at close.
@@ -142,9 +145,11 @@ def update_bet_result(
             if result == "win":
                 profit = stake * american_odds_to_payout(odds)
                 payout = profit
-            else:
+            elif result == "loss":
                 profit = -stake
                 payout = -stake
+            else:
+                raise ValueError(f"Unknown result '{result}'")
             roi = 0.0
             if stake:
                 roi = profit / stake
