@@ -9,7 +9,7 @@ import argparse
 import sys
 import numpy as np
 import pickle
-from typing import Optional, Dict
+from typing import Optional, Dict, TypedDict
 
 # For improved table and color output
 try:
@@ -68,6 +68,59 @@ from ml import (
 )
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
+
+# Dictionary key constants used throughout this module
+K_GAME = "game"
+K_BOOKMAKER = "bookmaker"
+K_TEAM1 = "team1"
+K_TEAM2 = "team2"
+K_PRICE1 = "price1"
+K_PRICE2 = "price2"
+K_IMPLIED_WIN = "implied_team1_win_probability"
+K_EVENT_ID = "event_id"
+K_PROJECTED_WIN = "projected_team1_win_probability"
+K_EDGE = "edge"
+K_PAYOUT = "payout"
+K_EXPECTED_VALUE = "expected_value"
+K_TICKET_PCT_TEAM1 = "ticket_percent_team1"
+K_TICKET_PCT_TEAM2 = "ticket_percent_team2"
+K_PUBLIC_FADE = "public_fade"
+K_STALE_FLAG = "stale_line_flag"
+K_MARKET_DISAGREEMENT_SCORE = "market_disagreement_score"
+K_SOFT_BOOK_SPREAD = "soft_book_spread"
+K_MULTI_BOOK_EDGE_SCORE = "multi_book_edge_score"
+K_MARKET_MAKER_MIRROR_SCORE = "market_maker_mirror_score"
+K_RISK_WEIGHT = "risk_weight"
+K_RISK_BLOCK_FLAG = "risk_block_flag"
+K_WEIGHTED_EDGE = "weighted_edge"
+K_WEIGHTED_EV = "weighted_expected_value"
+
+
+class ProjectionRow(TypedDict, total=False):
+    game: str
+    bookmaker: str
+    team1: str
+    team2: str
+    price1: int
+    price2: int
+    implied_team1_win_probability: float
+    event_id: str
+    projected_team1_win_probability: float
+    edge: float
+    payout: float
+    expected_value: float
+    ticket_percent_team1: float
+    ticket_percent_team2: float
+    public_fade: bool
+    stale_line_flag: bool
+    market_disagreement_score: float
+    soft_book_spread: float | None
+    multi_book_edge_score: float | None
+    market_maker_mirror_score: float | None
+    risk_weight: float
+    risk_block_flag: bool
+    weighted_edge: float
+    weighted_expected_value: float
 
 # Track last seen moneyline for stale line detection
 _STALE_HISTORY: dict[str, dict[str, tuple[float, datetime]]] = {}
@@ -451,22 +504,22 @@ def evaluate_h2h_all_tomorrow(
 
                 event_rows.append(
                     {
-                        "game": f"{team1} vs {team2}",
-                        "bookmaker": book_name,
-                        "team1": team1,
-                        "team2": team2,
-                        "price1": price1,
-                        "price2": price2,
-                        "implied_team1_win_probability": implied,
-                        "event_id": event_id,
-                        "projected_team1_win_probability": prob,
-                        "edge": edge,
-                        "payout": payout,
-                        "expected_value": ev,
-                        "ticket_percent_team1": team1_pct,
-                        "ticket_percent_team2": team2_pct,
-                        "public_fade": fade,
-                        "stale_line_flag": stale,
+                        K_GAME: f"{team1} vs {team2}",
+                        K_BOOKMAKER: book_name,
+                        K_TEAM1: team1,
+                        K_TEAM2: team2,
+                        K_PRICE1: price1,
+                        K_PRICE2: price2,
+                        K_IMPLIED_WIN: implied,
+                        K_EVENT_ID: event_id,
+                        K_PROJECTED_WIN: prob,
+                        K_EDGE: edge,
+                        K_PAYOUT: payout,
+                        K_EXPECTED_VALUE: ev,
+                        K_TICKET_PCT_TEAM1: team1_pct,
+                        K_TICKET_PCT_TEAM2: team2_pct,
+                        K_PUBLIC_FADE: fade,
+                        K_STALE_FLAG: stale,
                     }
                 )
                 implied_probs.append(implied)
@@ -485,32 +538,32 @@ def evaluate_h2h_all_tomorrow(
             multi_book_edge = (high + low) / 2
 
         for row in event_rows:
-            row["market_disagreement_score"] = diff
-            row["soft_book_spread"] = soft_spread
-            row["multi_book_edge_score"] = multi_book_edge
+            row[K_MARKET_DISAGREEMENT_SCORE] = diff
+            row[K_SOFT_BOOK_SPREAD] = soft_spread
+            row[K_MULTI_BOOK_EDGE_SCORE] = multi_book_edge
             mm_features = {
-                "opening_odds": row.get("price1"),
-                "handle_percent": row.get("ticket_percent_team1", 0.0),
-                "ticket_percent": row.get("ticket_percent_team1", 0.0),
+                "opening_odds": row.get(K_PRICE1),
+                "handle_percent": row.get(K_TICKET_PCT_TEAM1, 0.0),
+                "ticket_percent": row.get(K_TICKET_PCT_TEAM1, 0.0),
                 "volatility": diff * 100,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
-                row["market_maker_mirror_score"] = market_maker_mirror_score(
+                row[K_MARKET_MAKER_MIRROR_SCORE] = market_maker_mirror_score(
                     str(MARKET_MAKER_MIRROR_MODEL_PATH),
                     mm_features,
-                    row.get("price1"),
+                    row.get(K_PRICE1),
                 )
             else:
-                row["market_maker_mirror_score"] = None
+                row[K_MARKET_MAKER_MIRROR_SCORE] = None
             weight = 1 + diff + (soft_spread or 0)
-            if row.get("stale_line_flag"):
+            if row.get(K_STALE_FLAG):
                 weight *= 1.1
-            r_weight = risk_filter(row.get("edge"), row.get("price1"))
-            row["risk_weight"] = r_weight
-            row["risk_block_flag"] = r_weight == 0.0
+            r_weight = risk_filter(row.get(K_EDGE), row.get(K_PRICE1))
+            row[K_RISK_WEIGHT] = r_weight
+            row[K_RISK_BLOCK_FLAG] = r_weight == 0.0
             weight *= r_weight
-            row["weighted_edge"] = row["edge"] * weight
-            row["weighted_expected_value"] = row["expected_value"] * weight
+            row[K_WEIGHTED_EDGE] = row[K_EDGE] * weight
+            row[K_WEIGHTED_EV] = row[K_EXPECTED_VALUE] * weight
             results.append(row)
     
     if verbose:
@@ -529,35 +582,35 @@ def print_h2h_projections_table(projections: list) -> None:
     if tabulate is not None:
         table_data = []
         for row in projections:
-            prob = row.get("projected_team1_win_probability")
+            prob = row.get(K_PROJECTED_WIN)
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
 
-            edge = row.get("edge")
+            edge = row.get(K_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
 
-            w_edge = row.get("weighted_edge")
+            w_edge = row.get(K_WEIGHTED_EDGE)
             w_edge_str = f"{w_edge*100:+.1f}%" if w_edge is not None else "N/A"
 
-            ev = row.get("expected_value")
+            ev = row.get(K_EXPECTED_VALUE)
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
-            soft_spread = row.get("soft_book_spread")
+            soft_spread = row.get(K_SOFT_BOOK_SPREAD)
             soft_spread_str = (
                 f"{soft_spread*100:.1f}%" if soft_spread is not None else "N/A"
             )
 
-            mbedge = row.get("multi_book_edge_score")
+            mbedge = row.get(K_MULTI_BOOK_EDGE_SCORE)
             mbedge_str = f"{mbedge*100:.1f}%" if mbedge is not None else "N/A"
 
-            price1 = row.get("price1", 0)
-            price2 = row.get("price2", 0)
+            price1 = row.get(K_PRICE1, 0)
+            price2 = row.get(K_PRICE2, 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
             price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
 
             table_data.append([
-                row.get("team1", ""),
+                row.get(K_TEAM1, ""),
                 price1_str,
-                row.get("team2", ""),
+                row.get(K_TEAM2, ""),
                 price2_str,
                 prob_str,
                 edge_str,
@@ -565,11 +618,11 @@ def print_h2h_projections_table(projections: list) -> None:
                 ev_str,
                 soft_spread_str,
                 mbedge_str,
-                f"{row.get('market_maker_mirror_score', 0.0)*100:+.1f}%" if row.get('market_maker_mirror_score') is not None else "N/A",
-                "FADE" if row.get("public_fade") else "",
-                "STALE" if row.get("stale_line_flag") else "",
-                "RISK" if row.get("risk_block_flag") else "",
-                row.get("bookmaker", ""),
+                f"{row.get(K_MARKET_MAKER_MIRROR_SCORE, 0.0)*100:+.1f}%" if row.get(K_MARKET_MAKER_MIRROR_SCORE) is not None else "N/A",
+                "FADE" if row.get(K_PUBLIC_FADE) else "",
+                "STALE" if row.get(K_STALE_FLAG) else "",
+                "RISK" if row.get(K_RISK_BLOCK_FLAG) else "",
+                row.get(K_BOOKMAKER, ""),
             ])
 
         print(
@@ -618,10 +671,10 @@ def print_h2h_projections_table(projections: list) -> None:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
 
         widths = {
-            "TEAM1": col_width("team1", 10),
-            "PRICE1": col_width("price1", 6),
-            "TEAM2": col_width("team2", 10),
-            "PRICE2": col_width("price2", 6),
+            "TEAM1": col_width(K_TEAM1, 10),
+            "PRICE1": col_width(K_PRICE1, 6),
+            "TEAM2": col_width(K_TEAM2, 10),
+            "PRICE2": col_width(K_PRICE2, 6),
             "P(WIN)": 8,
             "EDGE": 8,
             "W_EDGE": 8,
@@ -631,7 +684,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "MM_SCORE": 8,
             "FADE": 6,
             "RISK": 6,
-            "BOOK": col_width("bookmaker", 8),
+            "BOOK": col_width(K_BOOKMAKER, 8),
             "STALE": 6,
         }
 
@@ -640,32 +693,32 @@ def print_h2h_projections_table(projections: list) -> None:
         print("-" * len(header_line))
 
         for row in projections:
-            prob = row.get("projected_team1_win_probability")
+            prob = row.get(K_PROJECTED_WIN)
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
-            edge = row.get("edge")
+            edge = row.get(K_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
-            w_edge = row.get("weighted_edge")
+            w_edge = row.get(K_WEIGHTED_EDGE)
             w_edge_str = f"{w_edge*100:+.1f}%" if w_edge is not None else "N/A"
-            ev = row.get("expected_value")
+            ev = row.get(K_EXPECTED_VALUE)
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
-            soft_spread = row.get("soft_book_spread")
+            soft_spread = row.get(K_SOFT_BOOK_SPREAD)
             soft_spread_str = (
                 f"{soft_spread*100:.1f}%" if soft_spread is not None else "N/A"
             )
 
-            mbedge = row.get("multi_book_edge_score")
+            mbedge = row.get(K_MULTI_BOOK_EDGE_SCORE)
             mbedge_str = f"{mbedge*100:.1f}%" if mbedge is not None else "N/A"
 
-            price1 = row.get("price1", 0)
-            price2 = row.get("price2", 0)
+            price1 = row.get(K_PRICE1, 0)
+            price2 = row.get(K_PRICE2, 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
             price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
 
             values = [
-                row.get("team1", ""),
+                row.get(K_TEAM1, ""),
                 price1_str,
-                row.get("team2", ""),
+                row.get(K_TEAM2, ""),
                 price2_str,
                 prob_str,
                 edge_str,
@@ -673,11 +726,11 @@ def print_h2h_projections_table(projections: list) -> None:
                 ev_str,
                 soft_spread_str,
                 mbedge_str,
-                f"{row.get('market_maker_mirror_score', 0.0)*100:+.1f}%" if row.get('market_maker_mirror_score') is not None else "N/A",
-                "FADE" if row.get("public_fade") else "",
-                "STALE" if row.get("stale_line_flag") else "",
-                "RISK" if row.get("risk_block_flag") else "",
-                row.get("bookmaker", ""),
+                f"{row.get(K_MARKET_MAKER_MIRROR_SCORE, 0.0)*100:+.1f}%" if row.get(K_MARKET_MAKER_MIRROR_SCORE) is not None else "N/A",
+                "FADE" if row.get(K_PUBLIC_FADE) else "",
+                "STALE" if row.get(K_STALE_FLAG) else "",
+                "RISK" if row.get(K_RISK_BLOCK_FLAG) else "",
+                row.get(K_BOOKMAKER, ""),
             ]
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
@@ -704,15 +757,15 @@ def log_bet_recommendations(
 
     lines: list[str] = []
     for row in projections:
-        edge = row.get("weighted_edge", row.get("edge"))
-        if row.get("risk_block_flag"):
+        edge = row.get(K_WEIGHTED_EDGE, row.get(K_EDGE))
+        if row.get(K_RISK_BLOCK_FLAG):
             continue
-        prob = row.get("projected_team1_win_probability")
+        prob = row.get(K_PROJECTED_WIN)
         if edge is None or prob is None or edge <= threshold:
             continue
-        team = row.get("team1", "")
-        odds = row.get("price1")
-        bookmaker = row.get("bookmaker", "")
+        team = row.get(K_TEAM1, "")
+        odds = row.get(K_PRICE1)
+        bookmaker = row.get(K_BOOKMAKER, "")
         timestamp = datetime.utcnow().isoformat()
         line = (
             f"{timestamp} - {team} @ {odds} ({bookmaker}) "
