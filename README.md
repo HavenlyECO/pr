@@ -211,6 +211,9 @@ opponent's slugging percentage from a team's bullpen ERA. Include
 ``bullpen_ERA`` and ``opponent_SLG_adjusted`` columns in your dataset and the
 trainer will derive this value automatically to highlight volatile late-game
 matchups.
+If your dataset provides fields like ``stat_last_10`` alongside ``stat``,
+``train_classifier`` will generate ``stat_weighted_recent`` using the
+``--recency-multiplier`` value so recent performance carries more influence.
 During training, probability quality is reported using AUC and Brier score
 rather than simple accuracy.
 When live-inning columns are available the validation set is also segmented into
@@ -253,6 +256,9 @@ python main.py train_classifier --dataset=training_data.csv --features-type=dual
 Pass ``--recent-half-life`` to weight newer rows more heavily based on a date column
 (defaults to the first column containing ``date`` in its name). Use ``--date-column``
 to specify the exact column if needed.
+``--recency-multiplier`` controls how much extra emphasis recent form columns
+receive when paired with season-long averages. A value of ``0.7`` gives 70% weight
+to stats like ``*_last_10`` when creating ``*_weighted_recent`` features.
 
 Or fetch historical data for a date range and train directly from it:
 

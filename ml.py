@@ -169,6 +169,39 @@ def bullpen_era_vs_opponent_slg(bullpen_era: float, opponent_slg: float) -> floa
     return float(bullpen_era) - float(opponent_slg)
 
 
+def attach_recency_weighted_features(
+    df: pd.DataFrame,
+    *,
+    multiplier: float = 0.7,
+    verbose: bool = False,
+) -> None:
+    """Add columns blending recent metrics with full-season stats.
+
+    Any column named like ``<stat>_last_<N>`` will be combined with a matching
+    ``<stat>`` column when present. The resulting ``<stat>_weighted_recent``
+    column gives ``multiplier`` weight to the recent value and ``1 - multiplier``
+    to the season-long value so the model can emphasize current form.
+    """
+
+    import re
+
+    pattern = re.compile(r"(.+)_last_\d+(?:_games?|_starts?)?")
+    added: list[str] = []
+    for col in list(df.columns):
+        m = pattern.match(col)
+        if not m:
+            continue
+        base = m.group(1)
+        if base in df.columns:
+            out_col = f"{base}_weighted_recent"
+            df[out_col] = (
+                df[col] * multiplier + df[base] * (1.0 - multiplier)
+            )
+            added.append(out_col)
+    if verbose and added:
+        print(f"Computed recency weighted features: {', '.join(added)}")
+
+
 def llm_sharp_context_score(text: str) -> float:
     """Return a score between 0 and 1 from OpenAI about sharp betting context."""
     if openai is None or not OPENAI_API_KEY:
@@ -1036,6 +1069,7 @@ def train_moneyline_classifier(
     verbose: bool = False,
     recent_half_life: float | None = None,
     date_column: str | None = None,
+    recency_multiplier: float = 0.7,
 ) -> None:
     """Train a logistic regression model from a CSV with a home_team_win column.
 
@@ -1118,6 +1152,9 @@ Modeling is done in regression mode first. You can later apply a probability thr
                 f"Computed bullpenERA_vs_opponentSLG using columns '{bullpen_col}' and '{slg_col}'"
             )
 
+    # Blend recent form metrics with season-long stats
+    attach_recency_weighted_features(df, multiplier=recency_multiplier, verbose=verbose)
+
     features_df = df.drop(columns=["home_team_win"])
     pregame_X, live_X = split_feature_sets(features_df)
     X = live_X if features_type == "live" else pregame_X
@@ -1137,7 +1174,7 @@ Modeling is done in regression mode first. You can later apply a probability thr
             if date_column and date_column in df.columns
             else next((c for c in df.columns if "date" in c.lower()), None)
         )
-    if col is not None:
+        if col is not None:
             weights = compute_recency_weights(
                 pd.to_datetime(df[col], errors="coerce"),
                 half_life_days=recent_half_life,
@@ -1155,12 +1192,15 @@ def train_dual_head_classifier(
     verbose: bool = False,
     recent_half_life: float | None = None,
     date_column: str | None = None,
+    recency_multiplier: float = 0.7,
 ) -> None:
     """Train separate pregame and live models and save a ``DualHeadModel``."""
 
     df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
+
+    attach_recency_weighted_features(df, multiplier=recency_multiplier, verbose=verbose)
 
     features_df = df.drop(columns=["home_team_win"])
     pregame_X, live_X = split_feature_sets(features_df)
