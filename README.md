@@ -325,12 +325,16 @@ stake is stored as a number—``0.0`` when no bankroll is supplied—so later
 results can be evaluated consistently.
 
 After the game finishes call ``update_bet_result`` from the ``bet_logger``
-module to mark the bet as a win or loss. The function records the resulting
-payout and the ROI compared to the stake so you can track how profitable the
-model's edge is over time. When ``closing_odds`` (or ``closing_implied_prob``)
-is supplied, ``update_bet_result`` also stores the closing line's implied
-probability and logs ``deviation_score = predicted_prob - closing_implied_prob``
-to measure how far the model disagreed with the market at close.
+module to mark the bet as a win or loss. ``update_bet_result`` searches for the
+first log entry where ``event_id`` and ``team`` match and ``outcome`` is still
+``null`` and updates that record. If you logged multiple bets for the same
+event/team pair, call the function once for each open position. The function
+records the resulting payout and the ROI compared to the stake so you can track
+how profitable the model's edge is over time. When ``closing_odds`` (or
+``closing_implied_prob``) is supplied, ``update_bet_result`` also stores the
+closing line's implied probability and logs ``deviation_score = predicted_prob -
+closing_implied_prob`` to measure how far the model disagreed with the market at
+close.
 
 ## Kelly Bet Sizing
 

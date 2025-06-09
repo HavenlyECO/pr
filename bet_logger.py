@@ -127,6 +127,12 @@ def update_bet_result(
 ) -> None:
     """Update the log entry for ``event_id`` and ``team`` with ``result``.
 
+    The function searches the log for the first entry whose ``event_id`` and
+    ``team`` match and whose ``outcome`` is still ``None``. Only this earliest
+    unresolved record is updated. If you log multiple bets for the same
+    event/team combination, call ``update_bet_result`` once for each open
+    position.
+
     ``result`` must be ``"win"`` or ``"loss"``. Any other value raises
     ``ValueError`` to prevent silent mistakes.
 
