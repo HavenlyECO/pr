@@ -8,9 +8,17 @@ from ml import american_odds_to_payout
 
 
 def kelly_bet_fraction(prob: float, odds: float) -> float:
-    """Return the Kelly bet fraction for the given probability and American odds."""
+    """Return the Kelly bet fraction for a win probability and American odds.
+
+    Implements ``(b * p - q) / b`` where ``b`` is the profit on a $1 bet
+    (decimal odds minus 1), ``p`` is the model probability and ``q`` is
+    ``1 - p``.
+    """
+
     b = american_odds_to_payout(odds)
-    fraction = (prob * (b + 1) - 1) / b
+    p = prob
+    q = 1 - p
+    fraction = (b * p - q) / b
     return max(fraction, 0.0)
 
 

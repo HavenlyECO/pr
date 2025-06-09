@@ -317,3 +317,15 @@ After the game finishes call ``update_bet_result`` from the ``bet_logger``
 module to mark the bet as a win or loss. The function records the resulting
 payout and the ROI compared to the stake so you can track how profitable the
 model's edge is over time.
+
+## Kelly Bet Sizing
+
+When a bankroll value is supplied, stakes are calculated using the Kelly
+criterion. For a predicted win probability ``p`` and the offered odds expressed
+in decimal form, the fraction of bankroll to wager is::
+
+    kelly_fraction = (b * p - (1 - p)) / b
+
+where ``b`` is ``odds - 1``. This approach allocates more to high-edge plays and
+reduces exposure when the edge is slim. Use the ``kelly_fraction`` argument to
+scale down from full Kelly if desired.
