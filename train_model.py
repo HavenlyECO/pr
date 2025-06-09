@@ -11,6 +11,20 @@ from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 import json
+import logging
+import warnings
+
+LOG_FILE = Path("training_warnings.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(LOG_FILE, mode="w"),
+    ],
+)
+logging.captureWarnings(True)
 
 # Import from your ml.py module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -33,7 +47,9 @@ def examine_cache_files(cache_dir=CACHE_DIR, max_files=5):
     """Examine what's in the cache files to help debug training issues"""
     cache_files = list(cache_dir.glob("*.pkl"))
     if not cache_files:
-        print(f"No cache files found in {cache_dir}")
+        msg = f"No cache files found in {cache_dir}"
+        print(msg)
+        logging.warning(msg)
         return
 
     print(f"Examining first {min(max_files, len(cache_files))} cache files:")
@@ -95,7 +111,9 @@ def examine_cache_files(cache_dir=CACHE_DIR, max_files=5):
                     print(f"  First item keys: {list(data[0].keys())}")
 
         except Exception as e:
-            print(f"  Error examining file {cache_file}: {e}")
+            msg = f"  Error examining file {cache_file}: {e}"
+            print(msg)
+            logging.warning(msg)
 
     print("\nCache examination complete.")
 
@@ -107,7 +125,9 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
 
     cache_files = list(cache_dir.glob("*.pkl"))
     if not cache_files:
-        print(f"No cache files found in {cache_dir}")
+        msg = f"No cache files found in {cache_dir}"
+        print(msg)
+        logging.warning(msg)
         return False
 
     if verbose:
@@ -175,11 +195,15 @@ def train_from_cache(cache_dir=CACHE_DIR, model_out=H2H_MODEL_PATH, verbose=True
 
         except Exception as e:
             if verbose:
-                print(f"Error processing cache file {cache_file}: {e}")
+                msg = f"Error processing cache file {cache_file}: {e}"
+                print(msg)
+                logging.warning(msg)
             continue
 
     if not rows:
-        print("No valid training data found in cache files")
+        msg = "No valid training data found in cache files"
+        print(msg)
+        logging.warning(msg)
         return False
 
     df = pd.DataFrame(rows)
