@@ -167,6 +167,13 @@ helper compiles recent social posts for each team and has OpenAI judge how much
 hype or "can't lose" sentiment is present. This numeric ``hype_trend_score``
 helps identify overreactions driven more by buzz than by fundamentals.
 
+The ``multi_book_edge_score`` metric compares moneyline prices from Bovada,
+MyBookie and BetUS. The odds from these softer books are converted to implied
+probabilities. The difference between the highest and lowest value for the same
+team is reported as ``soft_book_spread`` while their midpoint forms the
+``multi_book_edge_score``. Large spreads highlight pricing disagreements that
+can be exploited before the books adjust.
+
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
 for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
 enable this feature. ``OPENAI_API_KEY`` must also be configured.
