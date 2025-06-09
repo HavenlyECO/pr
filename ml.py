@@ -344,6 +344,7 @@ CACHE_DIR = H2H_DATA_DIR / "api_cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 H2H_MODEL_PATH = H2H_DATA_DIR / "h2h_classifier.pkl"
 MONEYLINE_MODEL_PATH = ROOT_DIR / "moneyline_classifier.pkl"
+DUAL_HEAD_MODEL_PATH = ROOT_DIR / "moneyline_dual_head.pkl"
 
 def to_fixed_utc(date_obj: datetime) -> str:
     """Return ISO-8601 string at fixed 12:00 UTC."""
@@ -839,6 +840,7 @@ def _train(
         pickle.dump(model, f)
 
     print(f"Model saved to {out_path}")
+    return model
 
 def train_h2h_classifier(
     sport_key: str,
@@ -878,6 +880,30 @@ def predict_h2h_probability(
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
     proba = model.predict_proba(df)[0][1]
     return float(proba)
+
+
+class DualHeadModel:
+    """Model containing separate pregame and live heads."""
+
+    def __init__(
+        self,
+        pregame_model: SegmentedCalibratedModel,
+        live_model: SegmentedCalibratedModel,
+        pregame_cols: list[str],
+        live_cols: list[str],
+    ) -> None:
+        self.pregame_model = pregame_model
+        self.live_model = live_model
+        self.pregame_cols = pregame_cols
+        self.live_cols = live_cols
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        df = pd.DataFrame(X)
+        if set(self.live_cols).issubset(df.columns) and df[self.live_cols].notna().any().any():
+            proba = self.live_model.predict_proba(df[self.live_cols])[:, 1]
+        else:
+            proba = self.pregame_model.predict_proba(df[self.pregame_cols])[:, 1]
+        return np.column_stack([1 - proba, proba])
 
 
 def split_feature_sets(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -1013,7 +1039,7 @@ Modeling is done in regression mode first. You can later apply a probability thr
             if date_column and date_column in df.columns
             else next((c for c in df.columns if "date" in c.lower()), None)
         )
-        if col is not None:
+    if col is not None:
             weights = compute_recency_weights(
                 pd.to_datetime(df[col], errors="coerce"),
                 half_life_days=recent_half_life,
@@ -1022,6 +1048,67 @@ Modeling is done in regression mode first. You can later apply a probability thr
                 print(f"Using column '{col}' for recency weighting")
 
     _train(X, y, model_out, sample_weight=weights)
+
+
+def train_dual_head_classifier(
+    dataset_path: str,
+    *,
+    model_out: str = str(DUAL_HEAD_MODEL_PATH),
+    verbose: bool = False,
+    recent_half_life: float | None = None,
+    date_column: str | None = None,
+) -> None:
+    """Train separate pregame and live models and save a ``DualHeadModel``."""
+
+    df = pd.read_csv(dataset_path)
+    if "home_team_win" not in df.columns:
+        raise ValueError("Dataset must include 'home_team_win' column")
+
+    features_df = df.drop(columns=["home_team_win"])
+    pregame_X, live_X = split_feature_sets(features_df)
+    y = df["home_team_win"]
+    if verbose:
+        print(
+            f"Training dual-head model with {len(pregame_X.columns)} pregame and {len(live_X.columns)} live features"
+        )
+
+    weights = None
+    if recent_half_life is not None:
+        col = (
+            date_column
+            if date_column and date_column in df.columns
+            else next((c for c in df.columns if "date" in c.lower()), None)
+        )
+        if col is not None:
+            weights = compute_recency_weights(
+                pd.to_datetime(df[col], errors="coerce"),
+                half_life_days=recent_half_life,
+            )
+            if verbose:
+                print(f"Using column '{col}' for recency weighting")
+
+    # Train each head using temporary paths to avoid saving intermediate files
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_pre, tempfile.NamedTemporaryFile(delete=False) as tmp_live:
+        pre_model = _train(pregame_X, y, tmp_pre.name, sample_weight=weights)
+        live_model = _train(live_X, y, tmp_live.name, sample_weight=weights)
+
+    for path in (tmp_pre.name, tmp_pre.name + ".residuals.csv", tmp_live.name, tmp_live.name + ".residuals.csv"):
+        try:
+            Path(path).unlink()
+        except FileNotFoundError:
+            pass
+
+    model = DualHeadModel(pre_model, live_model, list(pregame_X.columns), list(live_X.columns))
+
+    out_path = Path(model_out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "wb") as f:
+        pickle.dump(model, f)
+
+    if verbose:
+        print(f"Dual-head model saved to {out_path}")
 
 
 def predict_moneyline_probability(
