@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 import urllib.error
 import hashlib
+from contextlib import contextmanager, nullcontext
 
 try:
     import openai
@@ -29,6 +30,11 @@ try:
     from telethon import TelegramClient
 except ImportError:  # pragma: no cover - optional dependency
     TelegramClient = None
+
+try:  # Optional dependency for memory profiling
+    import psutil
+except ImportError:  # pragma: no cover - optional dependency
+    psutil = None
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, LinearRegression
@@ -69,6 +75,25 @@ def american_odds_to_payout(odds: float) -> float:
 
 
 LINE_MOVEMENT_THRESHOLD = 15
+
+
+@contextmanager
+def memory_usage(section: str):
+    """Log memory usage delta for a code block when ``psutil`` is installed."""
+    if psutil is None:
+        yield
+        return
+    process = psutil.Process(os.getpid())
+    start_mem = process.memory_info().rss / (1024 ** 2)
+    start_time = time.perf_counter()
+    try:
+        yield
+    finally:
+        end_mem = process.memory_info().rss / (1024 ** 2)
+        duration = time.perf_counter() - start_time
+        print(
+            f"[mem:{section}] {end_mem - start_mem:+.1f} MB in {duration:.1f}s (now {end_mem:.1f} MB)"
+        )
 
 def line_movement_delta(opening_odds: float, current_odds: float) -> float:
     """Return ``opening_odds - current_odds``.
@@ -1001,23 +1026,29 @@ def _train(
     y: pd.Series,
     model_out: str,
     sample_weight: pd.Series | None = None,
+    *,
+    profile_memory: bool = False,
 ) -> None:
     """Train a logistic regression model with segment-specific calibration."""
 
-    if sample_weight is not None:
-        X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
-            X, y, sample_weight, test_size=0.2, random_state=42
-        )
-    else:
-        X_train, X_val, y_train, y_val = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
+    ctx = memory_usage("train_split") if profile_memory else nullcontext()
+    with ctx:
+        if sample_weight is not None:
+            X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
+                X, y, sample_weight, test_size=0.2, random_state=42
+            )
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
 
     pipeline = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
-    if sample_weight is not None:
-        pipeline.fit(X_train, y_train, sample_weight=w_train)
-    else:
-        pipeline.fit(X_train, y_train)
+    ctx = memory_usage("fit_model") if profile_memory else nullcontext()
+    with ctx:
+        if sample_weight is not None:
+            pipeline.fit(X_train, y_train, sample_weight=w_train)
+        else:
+            pipeline.fit(X_train, y_train)
 
     # Build segment specific calibrators
     masks = {
@@ -1086,15 +1117,17 @@ def train_h2h_classifier(
     odds_format: str = "american",
     verbose: bool = False,
     recent_half_life: float | None = None,
+    profile_memory: bool = False,
 ) -> None:
-    df = build_h2h_dataset_from_api(
-        sport_key,
-        start_date,
-        end_date,
-        regions=regions,
-        odds_format=odds_format,
-        verbose=verbose,
-    )
+    with memory_usage("build_dataset") if profile_memory else nullcontext():
+        df = build_h2h_dataset_from_api(
+            sport_key,
+            start_date,
+            end_date,
+            regions=regions,
+            odds_format=odds_format,
+            verbose=verbose,
+        )
     if verbose:
         print(df.head())
     X = df[["price1", "price2"]]
@@ -1102,7 +1135,8 @@ def train_h2h_classifier(
     weights = None
     if recent_half_life is not None and "event_date" in df.columns:
         weights = compute_recency_weights(df["event_date"], half_life_days=recent_half_life)
-    _train(X, y, model_out, sample_weight=weights)
+    with memory_usage("train") if profile_memory else nullcontext():
+        _train(X, y, model_out, sample_weight=weights, profile_memory=profile_memory)
 
 def predict_h2h_probability(
     model_path: str,
@@ -1177,11 +1211,13 @@ def train_moneyline_classifier(
     recent_half_life: float | None = None,
     date_column: str | None = None,
     recency_multiplier: float = 0.7,
+    profile_memory: bool = False,
 ) -> None:
     """Train a logistic regression model from a CSV with a home_team_win column.
 
 Modeling is done in regression mode first. You can later apply a probability threshold for classification if desired."""
-    df = pd.read_csv(dataset_path)
+    with memory_usage("read_csv") if profile_memory else nullcontext():
+        df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
 
@@ -1293,7 +1329,14 @@ Modeling is done in regression mode first. You can later apply a probability thr
             if verbose:
                 print(f"Using column '{col}' for recency weighting")
 
-    _train(X, y, model_out, sample_weight=weights)
+    with memory_usage("train") if profile_memory else nullcontext():
+        _train(
+            X,
+            y,
+            model_out,
+            sample_weight=weights,
+            profile_memory=profile_memory,
+        )
 
 
 def train_dual_head_classifier(
@@ -1304,10 +1347,12 @@ def train_dual_head_classifier(
     recent_half_life: float | None = None,
     date_column: str | None = None,
     recency_multiplier: float = 0.7,
+    profile_memory: bool = False,
 ) -> None:
     """Train separate pregame and live models and save a ``DualHeadModel``."""
 
-    df = pd.read_csv(dataset_path)
+    with memory_usage("read_csv") if profile_memory else nullcontext():
+        df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
         raise ValueError("Dataset must include 'home_team_win' column")
 
@@ -1340,8 +1385,22 @@ def train_dual_head_classifier(
     import tempfile
 
     with tempfile.NamedTemporaryFile(delete=False) as tmp_pre, tempfile.NamedTemporaryFile(delete=False) as tmp_live:
-        pre_model = _train(pregame_X, y, tmp_pre.name, sample_weight=weights)
-        live_model = _train(live_X, y, tmp_live.name, sample_weight=weights)
+        with memory_usage("train_pregame") if profile_memory else nullcontext():
+            pre_model = _train(
+                pregame_X,
+                y,
+                tmp_pre.name,
+                sample_weight=weights,
+                profile_memory=profile_memory,
+            )
+        with memory_usage("train_live") if profile_memory else nullcontext():
+            live_model = _train(
+                live_X,
+                y,
+                tmp_live.name,
+                sample_weight=weights,
+                profile_memory=profile_memory,
+            )
 
     for path in (tmp_pre.name, tmp_pre.name + ".residuals.csv", tmp_live.name, tmp_live.name + ".residuals.csv"):
         try:
@@ -1365,10 +1424,12 @@ def train_market_maker_mirror_model(
     *,
     model_out: str = str(MARKET_MAKER_MIRROR_MODEL_PATH),
     verbose: bool = False,
+    profile_memory: bool = False,
 ) -> None:
     """Train a simple linear model that mirrors sharp bookmaker adjustments."""
 
-    df = pd.read_csv(dataset_path)
+    with memory_usage("read_csv") if profile_memory else nullcontext():
+        df = pd.read_csv(dataset_path)
     required = [
         "opening_odds",
         "handle_percent",
@@ -1386,7 +1447,8 @@ def train_market_maker_mirror_model(
     y = df["closing_odds"]
 
     model = LinearRegression()
-    model.fit(X, y)
+    with memory_usage("fit_model") if profile_memory else nullcontext():
+        model.fit(X, y)
 
     out_path = Path(model_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
