@@ -134,6 +134,28 @@ def reverse_line_move_flag(ticket_percent: float, line_delta: float, *, pivot: f
     return 0
 
 
+def bet_freeze_flag(
+    ticket_percent: float,
+    line_delta: float,
+    *,
+    ticket_threshold: float = 70.0,
+    move_threshold: float = LINE_MOVEMENT_THRESHOLD,
+) -> int:
+    """Return ``1`` when heavy public action and positive line movement align.
+
+    ``ticket_percent`` is the percentage of bets on the team. ``line_delta``
+    represents ``opening_odds - closing_odds``. A positive ``line_delta``
+    indicates the odds shortened (e.g. ``-120`` to ``-140``). When a majority of
+    tickets combine with a significant shorten in the same direction, sports
+    books may be luring action on a trendy side, so this flag instructs the
+    model to pause betting activity.
+    """
+
+    if pd.isna(ticket_percent) or pd.isna(line_delta):
+        return 0
+    return int(ticket_percent >= ticket_threshold and line_delta >= move_threshold)
+
+
 def bullpen_era_vs_opponent_slg(bullpen_era: float, opponent_slg: float) -> float:
     """Return bullpen ERA minus opponent slugging percentage.
 
@@ -1050,9 +1072,13 @@ Modeling is done in regression mode first. You can later apply a probability thr
             lambda r: reverse_line_move_flag(r["ticket_percent"], r["line_delta"]),
             axis=1,
         )
+        df["bet_freeze_flag"] = df.apply(
+            lambda r: bet_freeze_flag(r["ticket_percent"], r["line_delta"]),
+            axis=1,
+        )
         if verbose:
             print(
-                "Computed public_fade_flag and reverse_line_move from ticket_percent and line_delta"
+                "Computed public_fade_flag, reverse_line_move and bet_freeze_flag from ticket_percent and line_delta"
             )
 
     # Generate LLM-based sharp context score if a context column exists
