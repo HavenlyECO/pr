@@ -258,6 +258,11 @@ probability after each update. It exposes features like
 ``win_prob_delta_inning_X`` that capture sharp momentum swings from events such
 as a big inning or pitching change.
 
+``llm_inning_trend_summaries`` complements these utilities by turning raw
+play-by-play logs into a concise ``trend_summary`` for each inning. OpenAI
+distills the pitch sequence and scoring events into one short sentence per
+inning so you can quickly gauge emotional and tactical momentum.
+
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
