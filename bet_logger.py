@@ -103,6 +103,7 @@ def log_bets(
             "stale_line_flag": row.get("stale_line_flag", False),
             "bookmaker": bookmaker,
             "stake": 0.0,
+            "zero_stake_warning": False,
             "outcome": None,
             "payout": None,
             "roi": None,
@@ -110,6 +111,8 @@ def log_bets(
         if bankroll is not None:
             stake = calculate_bet_size(bankroll, prob, odds, fraction=kelly_fraction)
             entry["stake"] = round(stake, 2)
+        if not entry["stake"]:
+            entry["zero_stake_warning"] = True
         logs.append(entry)
 
     if logs:
@@ -159,6 +162,8 @@ def update_bet_result(
             roi = 0.0
             if stake:
                 roi = profit / stake
+            else:
+                entry["zero_stake_warning"] = True
 
             if closing_implied_prob is None and closing_odds is not None:
                 closing_implied_prob = american_odds_to_prob(closing_odds)
