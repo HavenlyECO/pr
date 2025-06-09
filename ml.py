@@ -436,6 +436,42 @@ def llm_sentiment_fakeout_social_score(team: str, limit: int = 50) -> float:
     return llm_sentiment_fakeout_score(combined[:4000])
 
 
+def llm_inning_trend_summaries(text: str) -> dict[int, str]:
+    """Return concise inning summaries extracted from raw play-by-play logs."""
+
+    if openai is None or not OPENAI_API_KEY:
+        return {}
+
+    prompt = (
+        "Summarize the following baseball game log with one short sentence per "
+        "inning. Format each line as 'Inning X: <summary>'.\n\n" + text + "\n\nSummaries:"
+    )
+
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        reply = resp.choices[0].message["content"].strip()
+    except Exception:
+        return {}
+
+    import re
+
+    summaries: dict[int, str] = {}
+    for line in reply.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"(?:Inning\s*)?(\d+)[:.]\s*(.+)", line)
+        if m:
+            inning = int(m.group(1))
+            summaries[inning] = m.group(2).strip()
+
+    return summaries
+
+
 def attach_managerial_signals(
     df: pd.DataFrame,
     column: str,
