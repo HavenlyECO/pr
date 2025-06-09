@@ -174,6 +174,14 @@ team is reported as ``soft_book_spread`` while their midpoint forms the
 ``multi_book_edge_score``. Large spreads highlight pricing disagreements that
 can be exploited before the books adjust.
 
+When monitoring betting exchanges directly, the ``volume_surge.py`` module
+offers a ``VolumeSurgeDetector`` utility. Provide it with a callback that
+returns the latest matched volume from Betfair or Matchbook and it maintains a
+short rolling history (default 10&nbsp;minutes). If the most recent reading
+exceeds the window average by several standard deviations, the detector outputs
+a ``volume_surge_score`` between 0 and 1. Sudden liquidity spikes often hint at
+syndicates entering the market before prices move.
+
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
 for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
 enable this feature. ``OPENAI_API_KEY`` must also be configured.
