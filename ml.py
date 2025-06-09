@@ -666,19 +666,41 @@ def build_h2h_dataset_from_api(
         print(f"Built h2h dataset with {len(rows)} rows.")
     return pd.DataFrame(rows)
 
+class SegmentedCalibratedModel:
+    """Logistic regression with per-inning probability calibration."""
+
+    def __init__(self, pipeline, calibrators: dict[str, CalibratedClassifierCV]):
+        self.pipeline = pipeline
+        self.calibrators = calibrators
+
+    def _segment_masks(self, X: pd.DataFrame) -> dict[str, pd.Series]:
+        seg7 = X.get("live_inning_7_diff", pd.Series([np.nan] * len(X))).notna()
+        seg5 = X.get("live_inning_5_diff", pd.Series([np.nan] * len(X))).notna() & ~seg7
+        seg_pre = ~seg5 & ~seg7
+        return {"7th_inning": seg7, "5th_inning": seg5, "pregame": seg_pre}
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        df = pd.DataFrame(X)
+        proba = np.zeros(len(df))
+        masks = self._segment_masks(df)
+        for seg, mask in masks.items():
+            if not mask.any():
+                continue
+            calibrator = self.calibrators.get(seg)
+            if calibrator is not None:
+                proba[mask] = calibrator.predict_proba(df[mask])[:, 1]
+            else:
+                proba[mask] = self.pipeline.predict_proba(df[mask])[:, 1]
+        return np.column_stack([1 - proba, proba])
+
+
 def _train(
     X: pd.DataFrame,
     y: pd.Series,
     model_out: str,
     sample_weight: pd.Series | None = None,
 ) -> None:
-    """Train a logistic regression model with feature normalization.
-
-    Continuous inputs are standardized using ``StandardScaler`` before
-    fitting to improve convergence. Probabilities are calibrated with
-    isotonic regression on a validation split.
-    This approach keeps modeling in a regression setup so you can choose any probability threshold later for classification.
-    """
+    """Train a logistic regression model with segment-specific calibration."""
 
     if sample_weight is not None:
         X_train, X_val, y_train, y_val, w_train, w_val = train_test_split(
@@ -695,38 +717,44 @@ def _train(
     else:
         pipeline.fit(X_train, y_train)
 
-    # Calibrate using isotonic regression on the validation set
-    calibrator = CalibratedClassifierCV(pipeline, method="isotonic", cv="prefit")
-    if sample_weight is not None:
-        calibrator.fit(X_val, y_val, sample_weight=w_val)
-    else:
-        calibrator.fit(X_val, y_val)
+    # Build segment specific calibrators
+    masks = {
+        "7th_inning": X_val.get("live_inning_7_diff", pd.Series([np.nan] * len(X_val))).notna(),
+    }
+    masks["5th_inning"] = X_val.get("live_inning_5_diff", pd.Series([np.nan] * len(X_val))).notna() & ~masks["7th_inning"]
+    masks["pregame"] = ~masks["5th_inning"] & ~masks["7th_inning"]
 
-    probas = calibrator.predict_proba(X_val)[:, 1]
+    calibrators: dict[str, CalibratedClassifierCV] = {}
+    for seg, mask in masks.items():
+        if not mask.any():
+            continue
+        cal = CalibratedClassifierCV(pipeline, method="isotonic", cv="prefit")
+        if sample_weight is not None:
+            cal.fit(X_val[mask], y_val[mask], sample_weight=w_val[mask])
+        else:
+            cal.fit(X_val[mask], y_val[mask])
+        calibrators[seg] = cal
+
+    model = SegmentedCalibratedModel(pipeline, calibrators)
+
+    probas = model.predict_proba(X_val)[:, 1]
     auc = roc_auc_score(y_val, probas)
     brier = brier_score_loss(y_val, probas)
     print(f"Validation AUC: {auc:.3f}, Brier score: {brier:.3f}")
 
     def _report_segment_metrics() -> None:
-        if not any(col.startswith("live_inning_") for col in X_val.columns):
-            return
-
-        segments = {
-            "pregame": X_val[X_val.filter(like="live_inning_").isna().all(axis=1)],
-            "5th inning": X_val[X_val.get("live_inning_5_diff").notna()],
-            "7th inning": X_val[X_val.get("live_inning_7_diff").notna()],
-        }
-
-        for name, seg_X in segments.items():
-            if seg_X.empty:
+        for seg, mask in masks.items():
+            if not mask.any() or seg not in calibrators:
                 continue
-            seg_y = y_val.loc[seg_X.index]
-            seg_proba = calibrator.predict_proba(seg_X)[:, 1]
+            seg_y = y_val.loc[mask]
+            seg_proba = calibrators[seg].predict_proba(X_val[mask])[:, 1]
             seg_auc = roc_auc_score(seg_y, seg_proba)
             seg_brier = brier_score_loss(seg_y, seg_proba)
+            name = "7th inning" if seg == "7th_inning" else ("5th inning" if seg == "5th_inning" else "pregame")
             print(f"  {name} AUC: {seg_auc:.3f}, Brier: {seg_brier:.3f}")
 
-    _report_segment_metrics()
+    if masks:
+        _report_segment_metrics()
 
     residuals_df = pd.DataFrame({
         "true_label": y_val.reset_index(drop=True),
@@ -741,7 +769,7 @@ def _train(
     out_path = Path(model_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "wb") as f:
-        pickle.dump(calibrator, f)
+        pickle.dump(model, f)
 
     print(f"Model saved to {out_path}")
 
