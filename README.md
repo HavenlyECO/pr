@@ -358,3 +358,10 @@ logic applies a simple risk filter. Bets with a modeled edge below 5% or
 moneyline odds worse than ``-170`` are assigned a zero weight. They will not be
 logged or factored into weighted edge calculations, helping protect ROI by
 discarding low-value opportunities.
+
+## Memory Profiling
+
+Training functions in ``ml.py`` accept a ``profile_memory`` flag. When set to
+``True`` and the optional ``psutil`` package is installed, memory usage for
+heavy pandas operations and model fitting is printed to the console. This can
+help identify bottlenecks when working with large datasets.
