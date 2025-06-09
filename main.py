@@ -42,6 +42,11 @@ if not API_KEY:
 # Minimum edge required for a bet to be recommended
 EDGE_THRESHOLD = 0.06
 
+# Sportsbooks considered "soft" for pricing comparisons. These lines often
+# lag sharper markets, creating short-lived arbitrage opportunities when they
+# disagree.
+SOFT_BOOKS = ("bovada", "mybookie", "betus")
+
 # Import here to avoid circular imports
 from ml import (
     H2H_MODEL_PATH,
@@ -321,6 +326,7 @@ def evaluate_h2h_all_tomorrow(
 
         event_rows: list[dict] = []
         implied_probs: list[float] = []
+        soft_implied_probs: list[float] = []
 
         for book in bookmakers:
             book_name = book.get("title") or book.get("key")
@@ -373,6 +379,10 @@ def evaluate_h2h_all_tomorrow(
                 payout = american_odds_to_payout(price1)
                 ev = edge * payout
 
+                book_key = (book_name or "").lower()
+                if any(sb in book_key for sb in SOFT_BOOKS):
+                    soft_implied_probs.append(implied)
+
                 sentiment = fetch_ticket_sentiment(event_id)
                 team1_pct = team2_pct = None
                 fade = False
@@ -417,9 +427,20 @@ def evaluate_h2h_all_tomorrow(
             continue
 
         diff = max(implied_probs) - min(implied_probs)
+
+        soft_spread = None
+        multi_book_edge = None
+        if soft_implied_probs:
+            high = max(soft_implied_probs)
+            low = min(soft_implied_probs)
+            soft_spread = high - low
+            multi_book_edge = (high + low) / 2
+
         for row in event_rows:
             row["market_disagreement_score"] = diff
-            weight = 1 + diff
+            row["soft_book_spread"] = soft_spread
+            row["multi_book_edge_score"] = multi_book_edge
+            weight = 1 + diff + (soft_spread or 0)
             if row.get("stale_line_flag"):
                 weight *= 1.1
             row["weighted_edge"] = row["edge"] * weight
@@ -454,6 +475,14 @@ def print_h2h_projections_table(projections: list) -> None:
             ev = row.get("expected_value")
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
+            soft_spread = row.get("soft_book_spread")
+            soft_spread_str = (
+                f"{soft_spread*100:.1f}%" if soft_spread is not None else "N/A"
+            )
+
+            mbedge = row.get("multi_book_edge_score")
+            mbedge_str = f"{mbedge*100:.1f}%" if mbedge is not None else "N/A"
+
             price1 = row.get("price1", 0)
             price2 = row.get("price2", 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
@@ -468,6 +497,8 @@ def print_h2h_projections_table(projections: list) -> None:
                 edge_str,
                 w_edge_str,
                 ev_str,
+                soft_spread_str,
+                mbedge_str,
                 "FADE" if row.get("public_fade") else "",
                 "STALE" if row.get("stale_line_flag") else "",
                 row.get("bookmaker", ""),
@@ -485,6 +516,8 @@ def print_h2h_projections_table(projections: list) -> None:
                     "Edge",
                     "W.Edge",
                     "EV",
+                    "SoftSpr",
+                    "MB.Edge",
                     "Fade",
                     "Stale",
                     "Book",
@@ -502,6 +535,8 @@ def print_h2h_projections_table(projections: list) -> None:
             "EDGE",
             "W_EDGE",
             "EV",
+            "SOFTSPR",
+            "MB_EDGE",
             "FADE",
             "STALE",
             "BOOK",
@@ -519,6 +554,8 @@ def print_h2h_projections_table(projections: list) -> None:
             "EDGE": 8,
             "W_EDGE": 8,
             "EV": 8,
+            "SOFTSPR": 8,
+            "MB_EDGE": 8,
             "FADE": 6,
             "BOOK": col_width("bookmaker", 8),
             "STALE": 6,
@@ -538,6 +575,14 @@ def print_h2h_projections_table(projections: list) -> None:
             ev = row.get("expected_value")
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
+            soft_spread = row.get("soft_book_spread")
+            soft_spread_str = (
+                f"{soft_spread*100:.1f}%" if soft_spread is not None else "N/A"
+            )
+
+            mbedge = row.get("multi_book_edge_score")
+            mbedge_str = f"{mbedge*100:.1f}%" if mbedge is not None else "N/A"
+
             price1 = row.get("price1", 0)
             price2 = row.get("price2", 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
@@ -552,6 +597,8 @@ def print_h2h_projections_table(projections: list) -> None:
                 edge_str,
                 w_edge_str,
                 ev_str,
+                soft_spread_str,
+                mbedge_str,
                 "FADE" if row.get("public_fade") else "",
                 "STALE" if row.get("stale_line_flag") else "",
                 row.get("bookmaker", ""),
