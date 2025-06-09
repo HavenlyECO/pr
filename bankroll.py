@@ -34,7 +34,8 @@ def calculate_bet_size(
     ``fraction`` scales the full Kelly stake (e.g. 0.5 for half-Kelly).
     """
     kelly_fraction = kelly_bet_fraction(prob, odds)
-    return bankroll * fraction * kelly_fraction
+    stake = bankroll * fraction * kelly_fraction
+    return round(stake, 2)
 
 
 # Simple bankroll update helper
@@ -51,9 +52,12 @@ def update_bankroll(
 
     if result == "win":
         profit = stake * american_odds_to_payout(odds)
-        return bankroll + profit
-    if result == "loss":
-        return bankroll - stake
-    if result == "push":
-        return bankroll
-    raise ValueError(f"Unknown result '{result}'")
+        new_bankroll = bankroll + profit
+    elif result == "loss":
+        new_bankroll = bankroll - stake
+    elif result == "push":
+        new_bankroll = bankroll
+    else:
+        raise ValueError(f"Unknown result '{result}'")
+
+    return round(new_bankroll, 2)
