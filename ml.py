@@ -261,13 +261,17 @@ def llm_managerial_signals(text: str) -> dict[str, int]:
             "pinch_hit_flag": 0,
             "matchup_move_flag": 0,
         }
+
+
+def llm_lineup_risk_score(text: str) -> float:
+    """Return lineup risk score from injury-related commentary text."""
+    if openai is None or not OPENAI_API_KEY:
+        return 0.0
     prompt = (
-        "Identify strategic baseball manager actions in the text. "
-        "Return JSON with keys early_pull_flag, pinch_hit_flag and "
-        "matchup_move_flag. Each value should be 1 when the text implies the "
-        "manager pulled the starter unusually early, used a pinch hitter for a "
-        "platoon advantage or made another matchup based substitution, "
-        "otherwise 0.\nText:\n" + text + "\nJSON:"
+        "Assess the risk of last-minute lineup changes due to injuries. "
+        "Look for phrases like 'late scratch', 'day-to-day' or "
+        "'questionable start' and output a number from 0 to 1 where higher "
+        "values indicate greater uncertainty.\nText:\n" + text + "\nScore:"
     )
     try:
         resp = openai.ChatCompletion.create(
@@ -275,19 +279,19 @@ def llm_managerial_signals(text: str) -> dict[str, int]:
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
         )
-        content = resp.choices[0].message["content"].strip()
-        data = json.loads(content)
-        return {
-            "early_pull_flag": int(bool(data.get("early_pull_flag"))),
-            "pinch_hit_flag": int(bool(data.get("pinch_hit_flag"))),
-            "matchup_move_flag": int(bool(data.get("matchup_move_flag"))),
-        }
+        reply = resp.choices[0].message["content"].strip()
+        return float(reply)
     except Exception:
-        return {
-            "early_pull_flag": 0,
-            "pinch_hit_flag": 0,
-            "matchup_move_flag": 0,
-        }
+        return 0.0
+
+
+def llm_lineup_risk_social_score(team: str, limit: int = 50) -> float:
+    """Return lineup risk score from recent social chatter about ``team``."""
+    texts = gather_social_text(team, limit=limit)
+    if not texts:
+        return 0.0
+    combined = "\n".join(texts)
+    return llm_lineup_risk_score(combined[:4000])
 
 
 def attach_managerial_signals(
@@ -305,6 +309,23 @@ def attach_managerial_signals(
     df["matchup_move_flag"] = flags.apply(lambda d: d["matchup_move_flag"])
     if verbose:
         print(f"Computed managerial signals using column '{column}'")
+
+
+def attach_lineup_risk_scores(
+    df: pd.DataFrame,
+    team_column: str,
+    *,
+    limit: int = 50,
+    verbose: bool = False,
+) -> None:
+    """Add ``lineup_risk_score`` column based on a team name column."""
+    if team_column not in df.columns:
+        raise ValueError(f"Column '{team_column}' not found in dataframe")
+    df["lineup_risk_score"] = df[team_column].apply(
+        lambda t: llm_lineup_risk_social_score(str(t), limit=limit)
+    )
+    if verbose:
+        print(f"Computed lineup_risk_score using column '{team_column}'")
 
 
 def attach_social_scores(

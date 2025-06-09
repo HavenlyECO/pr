@@ -151,6 +151,12 @@ text. It uses OpenAI to flag phrases such as "yanked the starter early" or
 ``early_pull_flag`` and ``pinch_hit_flag``. These signals highlight managerial
 patterns that may influence late-game outcomes beyond the box score.
 
+Similarly, :func:`attach_lineup_risk_scores` looks for injury language such as
+"late scratch", "day-to-day" or "questionable start" in pregame chatter pulled
+from social media and news feeds. It assigns a ``lineup_risk_score`` between
+0 and 1 for each team so you can capture last-minute uncertainty before it is
+fully reflected in the betting lines.
+
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
 for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
 enable this feature. ``OPENAI_API_KEY`` must also be configured.
