@@ -39,9 +39,21 @@ def calculate_bet_size(
 
 # Simple bankroll update helper
 
-def update_bankroll(bankroll: float, stake: float, result: Literal["win", "loss"], odds: float) -> float:
-    """Return bankroll after applying bet result."""
+def update_bankroll(
+    bankroll: float, stake: float, result: Literal["win", "loss", "push"], odds: float
+) -> float:
+    """Return bankroll after applying bet result.
+
+    ``result`` may be ``"win"``, ``"loss"`` or ``"push"``. ``"push"``
+    leaves the bankroll unchanged. Any other value raises ``ValueError``
+    to prevent silent mistakes.
+    """
+
     if result == "win":
         profit = stake * american_odds_to_payout(odds)
         return bankroll + profit
-    return bankroll - stake
+    if result == "loss":
+        return bankroll - stake
+    if result == "push":
+        return bankroll
+    raise ValueError(f"Unknown result '{result}'")
