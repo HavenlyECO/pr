@@ -294,72 +294,82 @@ def evaluate_h2h_all_tomorrow(
             continue
 
         if verbose:
-            print(f"  Bookmakers found: {[b.get('title') or b.get('key') for b in bookmakers]}")
+            print(
+                f"  Bookmakers found: {[b.get('title') or b.get('key') for b in bookmakers]}"
+            )
+
+        event_rows: list[dict] = []
+        implied_probs: list[float] = []
 
         for book in bookmakers:
-                book_name = book.get("title") or book.get("key")
+            book_name = book.get("title") or book.get("key")
+            if verbose:
+                print(f"    Bookmaker: {book_name}")
+
+            if not book.get("markets"):
                 if verbose:
-                    print(f"    Bookmaker: {book_name}")
-                
-                if not book.get("markets"):
+                    print("      Skipped: no markets in this bookmaker")
+                continue
+
+            for market in book.get("markets", []):
+                if verbose:
+                    print(
+                        f"      Market key: {market.get('key')}, desc: {market.get('description')}"
+                    )
+
+                if market.get("key") != "h2h":
                     if verbose:
-                        print("      Skipped: no markets in this bookmaker")
+                        print("        Skipped: not a h2h market")
                     continue
-                
-                for market in book.get("markets", []):
+
+                if not market.get("outcomes"):
                     if verbose:
-                        print(f"      Market key: {market.get('key')}, desc: {market.get('description')}")
-                    
-                    if market.get("key") != "h2h":
-                        if verbose:
-                            print("        Skipped: not a h2h market")
-                        continue
-                    
-                    if not market.get("outcomes"):
-                        if verbose:
-                            print("        Skipped: no outcomes in market")
-                        continue
-                    
-                    if len(market.get("outcomes", [])) != 2:
-                        if verbose:
-                            print("        Skipped: h2h market does not have exactly 2 outcomes")
-                        continue
-                    
-                    outcome1, outcome2 = market["outcomes"]
-                    team1 = outcome1.get("name")
-                    team2 = outcome2.get("name")
-                    price1 = outcome1.get("price")
-                    price2 = outcome2.get("price")
-                    
-                    if team1 is None or team2 is None or price1 is None or price2 is None:
-                        if verbose:
-                            print("        Skipped: missing team name or price")
-                        continue
-                    
-                    prob = predict_h2h_probability(model_path, price1, price2)
+                        print("        Skipped: no outcomes in market")
+                    continue
 
-                    implied = american_odds_to_prob(price1)
-                    edge = prob - implied
-                    payout = american_odds_to_payout(price1)
-                    ev = edge * payout
-
-                    sentiment = fetch_ticket_sentiment(event_id)
-                    team1_pct = team2_pct = None
-                    fade = False
-                    if sentiment:
-                        team1_pct = sentiment.get(team1)
-                        team2_pct = sentiment.get(team2)
-                        if team1_pct is not None and team1_pct >= 70 and edge < 0:
-                            fade = True
-
+                if len(market.get("outcomes", [])) != 2:
                     if verbose:
                         print(
-                            f"        EVAL: {team1}({price1}) vs {team2}({price2}) "
-                            f"prob={prob:.3f} implied={implied:.3f} edge={edge:.3f} "
-                            f"payout={payout:.3f} EV={ev:.4f}"
+                            "        Skipped: h2h market does not have exactly 2 outcomes"
                         )
+                    continue
 
-                    results.append({
+                outcome1, outcome2 = market["outcomes"]
+                team1 = outcome1.get("name")
+                team2 = outcome2.get("name")
+                price1 = outcome1.get("price")
+                price2 = outcome2.get("price")
+
+                if team1 is None or team2 is None or price1 is None or price2 is None:
+                    if verbose:
+                        print("        Skipped: missing team name or price")
+                    continue
+
+                prob = predict_h2h_probability(model_path, price1, price2)
+
+                implied = american_odds_to_prob(price1)
+                edge = prob - implied
+                payout = american_odds_to_payout(price1)
+                ev = edge * payout
+
+                sentiment = fetch_ticket_sentiment(event_id)
+                team1_pct = team2_pct = None
+                fade = False
+                if sentiment:
+                    team1_pct = sentiment.get(team1)
+                    team2_pct = sentiment.get(team2)
+                    if team1_pct is not None and team1_pct >= 70 and edge < 0:
+                        fade = True
+
+                if verbose:
+                    print(
+                        f"        EVAL: {team1}({price1}) vs {team2}({price2}) "
+                        f"prob={prob:.3f} implied={implied:.3f} edge={edge:.3f} "
+                        f"payout={payout:.3f} EV={ev:.4f}"
+                    )
+
+                event_rows.append(
+                    {
                         "game": f"{team1} vs {team2}",
                         "bookmaker": book_name,
                         "team1": team1,
@@ -375,7 +385,19 @@ def evaluate_h2h_all_tomorrow(
                         "ticket_percent_team1": team1_pct,
                         "ticket_percent_team2": team2_pct,
                         "public_fade": fade,
-                    })
+                    }
+                )
+                implied_probs.append(implied)
+
+        if not event_rows:
+            continue
+
+        diff = max(implied_probs) - min(implied_probs)
+        for row in event_rows:
+            row["market_disagreement_score"] = diff
+            row["weighted_edge"] = row["edge"] * (1 + diff)
+            row["weighted_expected_value"] = row["expected_value"] * (1 + diff)
+            results.append(row)
     
     if verbose:
         print(f"DEBUG: Total evaluated h2h: {len(results)}")
@@ -399,6 +421,9 @@ def print_h2h_projections_table(projections: list) -> None:
             edge = row.get("edge")
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
 
+            w_edge = row.get("weighted_edge")
+            w_edge_str = f"{w_edge*100:+.1f}%" if w_edge is not None else "N/A"
+
             ev = row.get("expected_value")
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
@@ -414,6 +439,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
+                w_edge_str,
                 ev_str,
                 "FADE" if row.get("public_fade") else "",
                 row.get("bookmaker", ""),
@@ -422,7 +448,18 @@ def print_h2h_projections_table(projections: list) -> None:
         print(
             tabulate(
                 table_data,
-                headers=["Team 1", "Odds", "Team 2", "Odds", "Win Prob", "Edge", "EV", "Fade", "Book"],
+                headers=[
+                    "Team 1",
+                    "Odds",
+                    "Team 2",
+                    "Odds",
+                    "Win Prob",
+                    "Edge",
+                    "W.Edge",
+                    "EV",
+                    "Fade",
+                    "Book",
+                ],
                 tablefmt="pretty",
             )
         )
@@ -434,6 +471,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "PRICE2",
             "P(WIN)",
             "EDGE",
+            "W_EDGE",
             "EV",
             "FADE",
             "BOOK",
@@ -449,6 +487,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "PRICE2": col_width("price2", 6),
             "P(WIN)": 8,
             "EDGE": 8,
+            "W_EDGE": 8,
             "EV": 8,
             "FADE": 6,
             "BOOK": col_width("bookmaker", 8),
@@ -463,6 +502,8 @@ def print_h2h_projections_table(projections: list) -> None:
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
             edge = row.get("edge")
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
+            w_edge = row.get("weighted_edge")
+            w_edge_str = f"{w_edge*100:+.1f}%" if w_edge is not None else "N/A"
             ev = row.get("expected_value")
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
@@ -478,6 +519,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
+                w_edge_str,
                 ev_str,
                 "FADE" if row.get("public_fade") else "",
                 row.get("bookmaker", ""),
@@ -503,7 +545,7 @@ def log_bet_recommendations(
 
     lines: list[str] = []
     for row in projections:
-        edge = row.get("edge")
+        edge = row.get("weighted_edge", row.get("edge"))
         prob = row.get("projected_team1_win_probability")
         if edge is None or prob is None or edge <= threshold:
             continue

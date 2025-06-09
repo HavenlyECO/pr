@@ -43,7 +43,7 @@ def log_bets(
     logs = _load_logs(path)
 
     for row in projections:
-        edge = row.get("edge")
+        edge = row.get("weighted_edge", row.get("edge"))
         prob = row.get("projected_team1_win_probability")
         implied = row.get("implied_team1_win_probability")
         if edge is None or prob is None or implied is None or edge <= threshold:
@@ -60,7 +60,9 @@ def log_bets(
             "odds": odds,
             "predicted_prob": prob,
             "implied_prob": implied,
-            "edge": edge,
+            "edge": row.get("edge"),
+            "weighted_edge": edge,
+            "market_disagreement_score": row.get("market_disagreement_score"),
             "bookmaker": bookmaker,
             "stake": None,
             "outcome": None,
