@@ -42,6 +42,10 @@ if not API_KEY:
 # Minimum edge required for a bet to be recommended
 EDGE_THRESHOLD = 0.06
 
+# Risk filter parameters
+RISK_EDGE_THRESHOLD = 0.05
+RISK_ODDS_LIMIT = -170
+
 # Sportsbooks considered "soft" for pricing comparisons. These lines often
 # lag sharper markets, creating short-lived arbitrage opportunities when they
 # disagree.
@@ -82,6 +86,16 @@ def _check_stale_line(event_id: str, bookmaker: str, price: float, *, threshold:
     hist[bookmaker] = (price, now)
     _STALE_HISTORY[event_id] = hist
     return flagged
+
+
+def risk_filter(edge: float | None, odds: float | None) -> float:
+    """Return a weight of 0 when ``edge`` or ``odds`` fail risk checks."""
+
+    if edge is None or odds is None:
+        return 1.0
+    if edge < RISK_EDGE_THRESHOLD or odds <= RISK_ODDS_LIMIT:
+        return 0.0
+    return 1.0
 
 
 def create_simple_fallback_model(model_path):
@@ -459,6 +473,10 @@ def evaluate_h2h_all_tomorrow(
             weight = 1 + diff + (soft_spread or 0)
             if row.get("stale_line_flag"):
                 weight *= 1.1
+            r_weight = risk_filter(row.get("edge"), row.get("price1"))
+            row["risk_weight"] = r_weight
+            row["risk_block_flag"] = r_weight == 0.0
+            weight *= r_weight
             row["weighted_edge"] = row["edge"] * weight
             row["weighted_expected_value"] = row["expected_value"] * weight
             results.append(row)
@@ -518,6 +536,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 f"{row.get('market_maker_mirror_score', 0.0)*100:+.1f}%" if row.get('market_maker_mirror_score') is not None else "N/A",
                 "FADE" if row.get("public_fade") else "",
                 "STALE" if row.get("stale_line_flag") else "",
+                "RISK" if row.get("risk_block_flag") else "",
                 row.get("bookmaker", ""),
             ])
 
@@ -533,13 +552,14 @@ def print_h2h_projections_table(projections: list) -> None:
                     "Edge",
                     "W.Edge",
                     "EV",
-                "SoftSpr",
-                "MB.Edge",
-                "MM.Score",
-                "Fade",
-                "Stale",
-                "Book",
-            ],
+                    "SoftSpr",
+                    "MB.Edge",
+                    "MM.Score",
+                    "Fade",
+                    "Stale",
+                    "Risk",
+                    "Book",
+                ],
                 tablefmt="pretty",
             )
         )
@@ -558,6 +578,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "MM_SCORE",
             "FADE",
             "STALE",
+            "RISK",
             "BOOK",
         ]
 
@@ -577,6 +598,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "MB_EDGE": 8,
             "MM_SCORE": 8,
             "FADE": 6,
+            "RISK": 6,
             "BOOK": col_width("bookmaker", 8),
             "STALE": 6,
         }
@@ -622,6 +644,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 f"{row.get('market_maker_mirror_score', 0.0)*100:+.1f}%" if row.get('market_maker_mirror_score') is not None else "N/A",
                 "FADE" if row.get("public_fade") else "",
                 "STALE" if row.get("stale_line_flag") else "",
+                "RISK" if row.get("risk_block_flag") else "",
                 row.get("bookmaker", ""),
             ]
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
@@ -646,6 +669,8 @@ def log_bet_recommendations(
     lines: list[str] = []
     for row in projections:
         edge = row.get("weighted_edge", row.get("edge"))
+        if row.get("risk_block_flag"):
+            continue
         prob = row.get("projected_team1_win_probability")
         if edge is None or prob is None or edge <= threshold:
             continue
