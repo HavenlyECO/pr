@@ -757,6 +757,12 @@ def train_classifier_cli(argv: list[str]) -> None:
         help="Half-life in days for weighting recent games",
     )
     parser.add_argument(
+        "--recency-multiplier",
+        type=float,
+        default=0.7,
+        help="Weight to apply to recent stat columns when combining with season averages",
+    )
+    parser.add_argument(
         "--date-column",
         help="Column name containing game dates for recency weighting",
     )
@@ -769,6 +775,7 @@ def train_classifier_cli(argv: list[str]) -> None:
             verbose=args.verbose,
             recent_half_life=args.recent_half_life,
             date_column=args.date_column,
+            recency_multiplier=args.recency_multiplier,
         )
     else:
         train_moneyline_classifier(
@@ -778,6 +785,7 @@ def train_classifier_cli(argv: list[str]) -> None:
             verbose=args.verbose,
             recent_half_life=args.recent_half_life,
             date_column=args.date_column,
+            recency_multiplier=args.recency_multiplier,
         )
 
 
