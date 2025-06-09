@@ -157,6 +157,11 @@ from social media and news feeds. It assigns a ``lineup_risk_score`` between
 0 and 1 for each team so you can capture last-minute uncertainty before it is
 fully reflected in the betting lines.
 
+To spot markets whipped into a frenzy, the :func:`attach_hype_trend_scores`
+helper compiles recent social posts for each team and has OpenAI judge how much
+hype or "can't lose" sentiment is present. This numeric ``hype_trend_score``
+helps identify overreactions driven more by buzz than by fundamentals.
+
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
 for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
 enable this feature. ``OPENAI_API_KEY`` must also be configured.
