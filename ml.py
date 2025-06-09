@@ -100,6 +100,25 @@ def public_fade_flag(ticket_percent: float, line_delta: float, *, threshold: flo
     return int(ticket_percent >= threshold and line_delta < 0)
 
 
+def reverse_line_move_flag(ticket_percent: float, line_delta: float, *, pivot: float = 50.0) -> int:
+    """Return ``1`` when the line moves opposite the public betting split.
+
+    ``ticket_percent`` represents the percentage of tickets on the team for this
+    row. ``line_delta`` should be ``opening_odds - current_odds`` where positive
+    values mean the price shortened. A reverse line move occurs when the market
+    shifts toward the side receiving fewer tickets or drifts away from the heavy
+    public side.
+    """
+
+    if pd.isna(ticket_percent) or pd.isna(line_delta):
+        return 0
+    if ticket_percent < pivot and line_delta > 0:
+        return 1
+    if ticket_percent > pivot and line_delta < 0:
+        return 1
+    return 0
+
+
 def llm_sharp_context_score(text: str) -> float:
     """Return a score between 0 and 1 from OpenAI about sharp betting context."""
     if openai is None or not OPENAI_API_KEY:
@@ -718,8 +737,14 @@ Modeling is done in regression mode first. You can later apply a probability thr
         df["public_fade_flag"] = df.apply(
             lambda r: public_fade_flag(r["ticket_percent"], r["line_delta"]), axis=1
         )
+        df["reverse_line_move"] = df.apply(
+            lambda r: reverse_line_move_flag(r["ticket_percent"], r["line_delta"]),
+            axis=1,
+        )
         if verbose:
-            print("Computed public_fade_flag from ticket_percent and line_delta")
+            print(
+                "Computed public_fade_flag and reverse_line_move from ticket_percent and line_delta"
+            )
 
     # Generate LLM-based sharp context score if a context column exists
     context_col = next((c for c in df.columns if "context" in c.lower()), None)
