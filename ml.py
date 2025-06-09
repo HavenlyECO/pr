@@ -382,6 +382,39 @@ def llm_hype_trend_social_score(team: str, limit: int = 50) -> float:
     return llm_hype_trend_score(combined[:4000])
 
 
+def llm_sentiment_fakeout_score(text: str) -> float:
+    """Return a score between 0 and 1 for sarcastic or misleading sentiment."""
+    if openai is None or not OPENAI_API_KEY:
+        return 0.0
+    prompt = (
+        "Analyze the following messages for sarcasm, ironic hype or "
+        "other sentiment reversals that might mislead crowd emotion. "
+        "Output a number from 0 to 1 where higher values mean the "
+        "apparent sentiment is likely a fake-out.\nText:\n"
+        + text
+        + "\nScore:"
+    )
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        reply = resp.choices[0].message["content"].strip()
+        return float(reply)
+    except Exception:
+        return 0.0
+
+
+def llm_sentiment_fakeout_social_score(team: str, limit: int = 50) -> float:
+    """Return fakeout sentiment score from social chatter about ``team``."""
+    texts = gather_social_text(team, limit=limit)
+    if not texts:
+        return 0.0
+    combined = "\n".join(texts)
+    return llm_sentiment_fakeout_score(combined[:4000])
+
+
 def attach_managerial_signals(
     df: pd.DataFrame,
     column: str,
@@ -448,6 +481,23 @@ def attach_hype_trend_scores(
     )
     if verbose:
         print(f"Computed hype_trend_score using column '{team_column}'")
+
+
+def attach_sentiment_fakeout_scores(
+    df: pd.DataFrame,
+    team_column: str,
+    *,
+    limit: int = 50,
+    verbose: bool = False,
+) -> None:
+    """Add ``sentiment_fakeout_score`` column based on a team name column."""
+    if team_column not in df.columns:
+        raise ValueError(f"Column '{team_column}' not found in dataframe")
+    df["sentiment_fakeout_score"] = df[team_column].apply(
+        lambda t: llm_sentiment_fakeout_social_score(str(t), limit=limit)
+    )
+    if verbose:
+        print(f"Computed sentiment_fakeout_score using column '{team_column}'")
 
 ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"

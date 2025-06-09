@@ -167,6 +167,13 @@ helper compiles recent social posts for each team and has OpenAI judge how much
 hype or "can't lose" sentiment is present. This numeric ``hype_trend_score``
 helps identify overreactions driven more by buzz than by fundamentals.
 
+The :func:`attach_sentiment_fakeout_scores` helper goes a step further by
+scanning chat messages, Twitter replies and Telegram threads for sarcasm or
+exaggerated hype. OpenAI assigns a ``sentiment_fakeout_score`` from 0 to 1 where
+higher values indicate that crowd sentiment is likely performative or ironic
+rather than genuinely bullish. Including this feature helps avoid chasing lines
+moved by viral trash talk rather than real conviction.
+
 The ``multi_book_edge_score`` metric compares moneyline prices from Bovada,
 MyBookie and BetUS. The odds from these softer books are converted to implied
 probabilities. The difference between the highest and lowest value for the same
