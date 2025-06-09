@@ -131,6 +131,12 @@ representing ``opening_odds - closing_odds``. When the absolute change
 exceeds 15 points an additional ``line_movement_delta`` flag is set to ``1``
 or ``-1`` depending on the direction of the move.
 
+When ticket sentiment is available an additional ``reverse_line_move`` flag is
+derived. This compares ``line_delta`` to the public ticket percentage and marks
+cases where the odds move away from the popular side (for example when the line
+shortens on a team receiving fewer bets). Such moves can indicate sharp action
+or internal risk adjustments that the public market has yet to fully price in.
+
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the
