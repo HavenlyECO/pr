@@ -671,10 +671,14 @@ def log_bet_recommendations(
 ) -> None:
     """Append bet recommendations to ``log_file``.
 
-    Bets are only logged when their edge exceeds ``threshold`` (defaults to
+    This produces a lightweight, human-readable text log. Bets are only
+    logged when their edge exceeds ``threshold`` (defaults to
     ``EDGE_THRESHOLD``). The edge is the model's predicted win probability minus
     the implied probability from the offered odds. When ``bankroll`` is
     supplied the recommended stake is calculated using ``calculate_bet_size``.
+
+    For a structured JSONL record of the same bets use :func:`log_bets` which
+    writes to ``bet_log.jsonl``.
     """
 
     lines: list[str] = []
@@ -931,6 +935,10 @@ def main() -> None:
     log_bet_recommendations(projections, threshold=EDGE_THRESHOLD)
     # Also log detailed bet information for later ROI analysis
     log_bets(projections, threshold=EDGE_THRESHOLD)
+    print(
+        "Recommendations appended to bet_recommendations.log; "
+        "detailed JSON records saved to bet_log.jsonl"
+    )
 
 
 if __name__ == '__main__':
