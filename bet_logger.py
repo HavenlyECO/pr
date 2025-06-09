@@ -43,6 +43,8 @@ def log_bets(
     logs = _load_logs(path)
 
     for row in projections:
+        if row.get("risk_block_flag"):
+            continue
         edge = row.get("weighted_edge", row.get("edge"))
         prob = row.get("projected_team1_win_probability")
         implied = row.get("implied_team1_win_probability")

@@ -329,3 +329,11 @@ in decimal form, the fraction of bankroll to wager is::
 where ``b`` is ``odds - 1``. This approach allocates more to high-edge plays and
 reduces exposure when the edge is slim. Use the ``kelly_fraction`` argument to
 scale down from full Kelly if desired.
+
+## Risk Filter
+
+To avoid overexposing the bankroll to marginal situations the ``evaluate_h2h``
+logic applies a simple risk filter. Bets with a modeled edge below 5% or
+moneyline odds worse than ``-170`` are assigned a zero weight. They will not be
+logged or factored into weighted edge calculations, helping protect ROI by
+discarding low-value opportunities.
