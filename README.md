@@ -164,6 +164,11 @@ automatically to prevent leaking post-game information into the model.
 
 Continuous numeric features like ERA, SLG and line delta are automatically
 standardized during training to improve optimizer convergence.
+Another useful metric is ``bullpenERA_vs_opponentSLG`` which subtracts an
+opponent's slugging percentage from a team's bullpen ERA. Include
+``bullpen_ERA`` and ``opponent_SLG_adjusted`` columns in your dataset and the
+trainer will derive this value automatically to highlight volatile late-game
+matchups.
 During training, probability quality is reported using AUC and Brier score
 rather than simple accuracy.
 When live-inning columns are available the validation set is also segmented into

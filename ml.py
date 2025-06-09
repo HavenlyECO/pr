@@ -134,6 +134,19 @@ def reverse_line_move_flag(ticket_percent: float, line_delta: float, *, pivot: f
     return 0
 
 
+def bullpen_era_vs_opponent_slg(bullpen_era: float, opponent_slg: float) -> float:
+    """Return bullpen ERA minus opponent slugging percentage.
+
+    A positive value indicates a weaker bullpen relative to the power of the
+    opposing lineup. ``opponent_slg`` can represent season-long or recent form
+    depending on the dataset. Missing values yield ``NaN``.
+    """
+
+    if pd.isna(bullpen_era) or pd.isna(opponent_slg):
+        return float("nan")
+    return float(bullpen_era) - float(opponent_slg)
+
+
 def llm_sharp_context_score(text: str) -> float:
     """Return a score between 0 and 1 from OpenAI about sharp betting context."""
     if openai is None or not OPENAI_API_KEY:
@@ -968,6 +981,17 @@ Modeling is done in regression mode first. You can later apply a probability thr
         if verbose:
             print(
                 f"Computed managerial signals using OpenAI on column '{commentary_col}'"
+            )
+
+    bullpen_col = next((c for c in df.columns if "bullpen_era" in c.lower()), None)
+    slg_col = next((c for c in df.columns if "opponent_slg" in c.lower()), None)
+    if bullpen_col and slg_col:
+        df["bullpenERA_vs_opponentSLG"] = df.apply(
+            lambda r: bullpen_era_vs_opponent_slg(r[bullpen_col], r[slg_col]), axis=1
+        )
+        if verbose:
+            print(
+                f"Computed bullpenERA_vs_opponentSLG using columns '{bullpen_col}' and '{slg_col}'"
             )
 
     features_df = df.drop(columns=["home_team_win"])
