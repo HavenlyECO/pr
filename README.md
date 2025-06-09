@@ -2,6 +2,20 @@
 
 This script fetches odds from [The Odds API](https://the-odds-api.com/).
 
+## Installation
+
+Install the core dependencies with:
+
+```bash
+pip install -r requirements.txt
+```
+
+For optional features such as memory profiling and colored table output, also install the development extras:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ## Usage
 
 1. Set an environment variable with your API key:

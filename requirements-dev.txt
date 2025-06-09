@@ -1,0 +1,5 @@
+# Additional dependencies useful for development and optional features
+# These are not required for the core odds fetching functionality
+psutil>=5.9
+colorama>=0.4
+tabulate>=0.9

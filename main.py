@@ -18,7 +18,7 @@ try:
     colorama_init(autoreset=True)
 except ImportError:
     print(
-        "Please install tabulate and colorama for improved output: pip install tabulate colorama"
+        "Please install tabulate and colorama for improved output: pip install -r requirements-dev.txt"
     )
     tabulate = None
     Fore = Style = None
