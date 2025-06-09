@@ -46,6 +46,7 @@ EDGE_THRESHOLD = 0.06
 from ml import (
     H2H_MODEL_PATH,
     MONEYLINE_MODEL_PATH,
+    train_dual_head_classifier,
     predict_h2h_probability,
     train_moneyline_classifier,
     predict_moneyline_probability,
@@ -677,9 +678,9 @@ def train_classifier_cli(argv: list[str]) -> None:
     parser.add_argument("--model-out", default=str(MONEYLINE_MODEL_PATH))
     parser.add_argument(
         "--features-type",
-        choices=["pregame", "live"],
+        choices=["pregame", "live", "dual"],
         default="pregame",
-        help="Which feature set to use for training",
+        help="Which feature set to use for training (or 'dual' for both)",
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
@@ -693,14 +694,23 @@ def train_classifier_cli(argv: list[str]) -> None:
     )
     args = parser.parse_args(argv)
 
-    train_moneyline_classifier(
-        args.dataset,
-        model_out=args.model_out,
-        features_type=args.features_type,
-        verbose=args.verbose,
-        recent_half_life=args.recent_half_life,
-        date_column=args.date_column,
-    )
+    if args.features_type == "dual":
+        train_dual_head_classifier(
+            args.dataset,
+            model_out=args.model_out,
+            verbose=args.verbose,
+            recent_half_life=args.recent_half_life,
+            date_column=args.date_column,
+        )
+    else:
+        train_moneyline_classifier(
+            args.dataset,
+            model_out=args.model_out,
+            features_type=args.features_type,
+            verbose=args.verbose,
+            recent_half_life=args.recent_half_life,
+            date_column=args.date_column,
+        )
 
 
 def predict_classifier_cli(argv: list[str]) -> None:

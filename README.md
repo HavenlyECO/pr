@@ -158,7 +158,9 @@ enable this feature. ``OPENAI_API_KEY`` must also be configured.
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the
-other and avoid mixing the two, which can lead to data leakage.
+other and avoid mixing the two, which can lead to data leakage. Passing
+``dual`` for this option builds a model with separate heads trained on each
+feature group.
 Any columns containing terms such as ``result`` or ``final`` are discarded
 automatically to prevent leaking post-game information into the model.
 
@@ -200,6 +202,12 @@ To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
 python main.py train_classifier --dataset=training_data.csv --features-type=pregame
+```
+
+To train both heads at once:
+
+```bash
+python main.py train_classifier --dataset=training_data.csv --features-type=dual
 ```
 
 Pass ``--recent-half-life`` to weight newer rows more heavily based on a date column
