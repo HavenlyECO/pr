@@ -2,6 +2,9 @@
 import os
 import pandas as pd
 import zipfile
+# Retrosheet archives contain fixed-width text files (GL####.TXT).
+# This script extracts those TXT files and converts them into a CSV suitable
+# for model training.
 import requests
 from pathlib import Path
 from datetime import datetime
@@ -42,7 +45,7 @@ def download_retrosheet_data(year):
 
 
 def extract_zip_file(zip_path):
-    """Extract files from retrosheet ZIP file"""
+    """Extract the GL####.TXT log from a Retrosheet ZIP archive"""
     if not zip_path or not zip_path.exists():
         return None
     try:
@@ -93,7 +96,7 @@ FIELD_SPECS = [
 
 
 def parse_retrosheet_file(file_path, year):
-    """Parse Retrosheet game log file"""
+    """Parse a GL####.TXT game log and return a dataframe"""
     if not file_path or not file_path.exists():
         return None
 
