@@ -28,6 +28,27 @@ export THE_ODDS_API_KEY=<your api key>
 If the variable is omitted the script runs in a limited *test mode* without
 making any API requests.
 
+### Quick start
+
+To fetch live odds, compute all features and output today's bet recommendations:
+
+```bash
+python3 main.py --run
+```
+
+This command pulls the latest odds, computes every feature and prints a
+dashboard with the top edges. Results are also saved to ``bet_log.jsonl`` and
+``bet_recommendations.log``.
+
+To build datasets and retrain the models in one step (example years shown):
+
+```bash
+python3 main.py --train --years 2018-2024
+```
+
+The old subcommands remain available for advanced workflows but ``--run`` and
+``--train`` are the recommended one-click options.
+
 2. Run the script (moneyline odds shown by default):
 
 ```bash

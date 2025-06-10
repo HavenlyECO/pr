@@ -58,6 +58,7 @@ SOFT_BOOKS = ("bovada", "mybookie", "betus")
 from ml import (
     H2H_MODEL_PATH,
     MONEYLINE_MODEL_PATH,
+    train_h2h_classifier,
     train_dual_head_classifier,
     predict_h2h_probability,
     train_moneyline_classifier,
@@ -829,6 +830,97 @@ def list_market_keys(
         print(f"Market key: {key}  {f'- {desc}' if desc else ''}")
 
 
+def _parse_year_range(text: str) -> range:
+    """Return ``range`` object from YEAR or YEAR-YEAR string."""
+    if not text:
+        return range(2018, datetime.utcnow().year)
+    if "-" in text:
+        start, end = text.split("-", 1)
+    else:
+        start = end = text
+    start_i = int(start)
+    end_i = int(end)
+    if start_i > end_i:
+        start_i, end_i = end_i, start_i
+    return range(start_i, end_i + 1)
+
+
+def _summarize_projections(projections: list[ProjectionRow]) -> list[ProjectionRow]:
+    """Return the best row per event ordered by weighted EV descending."""
+
+    best_rows: dict[str, ProjectionRow] = {}
+    for row in projections:
+        event_id = row.get(K_EVENT_ID)
+        if not event_id:
+            continue
+        ev = row.get(K_WEIGHTED_EV, row.get(K_EXPECTED_VALUE) or 0.0)
+        current = best_rows.get(event_id)
+        current_ev = 0.0
+        if current is not None:
+            current_ev = current.get(K_WEIGHTED_EV, current.get(K_EXPECTED_VALUE) or 0.0)
+        if current is None or ev > current_ev:
+            best_rows[event_id] = row
+
+    ordered = sorted(best_rows.values(), key=lambda r: r.get(K_WEIGHTED_EV, r.get(K_EXPECTED_VALUE) or 0.0), reverse=True)
+    return ordered
+
+
+def run_pipeline(
+    *, sport: str = "baseball_mlb", regions: str = "us", model_path: str = str(H2H_MODEL_PATH), verbose: bool = False
+) -> None:
+    """Fetch live data, compute features, run predictions and print a dashboard."""
+
+    projections = evaluate_h2h_all_tomorrow(
+        sport,
+        model_path,
+        regions=regions,
+        verbose=verbose,
+    )
+
+    if not projections:
+        print("No data returned from API")
+        return
+
+    print("\n===== PROJECTED WIN PROBABILITIES =====")
+    print_h2h_projections_table(projections)
+    log_bet_recommendations(projections, threshold=EDGE_THRESHOLD)
+    log_bets(projections, threshold=EDGE_THRESHOLD)
+
+    dashboard_rows = _summarize_projections(projections)
+    if dashboard_rows:
+        print("\n===== TODAY'S TOP RECOMMENDATIONS =====")
+        print_h2h_projections_table(dashboard_rows[:10])
+
+    print(
+        "Recommendations appended to bet_recommendations.log; "
+        "detailed JSON records saved to bet_log.jsonl"
+    )
+
+
+def train_pipeline(*, years: str = "2018-2024", sport: str = "baseball_mlb", verbose: bool = False) -> None:
+    """Build datasets and train all models for ``sport`` over ``years``."""
+
+    year_range = _parse_year_range(years)
+
+    import integrate_data
+
+    integrate_data.YEARS_TO_PROCESS = year_range
+    integrate_data.main()
+    dataset_path = integrate_data.OUTPUT_FILE
+
+    train_dual_head_classifier(dataset_path, verbose=verbose)
+
+    start = min(year_range)
+    end = max(year_range)
+    train_h2h_classifier(
+        sport,
+        f"{start}-01-01",
+        f"{end}-12-31",
+        verbose=verbose,
+    )
+    print("Training complete.")
+
+
 def train_classifier_cli(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description="Train moneyline classifier")
     parser.add_argument("--dataset", required=True, help="CSV file with training data")
@@ -1007,29 +1099,34 @@ def scores_cli(argv: list[str]) -> None:
         print(f"Scores saved to {SCORES_HISTORY_FILE}")
 
 
-def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] == "train_classifier":
-        train_classifier_cli(sys.argv[2:])
+def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+
+    if argv and argv[0] == "train_classifier":
+        train_classifier_cli(argv[1:])
         return
-    if len(sys.argv) > 1 and sys.argv[1] == "predict_classifier":
-        predict_classifier_cli(sys.argv[2:])
+    if argv and argv[0] == "predict_classifier":
+        predict_classifier_cli(argv[1:])
         return
-    if len(sys.argv) > 1 and sys.argv[1] == "continuous_train_classifier":
-        continuous_train_classifier_cli(sys.argv[2:])
+    if argv and argv[0] == "continuous_train_classifier":
+        continuous_train_classifier_cli(argv[1:])
         return
-    if len(sys.argv) > 1 and sys.argv[1] == "continuous_train_moneyline":
-        continuous_train_moneyline_cli(sys.argv[2:])
+    if argv and argv[0] == "continuous_train_moneyline":
+        continuous_train_moneyline_cli(argv[1:])
         return
-    if len(sys.argv) > 1 and sys.argv[1] == "continuous_train_mirror":
-        continuous_train_mirror_cli(sys.argv[2:])
+    if argv and argv[0] == "continuous_train_mirror":
+        continuous_train_mirror_cli(argv[1:])
         return
-    if len(sys.argv) > 1 and sys.argv[1] == "scores":
-        scores_cli(sys.argv[2:])
+    if argv and argv[0] == "scores":
+        scores_cli(argv[1:])
         return
 
     parser = argparse.ArgumentParser(
         description='Display projected head-to-head win probabilities for tomorrow (autofetch event IDs).'
     )
+    parser.add_argument('--run', action='store_true', help='Execute full live pipeline and exit')
+    parser.add_argument('--train', action='store_true', help='Run end-to-end training pipeline and exit')
+    parser.add_argument('--years', help='Year or YEAR-YEAR range for training')
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
     parser.add_argument('--model', default=str(H2H_MODEL_PATH), help='Path to trained ML model')
@@ -1047,7 +1144,21 @@ def main() -> None:
         action='store_true',
         help='List upcoming events for the given sport and exit'
     )
-    args = parser.parse_args()
+    args, remaining = parser.parse_known_args(argv)
+
+    if args.run:
+        run_pipeline(
+            sport=args.sport,
+            regions=args.regions,
+            model_path=args.model,
+            verbose=args.verbose,
+        )
+        return
+    if args.train:
+        train_pipeline(years=args.years or '2018-2024', sport=args.sport, verbose=args.verbose)
+        return
+
+    argv = remaining
 
     if args.event_odds:
         if not args.event_id:
