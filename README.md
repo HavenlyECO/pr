@@ -331,6 +331,14 @@ ready for model training:
 python3 integrate_data.py
 ```
 
+If you only need the Retrosheet results without any odds data, run
+``process_retrosheet.py``. It downloads the last several seasons and produces
+``retrosheet_training_data.csv`` with rolling team stats and synthetic odds:
+
+```bash
+python3 process_retrosheet.py
+```
+
 The resulting CSV can then be supplied to ``train_classifier`` as shown above.
 
 To predict with a trained model supply feature values as a JSON string:
