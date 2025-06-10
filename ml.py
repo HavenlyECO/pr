@@ -1215,7 +1215,9 @@ def _train(
     out_path = Path(model_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "wb") as f:
-        pickle.dump(model, f)
+        # Persist the training columns alongside the model so inference can
+        # easily align feature order.
+        pickle.dump((model, list(X.columns)), f)
 
     print(f"Model saved to {out_path}")
     return model
@@ -1265,12 +1267,21 @@ def predict_h2h_probability(
     model_path = sanitize_path(model_path)
     with open(model_path, "rb") as f:
         try:
-            model = pickle.load(f)
+            model_info = pickle.load(f)
         except AttributeError as exc:
             raise RuntimeError(
                 "Invalid or outdated model file. Train a new classifier using 'python3 main.py train_classifier'."
             ) from exc
+    if isinstance(model_info, tuple):
+        model, cols = model_info
+    else:
+        model = model_info
+        cols = None
+
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
+    if cols is not None:
+        df = df.reindex(cols, axis=1, fill_value=0)
+
     proba = model.predict_proba(df)[0][1]
     return float(proba)
 
@@ -1634,8 +1645,18 @@ def predict_moneyline_probability(
     """Predict win probability using a trained moneyline classifier."""
     model_path = sanitize_path(model_path)
     with open(model_path, "rb") as f:
-        model = pickle.load(f)
+        model_info = pickle.load(f)
+
+    if isinstance(model_info, tuple):
+        model, cols = model_info
+    else:
+        model = model_info
+        cols = getattr(model, "pregame_cols", None)
+
     df = pd.DataFrame([features])
+    if cols is not None:
+        df = df.reindex(cols, axis=1, fill_value=0)
+
     proba = model.predict_proba(df)[0][1]
     return float(proba)
 
