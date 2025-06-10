@@ -32,6 +32,13 @@ def build_moneyline_dataset_from_cache(cache_dir: str | Path = DEFAULT_CACHE_DIR
 
         data = cached.get("data") if isinstance(cached, dict) and "data" in cached else cached
 
+        # Some API responses store a single event as a dictionary rather than a
+        # list. Wrap it so the existing iteration logic still works.
+        if isinstance(data, dict):
+            if verbose:
+                print(f"Wrapping single event from {fp.name} into list")
+            data = [data]
+
         if not isinstance(data, list):
             continue
 
