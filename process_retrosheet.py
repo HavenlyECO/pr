@@ -15,6 +15,7 @@ import json
 import os
 import zipfile
 from pathlib import Path
+from datetime import datetime
 
 import pandas as pd
 import requests
@@ -23,7 +24,10 @@ DATA_DIR = Path("retrosheet_data")
 ODDS_CACHE_DIR = DATA_DIR / "odds_cache"
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 OUTPUT_FILE = "retrosheet_training_data.csv"
-YEARS = range(2018, 2026)  # inclusive
+# Only download completed seasons. Retrosheet typically releases data
+# for year ``YYYY`` at the beginning of the following year, so limit the
+# range to the year prior to the current one.
+YEARS = range(2018, datetime.now().year)
 BASE = "https://www.retrosheet.org/gamelogs"
 
 
@@ -208,11 +212,24 @@ def main() -> None:
         )
         long[f"rolling_run_diff_{n}"] = long[f"rolling_runs_scored_{n}"] - long[f"rolling_runs_allowed_{n}"]
 
-    home_feats = long[long["is_home"] == 1].drop(columns=["opp", "runs_scored", "runs_allowed", "win", "is_home"]).rename(columns={"team": "home_team"})
-    away_feats = long[long["is_home"] == 0].drop(columns=["opp", "runs_scored", "runs_allowed", "win", "is_home"]).rename(columns={"team": "visiting_team"})
+    home_feats = (
+        long[long["is_home"] == 1]
+        .drop(columns=["opp", "runs_scored", "runs_allowed", "win", "is_home"])
+        .rename(columns={"team": "home_team"})
+    )
+    home_feats = home_feats.add_prefix("home_")
+    home_feats.rename(columns={"home_date": "date", "home_home_team": "home_team"}, inplace=True)
+
+    away_feats = (
+        long[long["is_home"] == 0]
+        .drop(columns=["opp", "runs_scored", "runs_allowed", "win", "is_home"])
+        .rename(columns={"team": "visiting_team"})
+    )
+    away_feats = away_feats.add_prefix("visiting_")
+    away_feats.rename(columns={"visiting_date": "date", "visiting_visiting_team": "visiting_team"}, inplace=True)
 
     df = df.merge(home_feats, on=["date", "home_team"], how="left")
-    df = df.merge(away_feats, on=["date", "visiting_team"], how="left", suffixes=("_home", "_away"))
+    df = df.merge(away_feats, on=["date", "visiting_team"], how="left")
 
     defaults = {
         "rolling_win_pct_5": 0.5,
