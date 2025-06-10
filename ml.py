@@ -1043,6 +1043,14 @@ def _train(
     # Ensure training data only contains numeric columns
     X = pd.DataFrame(X).select_dtypes(include=[np.number, bool]).fillna(0)
 
+    # Remove rows where the target is missing
+    mask = pd.Series(y).notna()
+    if mask.sum() != len(y):
+        X = X.loc[mask]
+        y = pd.Series(y)[mask]
+        if sample_weight is not None:
+            sample_weight = pd.Series(sample_weight)[mask]
+
     ctx = memory_usage("train_split") if profile_memory else nullcontext()
     with ctx:
         if sample_weight is not None:
