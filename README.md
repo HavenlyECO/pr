@@ -455,18 +455,3 @@ Training functions in ``ml.py`` accept a ``profile_memory`` flag. When set to
 heavy pandas operations and model fitting is printed to the console. This can
 help identify bottlenecks when working with large datasets.
 
-## Training from Cached Data
-
-The ``train_model.py`` helper can build a model directly from cached API
-responses saved under ``h2h_data/api_cache``. To train using the cached data and
-print progress messages, run:
-
-```bash
-python3 train_model.py --use-cache --verbose
-```
-
-If you only wish to inspect the cached files for debugging, execute:
-
-```bash
-python3 train_model.py --examine-cache --verbose
-```
