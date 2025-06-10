@@ -349,6 +349,31 @@ year. If the supplied ``--start-date`` is older than that window, the
 continuous training command automatically clamps it to the most recent date
 allowed by the API.
 
+To record live and recent scores for training data, fetch them using the ``scores`` command:
+
+```bash
+python3 main.py scores --sport=baseball_mlb --days-from=1 --save-history
+```
+
+This saves the latest results to ``h2h_data/scores_history.jsonl`` which can later
+be converted into a training dataset.
+
+To keep a dataset-driven model up to date, run the moneyline continuous training
+command. It retrains from the specified CSV on a fixed interval and also records
+recent scores:
+
+```bash
+python3 main.py continuous_train_moneyline --dataset=training_data.csv \
+    --interval-hours=24 --sport=baseball_mlb
+```
+
+Likewise the market maker mirror model can be refreshed automatically:
+
+```bash
+python3 main.py continuous_train_mirror --dataset=training_data.csv \
+    --interval-hours=24 --sport=baseball_mlb
+```
+
 ## Bet Logging
 
 The project can log recommended bets to ``bet_log.jsonl``. Each entry records
