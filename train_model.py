@@ -44,7 +44,8 @@ class SimpleOddsModel:
 
 
 def examine_cache_files(cache_dir=CACHE_DIR, max_files=5):
-    """Examine what's in the cache files to help debug training issues"""
+    """Print a detailed look at cached API responses for debugging."""
+
     cache_files = list(cache_dir.glob("*.pkl"))
     if not cache_files:
         msg = f"No cache files found in {cache_dir}"
@@ -52,66 +53,101 @@ def examine_cache_files(cache_dir=CACHE_DIR, max_files=5):
         logging.warning(msg)
         return
 
-    print(f"Examining first {min(max_files, len(cache_files))} cache files:")
+    print(
+        f"Found {len(cache_files)} cache files. "
+        f"Examining {min(max_files, len(cache_files))} files in detail."
+    )
 
-    for i, cache_file in enumerate(cache_files[:max_files]):
+    for i, file_path in enumerate(cache_files[:max_files]):
+        print(f"\n{'='*80}\nFile {i+1}: {file_path.name}")
         try:
-            with open(cache_file, "rb") as f:
+            with open(file_path, "rb") as f:
                 data = pickle.load(f)
 
-            print(f"\nFile {i+1}: {cache_file.name}")
-
-            if isinstance(data, dict):
-                print(f"  Contains a dictionary with keys: {list(data.keys())}")
-
-                # Look inside the 'data' field which may contain the actual API response
-                if 'data' in data:
-                    inner_data = data['data']
-
-                    if isinstance(inner_data, list):
-                        print(f"  Data field contains a list of {len(inner_data)} items")
-
-                        if inner_data:
-                            for idx, item in enumerate(inner_data[:1]):  # Look at first item
-                                print(f"  Item {idx} type: {type(item)}")
-
-                                if isinstance(item, dict):
-                                    print(f"  Item {idx} keys: {list(item.keys())}")
-
-                                    # Check for bookmakers
-                                    if 'bookmakers' in item:
-                                        print(f"  Found {len(item['bookmakers'])} bookmakers")
-
-                                        for b_idx, book in enumerate(item['bookmakers'][:1]):  # First bookmaker
-                                            print(f"  Bookmaker {b_idx}: {book.get('key', 'unknown')}")
-
-                                            # Check for markets
-                                            if 'markets' in book:
-                                                print(f"  Found {len(book['markets'])} markets")
-
-                                                for m_idx, market in enumerate(book['markets'][:1]):  # First market
-                                                    print(f"  Market {m_idx} key: {market.get('key', 'unknown')}")
-
-                                                    # Check for h2h market
-                                                    if market.get('key') == 'h2h' and 'outcomes' in market:
-                                                        print(f"  Found h2h market with {len(market['outcomes'])} outcomes")
-
-                                                        # Check for results field
-                                                        has_results = any('result' in outcome for outcome in market['outcomes'])
-                                                        print(f"  Has results field: {has_results}")
-
-                                                        for o_idx, outcome in enumerate(market['outcomes']):
-                                                            print(f"  Outcome {o_idx} keys: {list(outcome.keys())}")
-                    elif isinstance(inner_data, dict):
-                        print(f"  Data field contains a dictionary with keys: {list(inner_data.keys())}")
+            if isinstance(data, dict) and "data" in data:
+                print("Structure: Dictionary with 'data' key")
+                other_keys = [k for k in data.keys() if k != "data"]
+                if other_keys:
+                    print(f"Other keys: {other_keys}")
+                inner_data = data["data"]
+                if isinstance(inner_data, list):
+                    print(f"Data: List of {len(inner_data)} events")
+                    events = inner_data
+                elif isinstance(inner_data, dict):
+                    print("Data: Single event dictionary")
+                    events = [inner_data]
+                else:
+                    print(f"Data is of unexpected type: {type(inner_data)}")
+                    continue
             elif isinstance(data, list):
-                print(f"  Contains a list of {len(data)} items")
+                print(f"Structure: Direct list of {len(data)} events")
+                events = data
+            elif isinstance(data, dict):
+                print(
+                    f"Structure: Dictionary without 'data' key. Keys: {list(data.keys())}"
+                )
+                if "id" in data and "bookmakers" in data:
+                    print("Appears to be a single event")
+                    events = [data]
+                else:
+                    print("Not recognized as event data")
+                    continue
+            else:
+                print(f"Unrecognized data structure: {type(data)}")
+                continue
 
-                if data and isinstance(data[0], dict):
-                    print(f"  First item keys: {list(data[0].keys())}")
+            if not events:
+                print("No events found in the data")
+                continue
 
-        except Exception as e:
-            msg = f"  Error examining file {cache_file}: {e}"
+            for event_idx, event in enumerate(events[:2]):
+                print(f"\nExamining Event {event_idx + 1}:")
+                if not isinstance(event, dict):
+                    print(f"Event is not a dictionary: {type(event)}")
+                    continue
+                print(f"Event ID: {event.get('id', 'N/A')}")
+                print(f"Sport: {event.get('sport_key', 'N/A')}")
+                print(
+                    f"Teams: {event.get('home_team', 'N/A')} vs {event.get('away_team', 'N/A')}"
+                )
+
+                bookmakers = event.get("bookmakers", [])
+                if not bookmakers:
+                    print("No bookmakers found!")
+                    continue
+                print(f"Found {len(bookmakers)} bookmakers")
+                book = bookmakers[0]
+                print(f"First bookmaker: {book.get('key', 'unknown')}")
+                markets = book.get("markets", [])
+                if not markets:
+                    print("No markets found!")
+                    continue
+                print(f"Found {len(markets)} markets")
+                h2h_markets = [m for m in markets if m.get("key") == "h2h"]
+                if not h2h_markets:
+                    print("No h2h markets found!")
+                    continue
+                print(f"Found {len(h2h_markets)} h2h markets")
+                market = h2h_markets[0]
+                outcomes = market.get("outcomes", [])
+                if not outcomes:
+                    print("No outcomes found!")
+                    continue
+                print(f"H2h market has {len(outcomes)} outcomes:")
+                for outcome_idx, outcome in enumerate(outcomes):
+                    print(f"\n  Outcome {outcome_idx + 1}:")
+                    print(f"    Name: {outcome.get('name', 'N/A')}")
+                    print(f"    Price: {outcome.get('price', 'N/A')}")
+                    print(f"    Result: {outcome.get('result', 'N/A')}")
+                    print(f"    All fields: {list(outcome.keys())}")
+
+                print("\nFull event structure:")
+                try:
+                    print(json.dumps(event, indent=2, default=str)[:500] + "...")
+                except Exception:  # pragma: no cover - fallback pretty print
+                    pprint.pprint(event)
+        except Exception as e:  # pragma: no cover - diagnostic output only
+            msg = f"Error examining file {file_path}: {e}"
             print(msg)
             logging.warning(msg)
 
