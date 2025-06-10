@@ -13,7 +13,12 @@ def american_odds_to_prob(odds: float) -> float:
 DEFAULT_CACHE_DIR = Path("h2h_data") / "api_cache"
 
 
-def build_moneyline_dataset_from_cache(cache_dir: str | Path = DEFAULT_CACHE_DIR, *, verbose: bool = False) -> pd.DataFrame:
+def build_moneyline_dataset_from_cache(
+    cache_dir: str | Path = DEFAULT_CACHE_DIR,
+    *,
+    verbose: bool = False,
+    require_results: bool = False,
+) -> pd.DataFrame:
     """Return a DataFrame built from cached API responses."""
     cache_path = Path(cache_dir)
     files = list(cache_path.glob("*.pkl"))
@@ -58,8 +63,19 @@ def build_moneyline_dataset_from_cache(cache_dir: str | Path = DEFAULT_CACHE_DIR
                     price2 = outcomes[1].get("price")
                     result1 = outcomes[0].get("result")
                     result2 = outcomes[1].get("result")
-                    if None in (team1, team2, price1, price2, result1, result2):
+
+                    # Skip entries with missing basic data
+                    if None in (team1, team2, price1, price2):
                         continue
+
+                    # If requiring results, skip entries with missing results
+                    if require_results and None in (result1, result2):
+                        continue
+
+                    # Set team1_win to None if results are missing
+                    team1_win = None
+                    if result1 is not None:
+                        team1_win = 1 if result1 == "win" else 0
                     rows.append(
                         {
                             "team1": team1,
@@ -67,11 +83,12 @@ def build_moneyline_dataset_from_cache(cache_dir: str | Path = DEFAULT_CACHE_DIR
                             "price1": price1,
                             "price2": price2,
                             "implied_prob": american_odds_to_prob(price1),
-                            "team1_win": 1 if result1 == "win" else 0,
+                            "team1_win": team1_win,
                         }
                     )
                     if verbose:
-                        print(f"Added {team1} vs {team2} from {fp.name}")
+                        result_info = f"result={result1}" if result1 else "no result yet"
+                        print(f"Added {team1} vs {team2} from {fp.name} ({result_info})")
                     break
     if not rows:
         raise RuntimeError("No valid data found in cache")
@@ -83,14 +100,22 @@ def save_dataset_from_cache(
     csv_out: str | Path = "training_data.csv",
     *,
     verbose: bool = False,
+    require_results: bool = False,
 ) -> Path:
     """Build dataset from cache and save as CSV."""
-    df = build_moneyline_dataset_from_cache(cache_dir, verbose=verbose)
+    df = build_moneyline_dataset_from_cache(
+        cache_dir, verbose=verbose, require_results=require_results
+    )
     out = Path(csv_out)
     out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out, index=False)
     if verbose:
-        print(f"Saved {len(df)} rows to {out}")
+        total_rows = len(df)
+        missing_results = df["team1_win"].isna().sum()
+        print(f"Saved {total_rows} rows to {out}")
+        print(
+            f"Note: {missing_results} rows ({missing_results/total_rows:.1%}) have missing results"
+        )
     return out
 
 
@@ -101,10 +126,20 @@ if __name__ == "__main__":
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR), help="Directory containing .pkl cache files")
     parser.add_argument("--output", required=True, help="Path to write the CSV dataset")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "--require-results",
+        action="store_true",
+        help="Only include entries with result fields",
+    )
     args = parser.parse_args()
 
     try:
-        save_dataset_from_cache(args.cache_dir, args.output, verbose=args.verbose)
+        save_dataset_from_cache(
+            args.cache_dir,
+            args.output,
+            verbose=args.verbose,
+            require_results=args.require_results,
+        )
     except Exception as exc:
         print(f"Failed to build dataset: {exc}")
         raise SystemExit(1)

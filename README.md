@@ -318,6 +318,9 @@ you can turn those ``.pkl`` files into a training CSV with:
 python3 data_prep.py --output=training_data.csv
 ```
 
+By default, rows without a recorded result are kept with ``team1_win`` set to
+``NaN``. Add the ``--require-results`` flag if you want to filter those out.
+
 The resulting CSV can then be supplied to ``train_classifier`` as shown above.
 
 To predict with a trained model supply feature values as a JSON string:
