@@ -958,6 +958,22 @@ def build_h2h_dataset_from_api(
 ) -> pd.DataFrame:
     start = datetime.fromisoformat(start_date)
     end = datetime.fromisoformat(end_date)
+
+    # The Odds API only keeps about one year of historical results. When the
+    # requested window falls outside that range the API returns no data,
+    # resulting in a confusing "No h2h data returned" error. Clamp the start
+    # date to the earliest supported day and warn the user if needed.
+    window_start = datetime.utcnow() - timedelta(days=365)
+    if start < window_start:
+        if verbose:
+            print(
+                f"Start date {start_date} is before the API window. "
+                f"Using {window_start.date()} instead."
+            )
+        start = window_start
+
+    if end < start:
+        raise ValueError("end_date must be on or after start_date")
     rows: list[dict] = []
     current = start
     while current <= end:
