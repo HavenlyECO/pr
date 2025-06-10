@@ -1232,7 +1232,12 @@ def predict_h2h_probability(
 ) -> float:
     model_path = sanitize_path(model_path)
     with open(model_path, "rb") as f:
-        model = pickle.load(f)
+        try:
+            model = pickle.load(f)
+        except AttributeError as exc:
+            raise RuntimeError(
+                "Invalid or outdated model file. Train a new classifier using 'python3 main.py train_classifier'."
+            ) from exc
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
     proba = model.predict_proba(df)[0][1]
     return float(proba)
