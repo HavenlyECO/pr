@@ -27,6 +27,15 @@ YEARS = range(2018, 2026)  # inclusive
 BASE = "https://www.retrosheet.org/gamelogs"
 
 
+def find_gamelog_file(year: int) -> Path | None:
+    """Return gamelog path for ``year`` ignoring case, if present."""
+    pattern = f"GL{year}".lower()
+    for p in DATA_DIR.glob("*.txt"):
+        if p.stem.lower() == pattern:
+            return p
+    return None
+
+
 def american_odds_to_prob(odds: float) -> float:
     """Convert American odds to implied probability."""
     if odds > 0:
@@ -103,8 +112,8 @@ def main() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     frames = []
     for year in YEARS:
-        txt = DATA_DIR / f"GL{year}.TXT"
-        if not txt.exists():
+        txt = find_gamelog_file(year)
+        if not txt:
             zip_path = DATA_DIR / f"gl{year}.zip"
             if not zip_path.exists():
                 url = f"{BASE}/gl{year}.zip"
@@ -121,11 +130,25 @@ def main() -> None:
                     continue
             try:
                 with zipfile.ZipFile(zip_path) as zf:
-                    name = next(n for n in zf.namelist() if n.startswith("GL") and n.endswith(".TXT"))
-                    txt.write_bytes(zf.read(name))
+                    name = next(
+                        (n for n in zf.namelist() if n.upper().startswith("GL") and n.upper().endswith(".TXT")),
+                        None,
+                    )
+                    if name:
+                        txt = DATA_DIR / f"GL{year}.TXT"
+                        txt.write_bytes(zf.read(name))
+                    else:
+                        print(f"No TXT found in {zip_path}")
+                        continue
             except Exception as exc:  # pragma: no cover
                 print(f"Error extracting {zip_path}: {exc}")
                 continue
+        else:
+            print(f"Using existing {txt.name}")
+
+        if not txt.exists():
+            print(f"Missing gamelog for {year}")
+            continue
 
         df = pd.read_csv(txt, header=None)
         df = df.rename(columns={
