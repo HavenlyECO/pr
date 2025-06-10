@@ -220,9 +220,12 @@ exceeds the window average by several standard deviations, the detector outputs
 a ``volume_surge_score`` between 0 and 1. Sudden liquidity spikes often hint at
 syndicates entering the market before prices move.
 
-Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` for Reddit, ``TWITTER_BEARER_TOKEN``
-for Twitter and ``TG_API_ID``/``TG_API_HASH`` for Telegram if you wish to
-enable this feature. ``OPENAI_API_KEY`` must also be configured.
+Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` (and optionally ``REDDIT_USER_AGENT``)
+for Reddit, ``TWITTER_BEARER_TOKEN`` for Twitter and
+``TG_API_ID``/``TG_API_HASH`` along with ``TG_CHANNEL`` for Telegram if you wish to
+enable these integrations. All of these variables are optional—the script will
+fall back to the available services when any token is missing. ``OPENAI_API_KEY``
+must still be configured for language model features.
 
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
