@@ -310,6 +310,15 @@ python main.py train_classifier --sport=baseball_mlb \
     --features-type=pregame
 ```
 
+If you've already cached historical API responses under ``h2h_data/api_cache``
+you can turn those ``.pkl`` files into a training CSV with:
+
+```bash
+python data_prep.py --output=training_data.csv
+```
+
+The resulting CSV can then be supplied to ``train_classifier`` as shown above.
+
 To predict with a trained model supply feature values as a JSON string:
 
 ```bash
