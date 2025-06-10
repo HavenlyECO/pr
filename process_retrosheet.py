@@ -16,12 +16,25 @@ import os
 import zipfile
 from pathlib import Path
 from datetime import datetime
+import argparse
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency
+    load_dotenv = None
 
 import pandas as pd
 import requests
 
 DATA_DIR = Path("retrosheet_data")
 ODDS_CACHE_DIR = DATA_DIR / "odds_cache"
+
+# Load API key from .env if available
+ROOT_DIR = Path(__file__).resolve().parent
+DOTENV_PATH = ROOT_DIR / ".env"
+if load_dotenv and DOTENV_PATH.exists():
+    load_dotenv(DOTENV_PATH)
+
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 OUTPUT_FILE = "retrosheet_training_data.csv"
 # Only download completed seasons. Retrosheet typically releases data
@@ -29,6 +42,18 @@ OUTPUT_FILE = "retrosheet_training_data.csv"
 # range to the year prior to the current one.
 YEARS = range(2018, datetime.now().year)
 BASE = "https://www.retrosheet.org/gamelogs"
+
+
+def parse_args() -> argparse.Namespace:
+    """Return CLI arguments."""
+    parser = argparse.ArgumentParser(description="Build Retrosheet training data")
+    parser.add_argument(
+        "--years",
+        nargs="+",
+        type=int,
+        help="Specific years to process (e.g. 2019 2020)",
+    )
+    return parser.parse_args()
 
 
 def find_gamelog_file(year: int) -> Path | None:
@@ -113,9 +138,12 @@ def build_odds_dataframe(dates: list[str]) -> pd.DataFrame:
 
 
 def main() -> None:
+    args = parse_args()
+    years = args.years if args.years else YEARS
+
     DATA_DIR.mkdir(exist_ok=True)
     frames = []
-    for year in YEARS:
+    for year in years:
         txt = find_gamelog_file(year)
         if not txt:
             zip_path = DATA_DIR / f"gl{year}.zip"
