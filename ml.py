@@ -1008,8 +1008,17 @@ class SegmentedCalibratedModel:
         self.calibrators = calibrators
 
     def _segment_masks(self, X: pd.DataFrame) -> dict[str, pd.Series]:
-        seg7 = X.get("live_inning_7_diff", pd.Series([np.nan] * len(X))).notna()
-        seg5 = X.get("live_inning_5_diff", pd.Series([np.nan] * len(X))).notna() & ~seg7
+        seg7 = X.get(
+            "live_inning_7_diff",
+            pd.Series([np.nan] * len(X), index=X.index),
+        ).notna()
+        seg5 = (
+            X.get(
+                "live_inning_5_diff",
+                pd.Series([np.nan] * len(X), index=X.index),
+            ).notna()
+            & ~seg7
+        )
         seg_pre = ~seg5 & ~seg7
         return {"7th_inning": seg7, "5th_inning": seg5, "pregame": seg_pre}
 
@@ -1040,8 +1049,16 @@ def _train(
 
     model_out = sanitize_path(model_out)
 
-    # Ensure training data only contains numeric columns
-    X = pd.DataFrame(X).select_dtypes(include=[np.number, bool]).fillna(0)
+    # Ensure training data only contains numeric columns. When reading from CSV
+    # pandas may interpret numeric fields as strings if the dataset contains
+    # mixed types or missing values. Attempt to coerce such object columns to
+    # numeric before dropping non-numeric data so valid training rows are not
+    # discarded inadvertently.
+    X = pd.DataFrame(X)
+    obj_cols = X.select_dtypes(include="object").columns
+    for col in obj_cols:
+        X[col] = pd.to_numeric(X[col], errors="coerce")
+    X = X.select_dtypes(include=[np.number, bool]).fillna(0)
 
     # Remove rows where the target is missing
     mask = pd.Series(y).notna()
@@ -1078,9 +1095,18 @@ def _train(
 
     # Build segment specific calibrators
     masks = {
-        "7th_inning": X_val.get("live_inning_7_diff", pd.Series([np.nan] * len(X_val))).notna(),
+        "7th_inning": X_val.get(
+            "live_inning_7_diff",
+            pd.Series([np.nan] * len(X_val), index=X_val.index),
+        ).notna(),
     }
-    masks["5th_inning"] = X_val.get("live_inning_5_diff", pd.Series([np.nan] * len(X_val))).notna() & ~masks["7th_inning"]
+    masks["5th_inning"] = (
+        X_val.get(
+            "live_inning_5_diff",
+            pd.Series([np.nan] * len(X_val), index=X_val.index),
+        ).notna()
+        & ~masks["7th_inning"]
+    )
     masks["pregame"] = ~masks["5th_inning"] & ~masks["7th_inning"]
 
     calibrators: dict[str, CalibratedClassifierCV] = {}
