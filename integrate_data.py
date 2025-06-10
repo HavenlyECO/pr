@@ -268,15 +268,21 @@ def parse_retrosheet_file(file_path, year):
             "WAS": "Washington Nationals",
             "WSH": "Washington Nationals",
         }
-        df["home_team_std"] = df["home_team"].map(team_code_map).fillna(df["home_team"])
-        df["visiting_team_std"] = (
-            df["visiting_team"].map(team_code_map).fillna(df["visiting_team"])
-        )
+        # Preserve the original Retrosheet team codes
         df["home_team_code"] = df["home_team"]
-        df["visiting_team_code"] = df["visiting_team"]
-        df = df.rename(
-            columns={"visiting_team_std": "away_team", "home_team_std": "home_team"}
-        )
+        df["away_team_code"] = df["visiting_team"]
+
+        # Map the Retrosheet codes to full team names for easier matching with
+        # the odds data.  Perform the mapping in place so we don't end up with
+        # duplicate column names which can cause pandas to return a DataFrame
+        # instead of a Series when selecting by column name.
+        df["home_team"] = df["home_team"].map(team_code_map).fillna(df["home_team"])
+        df["away_team"] = df["visiting_team"].map(team_code_map).fillna(df["visiting_team"])
+
+        # The original visiting_team column is no longer needed after we create
+        # ``away_team``.  Dropping it prevents accidental duplication of column
+        # names which previously caused issues when using the ``.str`` accessor.
+        df = df.drop(columns=["visiting_team"])
         return df
     except Exception as e:
         print(f"Error parsing Retrosheet file {file_path}: {e}")
