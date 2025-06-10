@@ -138,6 +138,7 @@ The project includes a simple logistic regression model that predicts the
 probability of the home team winning a matchup. Training data can be supplied
 via a CSV file **or** gathered automatically using the Odds API historical odds
 endpoint. The dataset should contain a `home_team_win` column as the target
+(datasets generated with `data_prep.py` use `team1_win`, which is also accepted)
 along with feature columns such as team statistics, starting pitcher ratings,
 bullpen strength, park factor and injury indicators.
 
@@ -319,7 +320,8 @@ python3 data_prep.py --output=training_data.csv
 ```
 
 By default, rows without a recorded result are kept with ``team1_win`` set to
-``NaN``. Add the ``--require-results`` flag if you want to filter those out.
+``NaN``. This column is treated as ``home_team_win`` when training.
+Add the ``--require-results`` flag if you want to filter those out.
 
 The resulting CSV can then be supplied to ``train_classifier`` as shown above.
 
