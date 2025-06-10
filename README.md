@@ -323,6 +323,14 @@ By default, rows without a recorded result are kept with ``team1_win`` set to
 ``NaN``. This column is treated as ``home_team_win`` when training.
 Add the ``--require-results`` flag if you want to filter those out.
 
+For historical MLB games ``integrate_data.py`` combines your cached odds with
+official Retrosheet logs. Running it creates ``integrated_training_data.csv``
+ready for model training:
+
+```bash
+python3 integrate_data.py
+```
+
 The resulting CSV can then be supplied to ``train_classifier`` as shown above.
 
 To predict with a trained model supply feature values as a JSON string:

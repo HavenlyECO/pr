@@ -6,4 +6,5 @@ openai>=1.0
 praw>=7.6
 tweepy>=4.10
 telethon>=1.28
+requests>=2.0
 
