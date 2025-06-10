@@ -5,6 +5,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from datetime import datetime, timedelta
+import time
 import argparse
 import sys
 import numpy as np
@@ -64,10 +65,12 @@ from ml import (
     american_odds_to_prob,
     american_odds_to_payout,
     MARKET_MAKER_MIRROR_MODEL_PATH,
+    train_market_maker_mirror_model,
     market_maker_mirror_score,
 )
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
+from scores import fetch_scores, append_scores_history, SCORES_HISTORY_FILE
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -914,12 +917,142 @@ def predict_classifier_cli(argv: list[str]) -> None:
     print(f"Home team win probability: {prob:.3f}")
 
 
+def continuous_train_classifier_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Continuously train h2h classifier")
+    parser.add_argument("--sport", default="baseball_mlb")
+    parser.add_argument("--start-date", required=True, help="YYYY-MM-DD")
+    parser.add_argument("--interval-hours", type=int, default=24)
+    parser.add_argument("--model-out", default=str(H2H_MODEL_PATH))
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    next_run = datetime.utcnow()
+    start = datetime.fromisoformat(args.start_date)
+    while True:
+        if datetime.utcnow() >= next_run:
+            end_date = datetime.utcnow().strftime("%Y-%m-%d")
+            train_h2h_classifier(
+                args.sport,
+                start.strftime("%Y-%m-%d"),
+                end_date,
+                model_out=args.model_out,
+                verbose=args.verbose,
+            )
+            try:
+                scores = fetch_scores(args.sport, days_from=3)
+                append_scores_history(scores)
+            except Exception as exc:  # pragma: no cover - keep running on error
+                print(f"Failed to fetch scores: {exc}")
+            next_run = datetime.utcnow() + timedelta(hours=args.interval_hours)
+        time.sleep(30)
+
+
+def continuous_train_moneyline_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        description="Continuously train moneyline or dual-head classifier"
+    )
+    parser.add_argument("--dataset", required=True, help="CSV file with training data")
+    parser.add_argument("--sport", default="baseball_mlb")
+    parser.add_argument("--features-type", choices=["pregame", "live", "dual"], default="pregame")
+    parser.add_argument("--interval-hours", type=int, default=24)
+    parser.add_argument("--model-out", default=str(MONEYLINE_MODEL_PATH))
+    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--recent-half-life", type=float)
+    parser.add_argument("--date-column")
+    parser.add_argument("--recency-multiplier", type=float, default=0.7)
+    args = parser.parse_args(argv)
+
+    next_run = datetime.utcnow()
+    while True:
+        if datetime.utcnow() >= next_run:
+            if args.features_type == "dual":
+                train_dual_head_classifier(
+                    args.dataset,
+                    model_out=args.model_out,
+                    verbose=args.verbose,
+                    recent_half_life=args.recent_half_life,
+                    date_column=args.date_column,
+                    recency_multiplier=args.recency_multiplier,
+                )
+            else:
+                train_moneyline_classifier(
+                    args.dataset,
+                    model_out=args.model_out,
+                    features_type=args.features_type,
+                    verbose=args.verbose,
+                    recent_half_life=args.recent_half_life,
+                    date_column=args.date_column,
+                    recency_multiplier=args.recency_multiplier,
+                )
+            try:
+                scores = fetch_scores(args.sport, days_from=3)
+                append_scores_history(scores)
+            except Exception as exc:  # pragma: no cover - keep running on error
+                print(f"Failed to fetch scores: {exc}")
+            next_run = datetime.utcnow() + timedelta(hours=args.interval_hours)
+        time.sleep(30)
+
+
+def continuous_train_mirror_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(
+        description="Continuously train market maker mirror model"
+    )
+    parser.add_argument("--dataset", required=True, help="CSV file with training data")
+    parser.add_argument("--sport", default="baseball_mlb")
+    parser.add_argument("--interval-hours", type=int, default=24)
+    parser.add_argument("--model-out", default=str(MARKET_MAKER_MIRROR_MODEL_PATH))
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    next_run = datetime.utcnow()
+    while True:
+        if datetime.utcnow() >= next_run:
+            train_market_maker_mirror_model(
+                args.dataset,
+                model_out=args.model_out,
+                verbose=args.verbose,
+            )
+            try:
+                scores = fetch_scores(args.sport, days_from=3)
+                append_scores_history(scores)
+            except Exception as exc:  # pragma: no cover - keep running on error
+                print(f"Failed to fetch scores: {exc}")
+            next_run = datetime.utcnow() + timedelta(hours=args.interval_hours)
+        time.sleep(30)
+
+
+def scores_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Fetch recent scores")
+    parser.add_argument("--sport", default="baseball_mlb")
+    parser.add_argument("--days-from", type=int, default=0)
+    parser.add_argument("--save-history", action="store_true")
+    args = parser.parse_args(argv)
+
+    scores = fetch_scores(args.sport, days_from=args.days_from)
+    print(json.dumps(scores, indent=2))
+    if args.save_history:
+        append_scores_history(scores)
+        print(f"Scores saved to {SCORES_HISTORY_FILE}")
+
+
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "train_classifier":
         train_classifier_cli(sys.argv[2:])
         return
     if len(sys.argv) > 1 and sys.argv[1] == "predict_classifier":
         predict_classifier_cli(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "continuous_train_classifier":
+        continuous_train_classifier_cli(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "continuous_train_moneyline":
+        continuous_train_moneyline_cli(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "continuous_train_mirror":
+        continuous_train_mirror_cli(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "scores":
+        scores_cli(sys.argv[2:])
         return
 
     parser = argparse.ArgumentParser(
