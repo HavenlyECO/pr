@@ -41,6 +41,7 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, brier_score_loss
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.frozen import FrozenEstimator
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
@@ -1122,7 +1123,10 @@ def _train(
     for seg, mask in masks.items():
         if not mask.any():
             continue
-        cal = CalibratedClassifierCV(pipeline, method="isotonic", cv="prefit")
+        cal = CalibratedClassifierCV(
+            FrozenEstimator(pipeline),
+            method="isotonic",
+        )
         if sample_weight is not None:
             cal.fit(X_val[mask], y_val[mask], sample_weight=w_val[mask])
         else:
