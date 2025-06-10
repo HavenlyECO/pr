@@ -1237,7 +1237,11 @@ Modeling is done in regression mode first. You can later apply a probability thr
     with memory_usage("read_csv") if profile_memory else nullcontext():
         df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
-        raise ValueError("Dataset must include 'home_team_win' column")
+        # Older datasets produced by data_prep.py used 'team1_win'
+        if "team1_win" in df.columns:
+            df = df.rename(columns={"team1_win": "home_team_win"})
+        else:
+            raise ValueError("Dataset must include 'home_team_win' column")
 
     # Automatically create line movement features when possible
     if {"opening_odds", "closing_odds"}.issubset(df.columns):
@@ -1374,7 +1378,10 @@ def train_dual_head_classifier(
     with memory_usage("read_csv") if profile_memory else nullcontext():
         df = pd.read_csv(dataset_path)
     if "home_team_win" not in df.columns:
-        raise ValueError("Dataset must include 'home_team_win' column")
+        if "team1_win" in df.columns:
+            df = df.rename(columns={"team1_win": "home_team_win"})
+        else:
+            raise ValueError("Dataset must include 'home_team_win' column")
 
     attach_recency_weighted_features(df, multiplier=recency_multiplier, verbose=verbose)
 
