@@ -2,6 +2,7 @@ import os
 import json
 import pickle
 import time
+import warnings
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -1280,6 +1281,12 @@ def predict_h2h_probability(
 
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
     if cols is not None:
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            warnings.warn(
+                f"Missing feature columns: {', '.join(missing)}",
+                RuntimeWarning,
+            )
         df = df.reindex(cols, axis=1, fill_value=0)
 
     proba = model.predict_proba(df)[0][1]
@@ -1655,6 +1662,12 @@ def predict_moneyline_probability(
 
     df = pd.DataFrame([features])
     if cols is not None:
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            warnings.warn(
+                f"Missing feature columns: {', '.join(missing)}",
+                RuntimeWarning,
+            )
         df = df.reindex(cols, axis=1, fill_value=0)
 
     proba = model.predict_proba(df)[0][1]

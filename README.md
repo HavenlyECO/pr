@@ -391,6 +391,11 @@ python3 main.py predict_classifier --features='{"home_team_stat":1.2,"away_team_
 
 The command prints the home team win probability.
 
+Training column names are persisted in the ``.pkl`` file. Prediction helpers
+reindex the provided feature mapping to this saved order, filling any missing
+columns with ``0``. A warning is emitted when expected columns are absent so
+mismatches can be caught early.
+
 To keep the classifier up to date without manually running a command each time,
 use the continuous training mode. This repeatedly fetches historical data from a
 start date up to the current day and retrains the model on a fixed interval
