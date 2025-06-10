@@ -612,6 +612,15 @@ def sanitize_path(path: str) -> str:
     path = os.path.normpath(path)
     return str(Path(path).resolve(strict=False))
 
+
+def _coerce_object_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` with object columns converted to numeric when possible."""
+    df = pd.DataFrame(df)
+    obj_cols = df.select_dtypes(include="object").columns
+    for col in obj_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
 def to_fixed_utc(date_obj: datetime) -> str:
     """Return ISO-8601 string at fixed 12:00 UTC."""
     return date_obj.strftime("%Y-%m-%dT12:00:00Z")
@@ -1367,7 +1376,9 @@ Modeling is done in regression mode first. You can later apply a probability thr
     # Blend recent form metrics with season-long stats
     attach_recency_weighted_features(df, multiplier=recency_multiplier, verbose=verbose)
 
-    features_df = df.drop(columns=["home_team_win"]).select_dtypes(include=[np.number, bool]).fillna(0)
+    features_df = df.drop(columns=["home_team_win"])
+    features_df = _coerce_object_numeric(features_df)
+    features_df = features_df.select_dtypes(include=[np.number, bool]).fillna(0)
     pregame_X, live_X = split_feature_sets(features_df)
     X = live_X if features_type == "live" else pregame_X
     y = df["home_team_win"]
@@ -1428,7 +1439,9 @@ def train_dual_head_classifier(
 
     attach_recency_weighted_features(df, multiplier=recency_multiplier, verbose=verbose)
 
-    features_df = df.drop(columns=["home_team_win"]).select_dtypes(include=[np.number, bool]).fillna(0)
+    features_df = df.drop(columns=["home_team_win"])
+    features_df = _coerce_object_numeric(features_df)
+    features_df = features_df.select_dtypes(include=[np.number, bool]).fillna(0)
     pregame_X, live_X = split_feature_sets(features_df)
     y = df["home_team_win"]
     if verbose:
