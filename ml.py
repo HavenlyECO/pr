@@ -1051,6 +1051,12 @@ def _train(
         if sample_weight is not None:
             sample_weight = pd.Series(sample_weight)[mask]
 
+    if len(X) == 0:
+        raise ValueError(
+            "Training data is empty after preprocessing. "
+            "Check that the dataset contains numeric feature values and non-missing labels."
+        )
+
     ctx = memory_usage("train_split") if profile_memory else nullcontext()
     with ctx:
         if sample_weight is not None:
