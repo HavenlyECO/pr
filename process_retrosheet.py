@@ -26,6 +26,9 @@ except ImportError:  # pragma: no cover - optional dependency
 import pandas as pd
 import requests
 
+# Import odds helpers from ml
+from ml import fetch_historical_h2h_odds, to_fixed_utc
+
 DATA_DIR = Path("retrosheet_data")
 ODDS_CACHE_DIR = DATA_DIR / "odds_cache"
 
@@ -84,24 +87,22 @@ def fetch_odds_for_date(date: str) -> list:
     if not API_KEY:
         print(f"No API key, skipping odds for {date}")
         return []
-    url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds-history"
-    params = {
-        "apiKey": API_KEY,
-        "regions": "us",
-        "markets": "h2h",
-        "dateFormat": "iso",
-        "oddsFormat": "american",
-        "date": date,
-    }
+
+    # Use the historical odds endpoint via helper in ml.py
+    date_iso = to_fixed_utc(datetime.fromisoformat(date))
+    events = fetch_historical_h2h_odds(
+        "baseball_mlb",
+        date_iso,
+        regions="us",
+        odds_format="american",
+    )
+
     try:
-        resp = requests.get(url, params=params, timeout=30)
-        if resp.ok:
-            cache_file.write_text(resp.text)
-            return resp.json()
-        print(f"Failed to fetch odds for {date}: {resp.status_code}")
-    except Exception as exc:
-        print(f"Error fetching odds for {date}: {exc}")
-    return []
+        cache_file.write_text(json.dumps(events))
+    except Exception:
+        pass
+
+    return events
 
 
 def build_odds_dataframe(dates: list[str]) -> pd.DataFrame:
