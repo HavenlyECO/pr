@@ -1,19 +1,20 @@
 # Odds Fetcher
 
 This script fetches odds from [The Odds API](https://the-odds-api.com/).
+It requires **Python 3**.
 
 ## Installation
 
 Install the core dependencies with:
 
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 For optional features such as memory profiling and colored table output, also install the development extras:
 
 ```bash
-pip install -r requirements-dev.txt
+pip3 install -r requirements-dev.txt
 ```
 
 ## Usage
@@ -30,43 +31,43 @@ making any API requests.
 2. Run the script (moneyline odds shown by default):
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 To display point spread (handicap) odds, run:
 
 ```bash
-python main.py spreads
+python3 main.py spreads
 ```
 
 To display totals (over/under) odds, run:
 
 ```bash
-python main.py totals
+python3 main.py totals
 ```
 
 To display alternate spreads odds, run:
 
 ```bash
-python main.py alternate_spreads
+python3 main.py alternate_spreads
 ```
 
 To display alternate totals odds, run:
 
 ```bash
-python main.py alternate_totals
+python3 main.py alternate_totals
 ```
 
 To display team totals odds, run:
 
 ```bash
-python main.py team_totals
+python3 main.py team_totals
 ```
 
 To display alternate team totals odds, run:
 
 ```bash
-python main.py alternate_team_totals
+python3 main.py alternate_team_totals
 ```
 
 The script now focuses solely on head-to-head matchups. Running it without
@@ -75,7 +76,7 @@ extra options will print projected win probabilities using the trained
 automatically when training the model:
 
 ```bash
-python main.py
+python3 main.py
 ```
 
 Use ``--model`` to specify a different classifier file if needed.
@@ -83,13 +84,13 @@ Use ``--model`` to specify a different classifier file if needed.
 To display outrights (futures) odds, run:
 
 ```bash
-python main.py outrights
+python3 main.py outrights
 ```
 
 To display historical odds for a specific date, run:
 
 ```bash
-python main.py historical --date=2024-01-01
+python3 main.py historical --date=2024-01-01
 ```
 
 Historical data is only available for approximately the last year.
@@ -103,7 +104,7 @@ layout.
 To list upcoming events and their IDs for a sport, run:
 
 ```bash
-python main.py --list-events
+python3 main.py --list-events
 ```
 The region defaults to ``us``. Pass ``--regions`` with a comma-separated list to
 see events available in other regions.
@@ -112,7 +113,7 @@ To fetch all odds for a single event and print the raw JSON response, supply the
 event ID and ``--event-odds``:
 
 ```bash
-python main.py --event-id=<event id> --event-odds
+python3 main.py --event-id=<event id> --event-odds
 ```
 You can also customize the ``--markets``, ``--odds-format`` and ``--date-format``
 options when using this endpoint.
@@ -121,13 +122,13 @@ To include game period markets (e.g. quarters or innings) in the API request,
 pass them via the ``--game-period-markets`` option:
 
 ```bash
-python main.py --game-period-markets=first_half_totals
+python3 main.py --game-period-markets=first_half_totals
 ```
 
 To list all market keys and descriptions available for upcoming games, run:
 
 ```bash
-python main.py --list-market-keys
+python3 main.py --list-market-keys
 ```
 
 ## Moneyline Classifier
@@ -286,13 +287,13 @@ inning so you can quickly gauge emotional and tactical momentum.
 To train the classifier and save it to ``moneyline_classifier.pkl`` run:
 
 ```bash
-python main.py train_classifier --dataset=training_data.csv --features-type=pregame
+python3 main.py train_classifier --dataset=training_data.csv --features-type=pregame
 ```
 
 To train both heads at once:
 
 ```bash
-python main.py train_classifier --dataset=training_data.csv --features-type=dual
+python3 main.py train_classifier --dataset=training_data.csv --features-type=dual
 ```
 
 Pass ``--recent-half-life`` to weight newer rows more heavily based on a date column
@@ -305,7 +306,7 @@ to stats like ``*_last_10`` when creating ``*_weighted_recent`` features.
 Or fetch historical data for a date range and train directly from it:
 
 ```bash
-python main.py train_classifier --sport=baseball_mlb \
+python3 main.py train_classifier --sport=baseball_mlb \
     --start-date=2024-04-01 --end-date=2024-04-07 \
     --features-type=pregame
 ```
@@ -314,7 +315,7 @@ If you've already cached historical API responses under ``h2h_data/api_cache``
 you can turn those ``.pkl`` files into a training CSV with:
 
 ```bash
-python data_prep.py --output=training_data.csv
+python3 data_prep.py --output=training_data.csv
 ```
 
 The resulting CSV can then be supplied to ``train_classifier`` as shown above.
@@ -322,7 +323,7 @@ The resulting CSV can then be supplied to ``train_classifier`` as shown above.
 To predict with a trained model supply feature values as a JSON string:
 
 ```bash
-python main.py predict_classifier --features='{"home_team_stat":1.2,"away_team_stat":0.8}'
+python3 main.py predict_classifier --features='{"home_team_stat":1.2,"away_team_stat":0.8}'
 ```
 
 The command prints the home team win probability.
@@ -333,7 +334,7 @@ start date up to the current day and retrains the model on a fixed interval
 (24&nbsp;hours by default):
 
 ```bash
-python main.py continuous_train_classifier --sport=baseball_mlb \
+python3 main.py continuous_train_classifier --sport=baseball_mlb \
     --start-date=2024-04-01 --interval-hours=24 \
     --features-type=pregame
 ```
@@ -391,3 +392,19 @@ Training functions in ``ml.py`` accept a ``profile_memory`` flag. When set to
 ``True`` and the optional ``psutil`` package is installed, memory usage for
 heavy pandas operations and model fitting is printed to the console. This can
 help identify bottlenecks when working with large datasets.
+
+## Training from Cached Data
+
+The ``train_model.py`` helper can build a model directly from cached API
+responses saved under ``h2h_data/api_cache``. To train using the cached data and
+print progress messages, run:
+
+```bash
+python3 train_model.py --use-cache --verbose
+```
+
+If you only wish to inspect the cached files for debugging, execute:
+
+```bash
+python3 train_model.py --examine-cache --verbose
+```
