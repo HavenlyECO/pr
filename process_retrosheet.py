@@ -197,9 +197,15 @@ def main() -> None:
     long = pd.concat(games).sort_values("date")
     grp = long.groupby("team")
     for n in (5, 10):
-        long[f"rolling_win_pct_{n}"] = grp["win"].apply(lambda s: s.shift().rolling(n, 1).mean())
-        long[f"rolling_runs_scored_{n}"] = grp["runs_scored"].apply(lambda s: s.shift().rolling(n, 1).mean())
-        long[f"rolling_runs_allowed_{n}"] = grp["runs_allowed"].apply(lambda s: s.shift().rolling(n, 1).mean())
+        long[f"rolling_win_pct_{n}"] = grp["win"].transform(
+            lambda s: s.shift().rolling(n, 1).mean()
+        )
+        long[f"rolling_runs_scored_{n}"] = grp["runs_scored"].transform(
+            lambda s: s.shift().rolling(n, 1).mean()
+        )
+        long[f"rolling_runs_allowed_{n}"] = grp["runs_allowed"].transform(
+            lambda s: s.shift().rolling(n, 1).mean()
+        )
         long[f"rolling_run_diff_{n}"] = long[f"rolling_runs_scored_{n}"] - long[f"rolling_runs_allowed_{n}"]
 
     home_feats = long[long["is_home"] == 1].drop(columns=["opp", "runs_scored", "runs_allowed", "win", "is_home"]).rename(columns={"team": "home_team"})
