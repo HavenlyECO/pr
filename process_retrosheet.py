@@ -84,12 +84,17 @@ def fetch_odds_for_date(date: str) -> list:
     if not API_KEY:
         print(f"No API key, skipping odds for {date}")
         return []
-    url = (
-        "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds-history"
-        f"/?apiKey={API_KEY}&regions=us&markets=h2h&date={date}"
-    )
+    url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/odds-history"
+    params = {
+        "apiKey": API_KEY,
+        "regions": "us",
+        "markets": "h2h",
+        "dateFormat": "iso",
+        "oddsFormat": "american",
+        "date": date,
+    }
     try:
-        resp = requests.get(url, timeout=30)
+        resp = requests.get(url, params=params, timeout=30)
         if resp.ok:
             cache_file.write_text(resp.text)
             return resp.json()
