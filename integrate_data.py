@@ -2,6 +2,7 @@
 import os
 import pandas as pd
 import zipfile
+# Retrosheet provides game logs as fixed-width text files inside ZIP archives.
 import requests
 import pickle
 from pathlib import Path
@@ -153,7 +154,7 @@ def download_retrosheet_data(year):
         return None
 
 def extract_zip_file(zip_path):
-    """Extract files from retrosheet ZIP file"""
+    """Extract the GL####.TXT log from a Retrosheet ZIP archive"""
     if not zip_path or not zip_path.exists():
         return None
     
@@ -174,7 +175,7 @@ def extract_zip_file(zip_path):
         return None
 
 def parse_retrosheet_file(file_path, year):
-    """Parse Retrosheet game log file"""
+    """Parse a GL####.TXT game log and return a dataframe"""
     if not file_path or not file_path.exists():
         return None
     

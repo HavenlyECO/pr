@@ -333,7 +333,9 @@ python3 integrate_data.py
 
 If you only need the Retrosheet results without any odds data, run
 ``process_retrosheet.py``. It downloads the last several seasons and produces
-``retrosheet_training_data.csv`` with rolling team stats and synthetic odds:
+``retrosheet_training_data.csv`` with rolling team stats and synthetic odds.
+The Retrosheet ZIP archives contain fixed-width ``GLYYYY.TXT`` files, so the
+script parses those text logs directly and writes the combined results to CSV:
 
 ```bash
 python3 process_retrosheet.py
