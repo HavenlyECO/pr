@@ -71,15 +71,23 @@ python3 main.py alternate_team_totals
 ```
 
 The script now focuses solely on head-to-head matchups. Running it without
-extra options will print projected win probabilities using the trained
-``h2h_data/h2h_classifier.pkl`` model. The ``h2h_data`` directory is created
-automatically when training the model:
+extra options prints projected win probabilities using a trained
+``h2h_data/h2h_classifier.pkl`` model. Be sure to train the classifier first —
+otherwise the script will exit with an error. The ``h2h_data`` directory is
+created automatically when training:
 
 ```bash
 python3 main.py
 ```
 
 Use ``--model`` to specify a different classifier file if needed.
+
+If you previously generated a simple fallback model, delete that file and train
+a classifier instead:
+
+```bash
+python3 main.py train_classifier --dataset=retrosheet_training_data.csv
+```
 
 To display outrights (futures) odds, run:
 

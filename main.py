@@ -177,41 +177,13 @@ def risk_filter(edge: float | None, odds: float | None) -> float:
     return 1.0
 
 
-def create_simple_fallback_model(model_path):
-    """Create a simple model that directly converts odds to probabilities without ML"""
-    print(f"{Fore.YELLOW}No trained model found at {model_path}" if Fore else f"No trained model found at {model_path}")
-    print("Creating a simple fallback model based on American odds conversion...")
-
-    class SimpleOddsModel:
-        def predict_proba(self, X):
-            price1 = X['price1'].values[0]
-            if price1 > 0:
-                prob = 100 / (price1 + 100)
-            else:
-                prob = abs(price1) / (abs(price1) + 100)
-            return np.array([[1 - prob, prob]])
-
-    model = SimpleOddsModel()
-
-    model_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(model_path, 'wb') as f:
-        pickle.dump(model, f)
-
-    print(f"{Fore.GREEN}Simple fallback model created at {model_path}" if Fore else f"Simple fallback model created at {model_path}")
-    print("Note: This is a very basic model based on odds conversion. For better results, train with real data:")
-    print(
-        "python ml.py --sport baseball_mlb --start-date 2023-05-01 "
-        "--end-date 2023-06-01 --verbose"
-    )
-
-    return model
-
-
 def ensure_model_exists(model_path):
-    """Ensure a model file exists, creating a fallback if needed."""
+    """Return the path if a trained model exists or raise an error."""
     path = Path(model_path)
     if not path.exists():
-        create_simple_fallback_model(path)
+        raise FileNotFoundError(
+            f"No trained model found at {path}. Train one with 'python3 main.py train_classifier'"
+        )
     return str(path)
 
 
