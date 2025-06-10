@@ -24,16 +24,31 @@ def update_cache_with_scores(sport_key="baseball_mlb", days_back=3, verbose=True
             continue
 
         # Extract completed games with scores
-        home_score = game.get("scores", {}).get("home", {}).get("score")
-        away_score = game.get("scores", {}).get("away", {}).get("score")
+        scores_data = game.get("scores")
+        home_team = game.get("home_team")
+        away_team = game.get("away_team")
+
+        home_score = None
+        away_score = None
+
+        if isinstance(scores_data, dict):
+            home_score = scores_data.get("home", {}).get("score")
+            away_score = scores_data.get("away", {}).get("score")
+        elif isinstance(scores_data, list):
+            # Loop through the scores list to find home and away scores
+            for score_item in scores_data:
+                team_name = score_item.get("name")
+                score = score_item.get("score")
+                if team_name == home_team:
+                    home_score = score
+                elif team_name == away_team:
+                    away_score = score
+
         completed = game.get("completed", False)
 
         # Only process completed games with valid scores
         if not completed or home_score is None or away_score is None:
             continue
-
-        home_team = game.get("home_team")
-        away_team = game.get("away_team")
 
         # Determine winners
         home_win = home_score > away_score
