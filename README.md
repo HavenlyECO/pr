@@ -332,10 +332,14 @@ python3 integrate_data.py
 ```
 
 If you only need the Retrosheet results without any odds data, run
-``process_retrosheet.py``. It downloads the last several seasons and produces
-``retrosheet_training_data.csv`` with rolling team stats and synthetic odds.
-The Retrosheet ZIP archives contain fixed-width ``GLYYYY.TXT`` files, so the
-script parses those text logs directly and writes the combined results to CSV:
+``process_retrosheet.py``. Place any ``GLYYYY.TXT`` gamelog files in the
+``retrosheet_data`` directory first to skip those downloads. The script will
+grab any seasons not already present (2018–2025 by default) and combine the
+logs into ``retrosheet_training_data.csv`` with rolling team stats. When
+``THE_ODDS_API_KEY`` is set, historical moneyline prices from The Odds API are
+merged automatically so no synthetic odds are created. Manager and home plate
+umpire columns are also included. Your ``GL`` files stay in that folder so they
+can be fed to the Retrosheet trainer or other tools:
 
 ```bash
 python3 process_retrosheet.py
