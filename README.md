@@ -94,6 +94,8 @@ python3 main.py historical --date=2024-01-01
 ```
 
 Historical data is only available for approximately the last year.
+When training with ``ml.py`` any start date older than this window is
+automatically adjusted to the earliest supported day to avoid empty results.
 
 The script requests head-to-head, point spread, totals, and outright markets as
 needed. It prints
