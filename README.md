@@ -48,6 +48,11 @@ python3 main.py --train --years 2018-2024
 
 The old subcommands remain available for advanced workflows but ``--run`` and
 ``--train`` are the recommended one-click options.
+These flags are mutually exclusive; the CLI will exit with an error if you
+attempt to supply both at once. Any unknown command line options are also
+reported so you can correct typos quickly. Options such as
+``--game-period-markets`` only take effect with ``--event-odds`` or
+``--list-market-keys`` and will trigger a warning otherwise.
 
 2. Run the script (moneyline odds shown by default):
 

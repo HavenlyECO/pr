@@ -1124,8 +1124,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description='Display projected head-to-head win probabilities for tomorrow (autofetch event IDs).'
     )
-    parser.add_argument('--run', action='store_true', help='Execute full live pipeline and exit')
-    parser.add_argument('--train', action='store_true', help='Run end-to-end training pipeline and exit')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--run', action='store_true', help='Execute full live pipeline and exit')
+    group.add_argument('--train', action='store_true', help='Run end-to-end training pipeline and exit')
     parser.add_argument('--years', help='Year or YEAR-YEAR range for training')
     parser.add_argument('--sport', default='baseball_mlb', help='Sport key')
     parser.add_argument('--regions', default='us', help='Comma separated regions (default: us)')
@@ -1146,19 +1147,30 @@ def main(argv: list[str] | None = None) -> None:
     )
     args, remaining = parser.parse_known_args(argv)
 
-    if args.run:
-        run_pipeline(
-            sport=args.sport,
-            regions=args.regions,
-            model_path=args.model,
-            verbose=args.verbose,
+    if remaining:
+        parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+
+    if args.game_period_markets and not (args.event_odds or args.list_market_keys):
+        print(
+            (Fore.YELLOW if Fore else '') +
+            '--game-period-markets has no effect without --event-odds or --list-market-keys'
         )
+
+    if args.run:
+        try:
+            run_pipeline(
+                sport=args.sport,
+                regions=args.regions,
+                model_path=args.model,
+                verbose=args.verbose,
+            )
+        except FileNotFoundError as exc:
+            print((Fore.RED + str(exc)) if Fore else str(exc))
+            return
         return
     if args.train:
         train_pipeline(years=args.years or '2018-2024', sport=args.sport, verbose=args.verbose)
         return
-
-    argv = remaining
 
     if args.event_odds:
         if not args.event_id:
@@ -1213,12 +1225,16 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     # Main functionality - get projections
-    projections = evaluate_h2h_all_tomorrow(
-        args.sport,
-        args.model,
-        regions=args.regions,
-        verbose=args.verbose,
-    )
+    try:
+        projections = evaluate_h2h_all_tomorrow(
+            args.sport,
+            args.model,
+            regions=args.regions,
+            verbose=args.verbose,
+        )
+    except FileNotFoundError as exc:
+        print((Fore.RED + str(exc)) if Fore else str(exc))
+        return
     
     print("\n===== PROJECTED WIN PROBABILITIES =====")
     print_h2h_projections_table(projections)
