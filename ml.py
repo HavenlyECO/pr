@@ -357,7 +357,32 @@ def llm_sharp_social_score(team: str, limit: int = 50) -> float:
 
 def llm_managerial_signals(text: str) -> dict[str, int]:
     """Return managerial move flags extracted from commentary text."""
+    # When OpenAI is unavailable simply fall back to a basic heuristic
     if openai is None or not OPENAI_API_KEY:
+        early_pull = int("pulled" in text.lower())
+        pinch_hit = int("pinch hit" in text.lower() or "pinch-hitter" in text.lower())
+        matchup_move = int("matchup" in text.lower())
+        return {
+            "early_pull_flag": early_pull,
+            "pinch_hit_flag": pinch_hit,
+            "matchup_move_flag": matchup_move,
+        }
+
+    prompt = (
+        "Identify whether the following commentary text mentions an early pull, "
+        "a pinch-hitting decision or a matchup based pitching change. "
+        "Respond with JSON like {\"early_pull_flag\":0,\"pinch_hit_flag\":0,"
+        "\"matchup_move_flag\":0}.\nText:\n" + text + "\nJSON:" 
+    )
+    try:
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        reply = resp.choices[0].message["content"].strip()
+        return json.loads(reply)
+    except Exception:
         return {
             "early_pull_flag": 0,
             "pinch_hit_flag": 0,
@@ -594,6 +619,13 @@ if not API_KEY:
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if openai is not None:
     openai.api_key = OPENAI_API_KEY
+elif OPENAI_API_KEY:
+    try:  # Dynamically import openai if API key is present
+        import openai as _openai
+        openai = _openai  # type: ignore
+        openai.api_key = OPENAI_API_KEY
+    except Exception:  # pragma: no cover - optional dependency
+        openai = None
 
 MAX_HISTORICAL_DAYS = 365
 
