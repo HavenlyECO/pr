@@ -1738,20 +1738,20 @@ def extract_advanced_ml_features(
         "price2": price2,
         "pregame_price": price1,
         "pregame_line": price1,
-        "event_id": "prediction",
-        "commence_time": now.isoformat(),
-        "bookmaker": "prediction",
-        "date": now.date().isoformat(),
+        "event_id": -1,  # placeholder for prediction
+        "commence_time": -1,
+        "bookmaker": -1,
+        "date": -1,
         "home_team": team1 or "Team1",
         "away_team": team2 or "Team2",
         "home_score": 0,
         "visiting_score": 0,
-        "day_night": "D",
+        "day_night": -1,
         "attendance": 0,
         "implied_prob": american_odds_to_prob(price1),
         "game_day": now.weekday(),
         "is_weekend": int(now.weekday() >= 5),
-        "team1": team1 or "Team1",  # PATCH: ensure team1/2 always present
+        "team1": team1 or "Team1",
         "team2": team2 or "Team2",
     }
 
