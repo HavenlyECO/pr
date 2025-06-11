@@ -302,6 +302,18 @@ def _normalize_team_name(name: str) -> str:
     return str(name).strip().lower()
 
 
+def _ensure_normalized_team_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Ensure DataFrame has normalized team name columns."""
+    if "home_team_norm" not in df.columns and "home_team" in df.columns:
+        df["home_team_norm"] = df["home_team"].apply(_normalize_team_name)
+    if "away_team_norm" not in df.columns:
+        if "away_team" not in df.columns and "visiting_team" in df.columns:
+            df["away_team"] = df["visiting_team"]
+        if "away_team" in df.columns:
+            df["away_team_norm"] = df["away_team"].apply(_normalize_team_name)
+    return df
+
+
 def _is_close_match(a: str, b: str, threshold: float = 0.8) -> bool:
     """Return True when strings are an approximate match."""
     if not a or not b:
@@ -320,13 +332,11 @@ def match_odds_with_results(odds_df, results_df):
         print("No data to match")
         return pd.DataFrame()
 
-    # Normalize team names once to reduce repeated string operations
+    # Normalize team names once to avoid repeated string operations
     odds_df = odds_df.copy()
     results_df = results_df.copy()
-    odds_df["home_team_norm"] = odds_df["home_team"].apply(_normalize_team_name)
-    odds_df["away_team_norm"] = odds_df["away_team"].apply(_normalize_team_name)
-    results_df["home_team_norm"] = results_df["home_team"].apply(_normalize_team_name)
-    results_df["away_team_norm"] = results_df["away_team"].apply(_normalize_team_name)
+    odds_df = _ensure_normalized_team_columns(odds_df)
+    results_df = _ensure_normalized_team_columns(results_df)
 
     print(f"Odds date range: {odds_df['date'].min()} to {odds_df['date'].max()}")
     print(f"Results date range: {results_df['date'].min()} to {results_df['date'].max()}")
