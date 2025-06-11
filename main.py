@@ -10,7 +10,7 @@ import argparse
 import sys
 import numpy as np
 import pickle
-from typing import Optional, Dict, TypedDict
+from typing import Dict, TypedDict
 
 # For improved table and color output
 try:
@@ -192,18 +192,36 @@ def tomorrow_iso() -> str:
     return (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
 
 
-def build_events_url(sport_key: str, regions: str = "us") -> str:
-    return (
-        f"https://api.the-odds-api.com/v4/sports/{sport_key}/events"
-        f"?apiKey={API_KEY}&regions={regions}"
-    )
+def build_events_url(
+    sport_key: str,
+    regions: str = "us",
+    markets: str | None = None,
+    bookmakers: str | None = None,
+) -> str:
+    params = {"apiKey": API_KEY, "regions": regions}
+    if markets:
+        params["markets"] = markets
+    if bookmakers:
+        params["bookmakers"] = bookmakers
+    query = urllib.parse.urlencode(params)
+    return f"https://api.the-odds-api.com/v4/sports/{sport_key}/events?{query}"
 
 
-def fetch_events(sport_key: str, regions: str = "us") -> list:
+def fetch_events(
+    sport_key: str,
+    regions: str = "us",
+    markets: str | None = None,
+    bookmakers: str | None = None,
+) -> list:
     if TEST_MODE:
         print("Test mode active: fetch_events returning empty list")
         return []
-    url = build_events_url(sport_key, regions=regions)
+    url = build_events_url(
+        sport_key,
+        regions=regions,
+        markets=markets,
+        bookmakers=bookmakers,
+    )
     try:
         with urllib.request.urlopen(url) as resp:
             return json.loads(resp.read().decode())
@@ -280,49 +298,59 @@ def fetch_event_odds(
         return []
 
 
-def build_ticket_sentiment_url(event_id: str) -> str:
-    base = f"https://api.the-odds-api.com/v4/events/{event_id}/consensus"
-    params = {"apiKey": API_KEY}
-    return f"{base}?{urllib.parse.urlencode(params)}"
-
-
-def fetch_ticket_sentiment(event_id: str) -> Optional[Dict[str, float]]:
-    """Return mapping of team -> ticket percentage if available."""
+def fetch_consensus_ticket_percentages(
+    sport_key: str, regions: str = "us"
+) -> Dict[str, Dict[str, float]]:
+    """Return mapping of event id -> team -> ticket percentage."""
     if TEST_MODE:
-        print("Test mode active: fetch_ticket_sentiment returning None")
-        return None
+        print(
+            "Test mode active: fetch_consensus_ticket_percentages returning empty mapping"
+        )
+        return {}
 
-    url = build_ticket_sentiment_url(event_id)
+    url = build_events_url(
+        sport_key,
+        regions=regions,
+        markets="h2h",
+        bookmakers="consensus",
+    )
+
     try:
         with urllib.request.urlopen(url) as resp:
             data = json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         print(
-            Fore.RED + f"HTTPError fetching ticket sentiment: {e.code} {e.reason}" if Fore else f"HTTPError fetching ticket sentiment: {e.code} {e.reason}"
+            Fore.RED + f"HTTPError fetching consensus data: {e.code} {e.reason}" if Fore else f"HTTPError fetching consensus data: {e.code} {e.reason}"
         )
-        return None
+        return {}
     except Exception as e:
         print(
-            Fore.RED + f"Error fetching ticket sentiment: {e}" if Fore else f"Error fetching ticket sentiment: {e}"
+            Fore.RED + f"Error fetching consensus data: {e}" if Fore else f"Error fetching consensus data: {e}"
         )
-        return None
+        return {}
 
-    if not isinstance(data, dict):
-        return None
-
-    markets = data.get("markets") or []
-    for market in markets:
-        if market.get("key") != "h2h":
-            continue
-        outcomes = market.get("outcomes", [])
-        percentages: Dict[str, float] = {}
-        for outcome in outcomes:
-            team = outcome.get("name")
-            pct = outcome.get("ticket_percentage")
-            if team is not None and pct is not None:
-                percentages[team] = pct
-        return percentages if percentages else None
-    return None
+    sentiments: Dict[str, Dict[str, float]] = {}
+    if isinstance(data, list):
+        for event in data:
+            event_id = event.get("id")
+            if not event_id:
+                continue
+            for book in event.get("bookmakers", []):
+                if book.get("key") != "consensus":
+                    continue
+                for market in book.get("markets", []):
+                    if market.get("key") != "h2h":
+                        continue
+                    percentages: Dict[str, float] = {}
+                    for outcome in market.get("outcomes", []):
+                        team = outcome.get("name")
+                        pct = outcome.get("ticket_percentage")
+                        if team is not None and pct is not None:
+                            percentages[team] = pct
+                    if percentages:
+                        sentiments[event_id] = percentages
+                break
+    return sentiments
 
 
 def evaluate_h2h_all_tomorrow(
@@ -337,6 +365,7 @@ def evaluate_h2h_all_tomorrow(
     model_path = ensure_model_exists(model_path)
     
     events = fetch_events(sport_key, regions=regions)
+    ticket_sentiments = fetch_consensus_ticket_percentages(sport_key, regions=regions)
     results = []
 
     if verbose or True:
@@ -460,7 +489,7 @@ def evaluate_h2h_all_tomorrow(
                 if any(sb in book_key for sb in SOFT_BOOKS):
                     soft_implied_probs.append(implied)
 
-                sentiment = fetch_ticket_sentiment(event_id)
+                sentiment = ticket_sentiments.get(event_id)
                 team1_pct = team2_pct = None
                 fade = False
                 if sentiment:
