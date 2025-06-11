@@ -136,6 +136,43 @@ def compute_recency_weights(dates: pd.Series, half_life_days: float = 30.0) -> p
     return weights
 
 
+def fetch_team_stats(team: str) -> dict:
+    """Return statistics dictionary for ``team``.
+
+    This placeholder implementation returns an empty mapping. Replace it with
+    real data retrieval as needed.
+    """
+
+    return {}
+
+
+def enrich_game_data(row: dict) -> dict:
+    """Add additional features needed by advanced ML models."""
+
+    team1 = row.get("team1")
+    team2 = row.get("team2")
+
+    team1_stats = fetch_team_stats(team1)
+    team2_stats = fetch_team_stats(team2)
+
+    row.update(
+        {
+            "pregame_price": row.get("price1"),
+            "pregame_line": row.get("price1"),
+            "home_team": team1,
+            "away_team": team2,
+            "day_night": "D",
+            "game_day": datetime.utcnow().weekday(),
+            "is_weekend": datetime.utcnow().weekday() >= 5,
+        }
+    )
+
+    row.update({f"team1_{k}": v for k, v in team1_stats.items()})
+    row.update({f"team2_{k}": v for k, v in team2_stats.items()})
+
+    return row
+
+
 def public_fade_flag(ticket_percent: float, line_delta: float, *, threshold: float = 70.0) -> int:
     """Return ``1`` when heavy public action and negative line movement align."""
 
