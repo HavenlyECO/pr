@@ -665,6 +665,7 @@ def print_h2h_projections_table(projections: list) -> None:
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
 
             edge = row.get(K_EDGE)
+            w_edge = row.get(K_WEIGHTED_EDGE)
             edge_color = ""
             edge_reset = ""
             
@@ -677,6 +678,7 @@ def print_h2h_projections_table(projections: list) -> None:
                     edge_reset = Style.RESET_ALL
                     
             edge_str = f"{edge_color}{edge*100:+.1f}%{edge_reset}" if edge is not None else "N/A"
+            w_edge_str = f"{w_edge*100:+.1f}%" if w_edge is not None else "N/A"
 
             # Format the team names with home team highlighted
             team1 = row.get(K_TEAM1, "")
@@ -704,17 +706,18 @@ def print_h2h_projections_table(projections: list) -> None:
                 rec,
                 team1,
                 price1_str,
-                team2, 
+                team2,
                 price2_str,
                 prob_str,
                 edge_str,
+                w_edge_str,
                 row.get(K_BOOKMAKER, "")
             ])
 
         # Print the table with nice formatting
         print(tabulate(
             table_data,
-            headers=["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "Book"],
+            headers=["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "W.Edge", "Book"],
             tablefmt="pretty",
             stralign="left",
         ))
@@ -727,7 +730,7 @@ def print_h2h_projections_table(projections: list) -> None:
             
     else:
         # Fallback for environments without tabulate
-        headers = ["REC", "TEAM1", "ODDS", "TEAM2", "ODDS", "WIN%", "EDGE", "BOOK"]
+        headers = ["REC", "TEAM1", "ODDS", "TEAM2", "ODDS", "WIN%", "EDGE", "WEDGE", "BOOK"]
         
         def col_width(key: str, minimum: int) -> int:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
@@ -741,11 +744,12 @@ def print_h2h_projections_table(projections: list) -> None:
             "ODDS2": 6,
             "WIN%": 6,
             "EDGE": 7,
+            "WEDGE": 7,
             "BOOK": col_width(K_BOOKMAKER, 10),
         }
         
         # Print header
-        header_line = " ".join(h.ljust(widths[h if h != "ODDS2" else "ODDS"]) for h in headers)
+        header_line = " ".join(h.ljust(widths[h if h not in ("ODDS2", "WEDGE") else "ODDS"]) for h in headers)
         print(header_line)
         print("-" * len(header_line))
         
@@ -755,7 +759,9 @@ def print_h2h_projections_table(projections: list) -> None:
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
             
             edge = row.get(K_EDGE)
+            wedge = row.get(K_WEIGHTED_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
+            wedge_str = f"{wedge*100:+.1f}%" if wedge is not None else "N/A"
             
             rec = "★" if should_highlight_row(edge) and not row.get(K_RISK_BLOCK_FLAG) else " "
             
@@ -772,6 +778,7 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
+                wedge_str,
                 row.get(K_BOOKMAKER, ""),
             ]
             
