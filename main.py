@@ -366,9 +366,13 @@ def evaluate_h2h_all_tomorrow(
     
     # Ensure model exists
     model_path = ensure_model_exists(model_path)
-    
+
+    # Progress: show when event data fetching begins
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching events for {sport_key}...")
     events = fetch_events(sport_key, regions=regions)
     ticket_sentiments = fetch_consensus_ticket_percentages(sport_key, regions=regions)
+    event_count = len(events)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Found {event_count} events to analyze")
     results = []
 
     if verbose or True:
@@ -377,11 +381,22 @@ def evaluate_h2h_all_tomorrow(
     now = datetime.utcnow()
     testing_mode = TEST_MODE or now.year >= 2025
 
+    # Progress tracking for event processing
+    processed = 0
+    total = len(events)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting analysis of {total} events...")
+
     for event in events:
+        processed += 1
         commence = event.get("commence_time", "")
         event_id = event.get("id")
         home = event.get("home_team")
         away = event.get("away_team")
+
+        if processed % 3 == 0 or processed == total:
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] Processing event {processed}/{total}: {away} at {home}"
+            )
         
         if verbose:
             print(f"\nEVENT: {event_id} | {away} at {home} | {commence}")
@@ -612,7 +627,11 @@ def evaluate_h2h_all_tomorrow(
             row[K_WEIGHTED_EDGE] = row[K_EDGE] * weight
             row[K_WEIGHTED_EV] = row[K_EXPECTED_VALUE] * weight
             results.append(row)
-    
+
+    print(
+        f"[{datetime.now().strftime('%H:%M:%S')}] Analysis complete: {len(results)} betting opportunities found\n"
+    )
+
     if verbose:
         print(f"DEBUG: Total evaluated h2h: {len(results)}")
     
