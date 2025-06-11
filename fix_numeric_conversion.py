@@ -72,6 +72,8 @@ def extract_advanced_ml_features(
             prob = implied + 0.02  # Slight edge over implied
 
         edge = prob - implied
+        if abs(edge) < 1e-6:
+            print("WARNING: Edge is zero or near zero. Check model and input features!")  # PATCH: Diagnostic
         ev = edge * american_odds_to_payout(price1)
         print(f"Model prob: {prob:.4f}, Implied: {implied:.4f}, Edge: {edge:.4f}")  # PATCH: Log edge calculation
 
