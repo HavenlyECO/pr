@@ -617,12 +617,22 @@ def print_h2h_projections_table(projections: list) -> None:
         print("No projection data available.")
         return
 
-    advanced_columns = [
-        "ml_confidence",
-        "lineup_strength",
-        "market_efficiency",
-        "sharp_action",
+
+    # Show fewer columns for better readability
+    columns_to_show = [
+        "Team 1",
+        "Odds",
+        "Team 2",
+        "Odds",
+        "Win Prob",
+        "Edge",
+        "W.Edge",
+        "EV",
+        "Book",
+        "ML.Conf",
     ]
+
+    advanced_columns = ["ml_confidence"]
 
     def format_value(val: Any) -> str:
         if val is None:
@@ -646,64 +656,29 @@ def print_h2h_projections_table(projections: list) -> None:
             ev = row.get(K_EXPECTED_VALUE)
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
-            soft_spread = row.get(K_SOFT_BOOK_SPREAD)
-            soft_spread_str = (
-                f"{soft_spread*100:.1f}%" if soft_spread is not None else "N/A"
-            )
-
-            mbedge = row.get(K_MULTI_BOOK_EDGE_SCORE)
-            mbedge_str = f"{mbedge*100:.1f}%" if mbedge is not None else "N/A"
-
             price1 = row.get(K_PRICE1, 0)
             price2 = row.get(K_PRICE2, 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
             price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
 
-            values = [
-                row.get(K_TEAM1, ""),
-                price1_str,
-                row.get(K_TEAM2, ""),
-                price2_str,
-                prob_str,
-                edge_str,
-                w_edge_str,
-                ev_str,
-                soft_spread_str,
-                mbedge_str,
-                f"{row.get(K_MARKET_MAKER_MIRROR_SCORE, 0.0)*100:+.1f}%" if row.get(K_MARKET_MAKER_MIRROR_SCORE) is not None else "N/A",
-                "FADE" if row.get(K_PUBLIC_FADE) else "",
-                "STALE" if row.get(K_STALE_FLAG) else "",
-                "RISK" if row.get(K_RISK_BLOCK_FLAG) else "",
-                row.get(K_BOOKMAKER, ""),
-            ]
-            for col in advanced_columns:
-                values.append(format_value(row.get(col)))
-            table_data.append(values)
+            ml_conf_str = format_value(row.get("ml_confidence"))
 
-        print(
-            tabulate(
-                table_data,
-                headers=[
-                    "Team 1",
-                    "Odds",
-                    "Team 2",
-                    "Odds",
-                    "Win Prob",
-                    "Edge",
-                    "W.Edge",
-                    "EV",
-                    "SoftSpr",
-                    "MB.Edge",
-                    "MM.Score",
-                    "Fade",
-                    "Stale",
-                    "Risk",
-                    "Book",
-                    *advanced_columns,
-                ],
-                tablefmt="pretty",
+            table_data.append(
+                [
+                    row.get(K_TEAM1, ""),
+                    price1_str,
+                    row.get(K_TEAM2, ""),
+                    price2_str,
+                    prob_str,
+                    edge_str,
+                    w_edge_str,
+                    ev_str,
+                    row.get(K_BOOKMAKER, ""),
+                    ml_conf_str,
+                ]
             )
-        )
+
+        print(tabulate(table_data, headers=columns_to_show, tablefmt="pretty"))
     else:
         headers = [
             "TEAM1",
@@ -714,15 +689,9 @@ def print_h2h_projections_table(projections: list) -> None:
             "EDGE",
             "W_EDGE",
             "EV",
-            "SOFTSPR",
-            "MB_EDGE",
-            "MM_SCORE",
-            "FADE",
-            "STALE",
-            "RISK",
             "BOOK",
+            "ML_CONF",
         ]
-        headers.extend([c.upper() for c in advanced_columns])
 
         def col_width(key: str, minimum: int) -> int:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
@@ -736,16 +705,9 @@ def print_h2h_projections_table(projections: list) -> None:
             "EDGE": 8,
             "W_EDGE": 8,
             "EV": 8,
-            "SOFTSPR": 8,
-            "MB_EDGE": 8,
-            "MM_SCORE": 8,
-            "FADE": 6,
-            "RISK": 6,
             "BOOK": col_width(K_BOOKMAKER, 8),
-            "STALE": 6,
+            "ML_CONF": col_width("ml_confidence", 8),
         }
-        for col in advanced_columns:
-            widths[col.upper()] = col_width(col, 8)
 
         header_line = " ".join(h.ljust(widths[h]) for h in headers)
         print(header_line)
@@ -761,14 +723,6 @@ def print_h2h_projections_table(projections: list) -> None:
             ev = row.get(K_EXPECTED_VALUE)
             ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
 
-            soft_spread = row.get(K_SOFT_BOOK_SPREAD)
-            soft_spread_str = (
-                f"{soft_spread*100:.1f}%" if soft_spread is not None else "N/A"
-            )
-
-            mbedge = row.get(K_MULTI_BOOK_EDGE_SCORE)
-            mbedge_str = f"{mbedge*100:.1f}%" if mbedge is not None else "N/A"
-
             price1 = row.get(K_PRICE1, 0)
             price2 = row.get(K_PRICE2, 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
@@ -783,16 +737,10 @@ def print_h2h_projections_table(projections: list) -> None:
                 edge_str,
                 w_edge_str,
                 ev_str,
-                soft_spread_str,
-                mbedge_str,
-                f"{row.get(K_MARKET_MAKER_MIRROR_SCORE, 0.0)*100:+.1f}%" if row.get(K_MARKET_MAKER_MIRROR_SCORE) is not None else "N/A",
-                "FADE" if row.get(K_PUBLIC_FADE) else "",
-                "STALE" if row.get(K_STALE_FLAG) else "",
-                "RISK" if row.get(K_RISK_BLOCK_FLAG) else "",
                 row.get(K_BOOKMAKER, ""),
+                format_value(row.get("ml_confidence")),
             ]
-            for col in advanced_columns:
-                values.append(format_value(row.get(col)))
+
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
 
