@@ -1327,7 +1327,9 @@ def predict_h2h_probability(
         df = df.reindex(cols, axis=1, fill_value=0)
 
     proba = model.predict_proba(df)[0][1]
-    print(f"[DEBUG] Model proba: {proba} (features: {features})")
+    print(
+        f"[DEBUG] Model proba: {proba} (price1: {price1}, price2: {price2})"
+    )
     return float(proba)
 
 
