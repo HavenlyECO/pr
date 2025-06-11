@@ -1719,44 +1719,23 @@ def extract_advanced_ml_features(
     team1: str | None = None,
     team2: str | None = None,
 ) -> dict:
-    """Return additional metrics from a moneyline or dual-head model with proper feature construction."""
+    """Return additional metrics from a moneyline or dual-head model."""
 
-    now = datetime.utcnow()
-
-    features = {
-        "price1": price1,
-        "price2": price2,
-        "pregame_price": price1,
-        "pregame_line": price1,
-        "event_id": "prediction",
-        "commence_time": now.isoformat(),
-        "bookmaker": "prediction",
-        "date": now.date().isoformat(),
-        "home_team": team1 or "Team1",
-        "away_team": team2 or "Team2",
-        "home_score": 0,
-        "visiting_score": 0,
-        "day_night": "D",
-        "attendance": 0,
-        "implied_prob": american_odds_to_prob(price1),
-        "game_day": now.weekday(),
-        "is_weekend": int(now.weekday() >= 5),
-    }
+    base_features = {"price1": price1, "price2": price2}
+    if team1 is not None:
+        base_features["team1"] = team1
+    if team2 is not None:
+        base_features["team2"] = team2
 
     try:
-        prob = predict_moneyline_probability(model_path, features)
+        prob = predict_moneyline_probability(model_path, base_features)
     except Exception:
         return {}
 
     implied = american_odds_to_prob(price1)
     edge = prob - implied
     ev = edge * american_odds_to_payout(price1)
-
     return {
-        "ml_confidence": prob,
-        "lineup_strength": 0.5,
-        "market_efficiency": implied,
-        "sharp_action": edge,
         "advanced_ml_prob": prob,
         "advanced_ml_edge": edge,
         "advanced_ml_ev": ev,
