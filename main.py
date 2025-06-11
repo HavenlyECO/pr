@@ -10,7 +10,7 @@ import argparse
 import sys
 import numpy as np
 import pickle
-from typing import Dict, TypedDict
+from typing import Dict, TypedDict, Any
 
 # For improved table and color output
 try:
@@ -607,6 +607,20 @@ def print_h2h_projections_table(projections: list) -> None:
         print("No projection data available.")
         return
 
+    advanced_columns = [
+        "ml_confidence",
+        "lineup_strength",
+        "market_efficiency",
+        "sharp_action",
+    ]
+
+    def format_value(val: Any) -> str:
+        if val is None:
+            return "N/A"
+        if isinstance(val, float):
+            return f"{val:.3f}"
+        return str(val)
+
     if tabulate is not None:
         table_data = []
         for row in projections:
@@ -635,7 +649,7 @@ def print_h2h_projections_table(projections: list) -> None:
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
             price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
 
-            table_data.append([
+            values = [
                 row.get(K_TEAM1, ""),
                 price1_str,
                 row.get(K_TEAM2, ""),
@@ -651,7 +665,10 @@ def print_h2h_projections_table(projections: list) -> None:
                 "STALE" if row.get(K_STALE_FLAG) else "",
                 "RISK" if row.get(K_RISK_BLOCK_FLAG) else "",
                 row.get(K_BOOKMAKER, ""),
-            ])
+            ]
+            for col in advanced_columns:
+                values.append(format_value(row.get(col)))
+            table_data.append(values)
 
         print(
             tabulate(
@@ -672,6 +689,7 @@ def print_h2h_projections_table(projections: list) -> None:
                     "Stale",
                     "Risk",
                     "Book",
+                    *advanced_columns,
                 ],
                 tablefmt="pretty",
             )
@@ -694,6 +712,7 @@ def print_h2h_projections_table(projections: list) -> None:
             "RISK",
             "BOOK",
         ]
+        headers.extend([c.upper() for c in advanced_columns])
 
         def col_width(key: str, minimum: int) -> int:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
@@ -715,6 +734,8 @@ def print_h2h_projections_table(projections: list) -> None:
             "BOOK": col_width(K_BOOKMAKER, 8),
             "STALE": 6,
         }
+        for col in advanced_columns:
+            widths[col.upper()] = col_width(col, 8)
 
         header_line = " ".join(h.ljust(widths[h]) for h in headers)
         print(header_line)
@@ -760,6 +781,8 @@ def print_h2h_projections_table(projections: list) -> None:
                 "RISK" if row.get(K_RISK_BLOCK_FLAG) else "",
                 row.get(K_BOOKMAKER, ""),
             ]
+            for col in advanced_columns:
+                values.append(format_value(row.get(col)))
             print(" ".join(str(v).ljust(widths[h]) for v, h in zip(values, headers)))
 
 
