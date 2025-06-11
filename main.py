@@ -398,11 +398,14 @@ def evaluate_h2h_all_tomorrow(
             start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
             end_dt = start_dt + timedelta(hours=14)
 
-            if not (start_dt <= commence_dt < end_dt):
-                if verbose:
-                    print(f"  Skipped: commence_time {commence_dt} not in window {start_dt} to {end_dt}")
-                continue
+        if not (start_dt <= commence_dt < end_dt):
+            if verbose:
+                print(f"  Skipped: commence_time {commence_dt} not in window {start_dt} to {end_dt}")
+            continue
 
+        if verbose:
+            msg = f"[FETCHING] Odds for {away} at {home} ({event_id})..."
+            print(msg, end="", flush=True)
         game_odds = fetch_event_odds(
             sport_key,
             event_id,
@@ -410,6 +413,9 @@ def evaluate_h2h_all_tomorrow(
             regions=regions,
             player_props=False,
         )
+
+        if verbose:
+            print(" done.")
         
         if verbose:
             print(f"  Raw odds for event {event_id}:")
