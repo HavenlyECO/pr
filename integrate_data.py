@@ -289,28 +289,50 @@ def parse_retrosheet_file(file_path, year):
         return None
 
 
+def _normalize_team_name(name: str) -> str:
+    """Return a lower-case team name without surrounding whitespace"""
+    return str(name).strip().lower()
+
+
 def match_odds_with_results(odds_df, results_df):
     """Match odds data with game results by team and date"""
     print("\nMatching odds data with game results...")
     if odds_df.empty or results_df.empty:
         print("No data to match")
         return pd.DataFrame()
+
+    # Normalize team names once to reduce repeated string operations
+    odds_df = odds_df.copy()
+    results_df = results_df.copy()
+    odds_df["home_team_norm"] = odds_df["home_team"].apply(_normalize_team_name)
+    odds_df["away_team_norm"] = odds_df["away_team"].apply(_normalize_team_name)
+    results_df["home_team_norm"] = results_df["home_team"].apply(_normalize_team_name)
+    results_df["away_team_norm"] = results_df["away_team"].apply(_normalize_team_name)
+
     matched_records = []
     matched_count = 0
     total_odds = len(odds_df)
     for _, odds_row in odds_df.iterrows():
         odds_date = odds_row["date"]
-        odds_home = odds_row["home_team"]
-        odds_away = odds_row["away_team"]
+        odds_home = odds_row["home_team_norm"]
+        odds_away = odds_row["away_team_norm"]
         matches = results_df[
             (results_df["date"] == odds_date)
             & (
-                (results_df["home_team"] == odds_home)
-                | (results_df["home_team"].str.contains(odds_home, na=False))
+                (results_df["home_team_norm"] == odds_home)
+                | (
+                    results_df["home_team_norm"].str.contains(
+                        odds_home, na=False, regex=False
+                    )
+                )
             )
             & (
-                (results_df["away_team"] == odds_away)
-                | (results_df["away_team"].str.contains(odds_away, na=False))
+                (results_df["away_team_norm"] == odds_away)
+                | (
+                    results_df["away_team_norm"].str.contains(
+                        odds_away, na=False, regex=False
+                    )
+                )
             )
         ]
         if len(matches) > 0:
