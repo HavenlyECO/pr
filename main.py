@@ -53,7 +53,8 @@ RISK_ODDS_LIMIT = -170
 
 def should_highlight_row(edge: float | None) -> bool:
     """Return ``True`` when ``edge`` exceeds the recommendation threshold."""
-    return edge is not None and edge > EDGE_THRESHOLD
+    print(f"[DEBUG] Highlight check for edge: {edge}")
+    return edge is not None and edge > 0.06
 
 # Sportsbooks considered "soft" for pricing comparisons. These lines often
 # lag sharper markets, creating short-lived arbitrage opportunities when they
