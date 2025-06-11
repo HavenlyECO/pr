@@ -36,7 +36,9 @@ def update_table_layout():
                     edge_color = Fore.RED
                     edge_reset = Style.RESET_ALL
                     
+            wedge = row.get(K_WEIGHTED_EDGE)
             edge_str = f"{edge_color}{edge*100:+.1f}%{edge_reset}" if edge is not None else "N/A"
+            wedge_str = f"{wedge*100:+.1f}%" if wedge is not None else "N/A"
 
             # Format the team names with home team highlighted
             team1 = row.get(K_TEAM1, "")
@@ -64,15 +66,16 @@ def update_table_layout():
                 rec,
                 team1,
                 price1_str,
-                team2, 
+                team2,
                 price2_str,
                 prob_str,
                 edge_str,
+                wedge_str,
                 row.get(K_BOOKMAKER, "")[:10]  # Truncate long bookmaker names
             ])
 
         # Print the table with nice formatting
-        headers = ["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "Book"]
+        headers = ["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "W.Edge", "Book"]
         print(tabulate(
             table_data,
             headers=headers,
@@ -88,7 +91,7 @@ def update_table_layout():
             
     else:
         # Fallback for environments without tabulate
-        headers = ["REC", "TEAM", "ODDS", "OPP", "ODDS", "WIN%", "EDGE", "BOOK"]
+        headers = ["REC", "TEAM", "ODDS", "OPP", "ODDS", "WIN%", "EDGE", "WEDGE", "BOOK"]
         
         def col_width(key: str, minimum: int) -> int:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
@@ -102,11 +105,12 @@ def update_table_layout():
             "ODDS2": 6,
             "WIN%": 6,
             "EDGE": 7,
+            "WEDGE": 7,
             "BOOK": 10,
         }
         
         # Print header
-        header_line = " ".join(h.ljust(widths[h if h != "ODDS2" else "ODDS"]) for h in headers)
+        header_line = " ".join(h.ljust(widths[h if h not in ("ODDS2", "WEDGE") else "ODDS"]) for h in headers)
         print(header_line)
         print("-" * len(header_line))
         
@@ -116,7 +120,9 @@ def update_table_layout():
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
             
             edge = row.get(K_EDGE)
+            wedge = row.get(K_WEIGHTED_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
+            wedge_str = f"{wedge*100:+.1f}%" if wedge is not None else "N/A"
             
             # Recommendation indicator
             rec = "★" if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG) else " "
@@ -134,6 +140,7 @@ def update_table_layout():
                 price2_str,
                 prob_str,
                 edge_str,
+                wedge_str,
                 (row.get(K_BOOKMAKER, "") or "")[:10],  # Truncate long bookmaker names
             ]
             
