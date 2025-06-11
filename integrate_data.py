@@ -203,27 +203,34 @@ def parse_retrosheet_file(file_path, year):
         return None
 
     try:
-        columns = [
-            (0, 8, "date"),
-            (8, 9, "game_number"),
-            (9, 12, "day_of_week"),
-            (12, 14, "visiting_team"),
-            (14, 15, "visiting_league"),
-            (17, 19, "home_team"),
-            (19, 20, "home_league"),
-            (22, 24, "visiting_score"),
-            (24, 26, "home_score"),
-            (28, 29, "day_night"),
-            (59, 62, "park_id"),
-            (62, 68, "attendance"),
-        ]
-        colspecs = [(start, end) for start, end, _ in columns]
-        names = [name for _, _, name in columns]
-        df = pd.read_fwf(file_path, colspecs=colspecs, names=names, encoding="latin1")
+        # Retrosheet gamelog files are comma separated, not fixed width.  The
+        # previous implementation attempted to parse them with ``read_fwf`` which
+        # resulted in truncated team codes like ``hu`` and missing dates.  Read
+        # the file as CSV instead and then rename the handful of columns we need.
+
+        df = pd.read_csv(file_path, header=None, encoding="latin1")
+        df = df.rename(
+            columns={
+                0: "date",
+                1: "game_number",
+                2: "day_of_week",
+                3: "visiting_team",
+                4: "visiting_league",
+                5: "visiting_game_num",
+                6: "home_team",
+                7: "home_league",
+                8: "home_game_num",
+                9: "visiting_score",
+                10: "home_score",
+                11: "outs",
+                12: "day_night",
+                16: "park_id",
+                17: "attendance",
+            }
+        )
+
         df["year"] = year
-        df["date"] = pd.to_datetime(
-            df["date"].astype(str), format="%Y%m%d", errors="coerce"
-        ).dt.strftime("%Y-%m-%d")
+        df["date"] = pd.to_datetime(df["date"], format="%Y%m%d", errors="coerce").dt.strftime("%Y-%m-%d")
         df["visiting_score"] = pd.to_numeric(df["visiting_score"], errors="coerce")
         df["home_score"] = pd.to_numeric(df["home_score"], errors="coerce")
         df["home_team_win"] = (df["home_score"] > df["visiting_score"]).astype(int)
