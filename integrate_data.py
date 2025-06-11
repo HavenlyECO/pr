@@ -449,21 +449,52 @@ def add_ml_features(df):
 
 def main():
     """Main processing function"""
+    # Parse command line arguments
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Integrate odds data with Retrosheet game results"
+    )
+    parser.add_argument(
+        "--year", type=int, help="Process only a specific target year (e.g., 2023)"
+    )
+    parser.add_argument(
+        "--years", help="Year range to process (e.g., '2018-2023')"
+    )
+    parser.add_argument(
+        "--output",
+        default=OUTPUT_FILE,
+        help=f"Output CSV file path (default: {OUTPUT_FILE})",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
+
     print("Starting data integration process...")
     setup_directories()
     odds_df = load_odds_from_cache()
     if odds_df.empty:
         print("No odds data found. Please check your cache files.")
         return
-    # Limit odds to the year(s) being processed.  This keeps the dataset
-    # smaller and ensures we are only matching games within the same season.
-    year_strs = [str(y) for y in YEARS_TO_PROCESS]
-    odds_df = odds_df[odds_df["date"].str[:4].isin(year_strs)]
-    print(
-        f"Filtered to {len(odds_df)} odds records from {', '.join(year_strs)}"
-    )
+
+    # Filter odds data to specific year if requested
+    if args.year:
+        year_str = str(args.year)
+        odds_df = odds_df[odds_df["date"].str.startswith(year_str)]
+        print(f"Filtered to {len(odds_df)} odds records from {args.year}")
+
+    # Determine years to process
+    years_to_process = YEARS_TO_PROCESS
+    if args.year:
+        years_to_process = [args.year]
+    elif args.years:
+        if "-" in args.years:
+            start_year, end_year = map(int, args.years.split("-"))
+            years_to_process = range(start_year, end_year + 1)
+        else:
+            years_to_process = [int(year.strip()) for year in args.years.split(",")]
+
     all_results = []
-    for year in YEARS_TO_PROCESS:
+    for year in years_to_process:
         print(f"\nProcessing Retrosheet data for {year}:")
         zip_file = download_retrosheet_data(year)
         if zip_file:
@@ -475,18 +506,23 @@ def main():
                     all_results.append(year_df)
                 else:
                     print(f"No valid data extracted for {year}")
+
     if not all_results:
         print("No Retrosheet results were processed.")
         return
+
     results_df = pd.concat(all_results)
     print(f"Combined results dataset has {len(results_df)} games")
     matched_df = match_odds_with_results(odds_df, results_df)
+
     if matched_df.empty:
         print("No matches found between odds data and results.")
         return
+
     final_df = add_ml_features(matched_df)
-    print(f"Saving integrated training dataset to {OUTPUT_FILE}...")
-    final_df.to_csv(OUTPUT_FILE, index=False)
+    print(f"Saving integrated training dataset to {args.output}...")
+    final_df.to_csv(args.output, index=False)
+
     print("\nDataset Summary:")
     print(f"Total games with odds and results: {len(final_df)}")
     print(f"Date range: {final_df['date'].min()} to {final_df['date'].max()}")
@@ -495,7 +531,7 @@ def main():
         "\nProcess complete! You can now use this dataset for training your ML model."
     )
     print(
-        f"Run: python main.py train_classifier --dataset={OUTPUT_FILE} --features-type=dual --verbose"
+        f"Run: python main.py train_classifier --dataset={args.output} --features-type=dual --verbose"
     )
 
 
