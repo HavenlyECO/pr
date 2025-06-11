@@ -108,8 +108,17 @@ def extract_advanced_ml_features(
         "implied_prob": american_odds_to_prob(price1),
         "game_day": 0,
         "is_weekend": 0,
-        "team1": (event.get("team1") if event else None) or "UnknownTeam1",  # PATCH: ensure not missing
-        "team2": (event.get("team2") if event else None) or "UnknownTeam2",  # PATCH: ensure not missing
+        # Use provided team names if available, otherwise fall back to event data
+        # or a clear placeholder. This ensures the advanced model receives the
+        # actual teams participating in the matchup when possible.
+        "team1":
+            team1
+            if team1 is not None
+            else (event.get("team1") if event else None) or "UnknownTeam1",
+        "team2":
+            team2
+            if team2 is not None
+            else (event.get("team2") if event else None) or "UnknownTeam2",
     }
 
     try:
