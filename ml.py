@@ -1327,6 +1327,7 @@ def predict_h2h_probability(
         df = df.reindex(cols, axis=1, fill_value=0)
 
     proba = model.predict_proba(df)[0][1]
+    print(f"[DEBUG] Model proba: {proba} (features: {features})")
     return float(proba)
 
 
@@ -1692,8 +1693,8 @@ def predict_moneyline_probability(
         with open(model_path, "rb") as f:
             model_info = pickle.load(f)
     except Exception as e:
-        print(f"ERROR: Could not load ML model from {model_path}: {e}")  # PATCH: Loudly warn
-        raise  # Let the fallback logic handle this
+        print(f"[ERROR] Could not load ML model from {model_path}: {e}")
+        raise  # Let the fallback in fix_numeric_conversion.py handle it
 
     if isinstance(model_info, tuple):
         model, cols = model_info
@@ -1712,6 +1713,7 @@ def predict_moneyline_probability(
         df = df.reindex(cols, axis=1, fill_value=0)
 
     proba = model.predict_proba(df)[0][1]
+    print(f"[DEBUG] Model proba: {proba} (features: {features})")
     return float(proba)
 
 
