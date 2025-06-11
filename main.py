@@ -68,6 +68,8 @@ from ml import (
     MARKET_MAKER_MIRROR_MODEL_PATH,
     train_market_maker_mirror_model,
     market_maker_mirror_score,
+    extract_advanced_ml_features,
+    extract_market_signals,
 )
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
@@ -560,6 +562,27 @@ def evaluate_h2h_all_tomorrow(
                 )
             else:
                 row[K_MARKET_MAKER_MIRROR_SCORE] = None
+
+            # Add advanced machine learning features
+            team1 = row.get(K_TEAM1)
+            team2 = row.get(K_TEAM2)
+            if Path(MONEYLINE_MODEL_PATH).exists():
+                adv = extract_advanced_ml_features(
+                    model_path=str(MONEYLINE_MODEL_PATH),
+                    price1=row.get(K_PRICE1),
+                    price2=row.get(K_PRICE2),
+                    team1=team1,
+                    team2=team2,
+                )
+                row.update(adv)
+
+            if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
+                sig = extract_market_signals(
+                    model_path=str(MARKET_MAKER_MIRROR_MODEL_PATH),
+                    price1=row.get(K_PRICE1),
+                    ticket_percent=row.get(K_TICKET_PCT_TEAM1, 0.0),
+                )
+                row.update(sig)
             weight = 1 + diff + (soft_spread or 0)
             if row.get(K_STALE_FLAG):
                 weight *= 1.1

@@ -1673,6 +1673,65 @@ def predict_moneyline_probability(
     proba = model.predict_proba(df)[0][1]
     return float(proba)
 
+
+def extract_advanced_ml_features(
+    model_path: str,
+    *,
+    price1: float,
+    price2: float,
+    team1: str | None = None,
+    team2: str | None = None,
+) -> dict:
+    """Return additional metrics from a moneyline or dual-head model."""
+
+    base_features = {"price1": price1, "price2": price2}
+    if team1 is not None:
+        base_features["team1"] = team1
+    if team2 is not None:
+        base_features["team2"] = team2
+
+    try:
+        prob = predict_moneyline_probability(model_path, base_features)
+    except Exception:
+        return {}
+
+    implied = american_odds_to_prob(price1)
+    edge = prob - implied
+    ev = edge * american_odds_to_payout(price1)
+    return {
+        "advanced_ml_prob": prob,
+        "advanced_ml_edge": edge,
+        "advanced_ml_ev": ev,
+    }
+
+
+def extract_market_signals(
+    model_path: str,
+    *,
+    price1: float,
+    ticket_percent: float,
+) -> dict:
+    """Return market maker mirror metrics for the given line."""
+
+    features = {
+        "opening_odds": price1,
+        "handle_percent": ticket_percent,
+        "ticket_percent": ticket_percent,
+        "volatility": 0.0,
+    }
+
+    try:
+        mirror_price = predict_market_maker_price(model_path, features)
+        mirror_score = market_maker_mirror_score(model_path, features, price1)
+    except Exception:
+        return {}
+
+    return {
+        "predicted_mirror_price": mirror_price,
+        "predicted_mirror_probability": american_odds_to_prob(mirror_price),
+        "mirror_score": mirror_score,
+    }
+
 def _cli():
     import argparse
 
