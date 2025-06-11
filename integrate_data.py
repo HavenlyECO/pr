@@ -17,7 +17,9 @@ RETROSHEET_DIR = Path("retrosheet_data")
 PROCESSED_DIR = RETROSHEET_DIR / "processed"
 CACHE_DIR = Path("h2h_data") / "api_cache"  # Your existing odds API cache
 OUTPUT_FILE = "integrated_training_data.csv"
-YEARS_TO_PROCESS = range(2018, 2024)  # Adjust years to match your odds data
+# Process one year at a time for now.  Start with just 2023 while validating the
+# integration logic.
+YEARS_TO_PROCESS = [2023]
 RETROSHEET_BASE_URL = "https://www.retrosheet.org/gamelogs"
 
 
@@ -358,14 +360,18 @@ def match_odds_with_results(odds_df, results_df):
         odds_home = odds_row["home_team_norm"]
         odds_away = odds_row["away_team_norm"]
 
-        date_mask = (
+        matches = results_df[
             (results_df["date_dt"] >= odds_date - pd.Timedelta(days=1))
             & (results_df["date_dt"] <= odds_date + pd.Timedelta(days=1))
-        )
-        tmp = results_df[date_mask]
-        tmp = tmp[tmp["home_team_norm"].apply(lambda x: _is_close_match(x, odds_home))]
-        tmp = tmp[tmp["away_team_norm"].apply(lambda x: _is_close_match(x, odds_away))]
-        matches = tmp
+            & (
+                results_df["home_team_norm"].str.contains(odds_home, case=False, na=False)
+                | results_df["home_team_norm"].str.contains(odds_home[:5], case=False, na=False)
+            )
+            & (
+                results_df["away_team_norm"].str.contains(odds_away, case=False, na=False)
+                | results_df["away_team_norm"].str.contains(odds_away[:5], case=False, na=False)
+            )
+        ]
         if len(matches) > 0:
             result_row = matches.iloc[0]
             record = {
@@ -449,6 +455,13 @@ def main():
     if odds_df.empty:
         print("No odds data found. Please check your cache files.")
         return
+    # Limit odds to the year(s) being processed.  This keeps the dataset
+    # smaller and ensures we are only matching games within the same season.
+    year_strs = [str(y) for y in YEARS_TO_PROCESS]
+    odds_df = odds_df[odds_df["date"].str[:4].isin(year_strs)]
+    print(
+        f"Filtered to {len(odds_df)} odds records from {', '.join(year_strs)}"
+    )
     all_results = []
     for year in YEARS_TO_PROCESS:
         print(f"\nProcessing Retrosheet data for {year}:")
