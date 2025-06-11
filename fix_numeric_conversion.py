@@ -83,6 +83,7 @@ def extract_advanced_ml_features(
     *,
     price1: float,
     price2: float,
+    event: dict | None = None,
     team1: str | None = None,
     team2: str | None = None,
 ) -> dict:
@@ -101,14 +102,14 @@ def extract_advanced_ml_features(
         "home_team": -1 if team1 is None else 0,  # Numeric placeholders
         "away_team": -1 if team2 is None else 0,
         "home_score": 0,
-        "visiting_score": 0, 
+        "visiting_score": 0,
         "day_night": -1,  # Numeric placeholder
         "attendance": 0,
         "implied_prob": american_odds_to_prob(price1),
         "game_day": 0,
         "is_weekend": 0,
-        "team1": -1 if team1 is None else 0,  # Add team1/team2 columns
-        "team2": -1 if team2 is None else 0,
+        "team1": (event.get("team1") if event else None) or "UnknownTeam1",  # PATCH: ensure not missing
+        "team2": (event.get("team2") if event else None) or "UnknownTeam2",  # PATCH: ensure not missing
     }
 
     try:
