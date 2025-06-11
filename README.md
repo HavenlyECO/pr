@@ -486,3 +486,17 @@ Training functions in ``ml.py`` accept a ``profile_memory`` flag. When set to
 heavy pandas operations and model fitting is printed to the console. This can
 help identify bottlenecks when working with large datasets.
 
+## Verbose Output and Debugging
+
+Pass the ``--verbose`` flag to ``main.py`` to see progress messages while data
+is fetched and evaluated. This prints a short notice for each game as odds are
+retrieved. For interactive troubleshooting launch the script with Python's
+built-in debugger:
+
+```bash
+python3 -m pdb main.py --verbose
+```
+
+The debugger lets you inspect variables, step through code and continue
+execution at your own pace.
+
