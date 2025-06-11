@@ -1729,6 +1729,8 @@ def extract_advanced_ml_features(
 ) -> dict:
     """Return additional metrics from a moneyline or dual-head model with proper feature construction."""
 
+    from datetime import datetime
+
     now = datetime.utcnow()
 
     features = {
@@ -1749,11 +1751,14 @@ def extract_advanced_ml_features(
         "implied_prob": american_odds_to_prob(price1),
         "game_day": now.weekday(),
         "is_weekend": int(now.weekday() >= 5),
+        "team1": team1 or "Team1",  # PATCH: ensure team1/2 always present
+        "team2": team2 or "Team2",
     }
 
     try:
         prob = predict_moneyline_probability(model_path, features)
-    except Exception:
+    except Exception as e:
+        print(f"Failed to predict with advanced model: {e}")
         return {}
 
     implied = american_odds_to_prob(price1)
