@@ -393,14 +393,17 @@ def evaluate_h2h_all_tomorrow(
                 print(f"  Skipped: invalid commence_time format {commence} ({e})")
             continue
 
-        if not testing_mode:
-            today = datetime.utcnow()
-            start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
-            end_dt = start_dt + timedelta(hours=14)
+        # Always define time window variables
+        today = datetime.utcnow()
+        start_dt = datetime(today.year, today.month, today.day, 16, 0, 0)
+        end_dt = start_dt + timedelta(hours=14)
 
-        if not (start_dt <= commence_dt < end_dt):
+        # Only apply the window filter when not in testing mode
+        if not testing_mode and not (start_dt <= commence_dt < end_dt):
             if verbose:
-                print(f"  Skipped: commence_time {commence_dt} not in window {start_dt} to {end_dt}")
+                print(
+                    f"  Skipped: commence_time {commence_dt} not in window {start_dt} to {end_dt}"
+                )
             continue
 
         if verbose:
@@ -623,86 +626,87 @@ def print_h2h_projections_table(projections: list) -> None:
         print("No projection data available.")
         return
 
-
     if tabulate is not None:
-        # Create table data with better formatting
-        table_data: list[list[str]] = []
+        # Define columns for a more compact and readable table
+        table_data = []
+        
+        # Set up colorization if available
         use_color = Fore is not None
-
+        
         for row in projections:
-            # Add recommendation indicator
-            rec = ""
-            edge = row.get(K_EDGE)
-            if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG):
-                rec = f"{Fore.GREEN}★{Style.RESET_ALL}" if use_color else "★"
-
-            # Format team names - highlight home team
-            team1 = row.get(K_TEAM1, "")
-            team2 = row.get(K_TEAM2, "")
-            if use_color:
-                team1 = f"{Fore.CYAN}{team1}{Style.RESET_ALL}"
-
-            # Format probabilities
             prob = row.get(K_PROJECTED_WIN)
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
 
-            # Format edges with colors based on value
+            edge = row.get(K_EDGE)
             edge_color = ""
             edge_reset = ""
+            
             if use_color and edge is not None:
                 if edge > EDGE_THRESHOLD:
                     edge_color = Fore.GREEN
+                    edge_reset = Style.RESET_ALL
                 elif edge < 0:
                     edge_color = Fore.RED
-                edge_reset = Style.RESET_ALL
+                    edge_reset = Style.RESET_ALL
+                    
             edge_str = f"{edge_color}{edge*100:+.1f}%{edge_reset}" if edge is not None else "N/A"
 
-            # Format weighted edge
-            w_edge = row.get(K_WEIGHTED_EDGE)
-            w_edge_str = f"{w_edge*100:+.1f}%" if w_edge is not None else "N/A"
-
-            # Format EV
-            ev = row.get(K_EXPECTED_VALUE)
-            ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
-
-            # Format odds
+            # Format the team names with home team highlighted
+            team1 = row.get(K_TEAM1, "")
+            team2 = row.get(K_TEAM2, "")
+            
+            if use_color:
+                team1 = f"{Fore.CYAN}{team1}{Style.RESET_ALL}"
+                
+            # Format odds with colors
             price1 = row.get(K_PRICE1, 0)
             price2 = row.get(K_PRICE2, 0)
-            price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
-            price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
-
-            # Format ML confidence
-            ml_conf = row.get("ml_confidence")
-            ml_conf_str = f"{ml_conf:.3f}" if ml_conf is not None else "N/A"
-
-            # Add row to table
+            
+            price1_color = Fore.GREEN if use_color and price1 > 0 else ""
+            price2_color = Fore.GREEN if use_color and price2 > 0 else ""
+            price1_str = f"{price1_color}{'+' + str(price1) if price1 > 0 else price1}{Style.RESET_ALL if use_color else ''}"
+            price2_str = f"{price2_color}{'+' + str(price2) if price2 > 0 else price2}{Style.RESET_ALL if use_color else ''}"
+            
+            # Recommendation indicator
+            rec = ""
+            if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG):
+                rec = f"{Fore.GREEN}★{Style.RESET_ALL}" if use_color else "★"
+                
+            # Add the row to table data
             table_data.append([
                 rec,
                 team1,
                 price1_str,
-                team2,
+                team2, 
                 price2_str,
                 prob_str,
                 edge_str,
-                ev_str,
-                row.get(K_BOOKMAKER, "")[:12],
+                row.get(K_BOOKMAKER, "")[:10]  # Truncate long bookmaker names
             ])
 
-        # Print the nicely formatted table
-        headers = ["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "EV", "Book"]
-        print(tabulate(table_data, headers=headers, tablefmt="pretty"))
-
-        # Add legend if any recommendations exist
-        if any(row[0] for row in table_data):
-            star = f"{Fore.GREEN}★{Style.RESET_ALL}" if use_color else "★"
-            print(f"\n{star} = Recommended bet (Edge > {EDGE_THRESHOLD*100:.1f}%)")
+        # Print the table with nice formatting
+        headers = ["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "Book"]
+        print(tabulate(
+            table_data,
+            headers=headers,
+            tablefmt="pretty",
+            stralign="left",
+        ))
+        
+        # Print legend at the bottom
+        if use_color:
+            print(f"{Fore.GREEN}★{Style.RESET_ALL} = Recommended bet (Edge > {EDGE_THRESHOLD*100:.1f}%)")
+        else:
+            print(f"★ = Recommended bet (Edge > {EDGE_THRESHOLD*100:.1f}%)")
+            
     else:
-        # Fallback formatter for environments without tabulate
-        headers = ["REC", "TEAM", "ODDS", "OPP", "ODDS", "WIN%", "EDGE", "EV", "BOOK"]
-
+        # Fallback for environments without tabulate
+        headers = ["REC", "TEAM", "ODDS", "OPP", "ODDS", "WIN%", "EDGE", "BOOK"]
+        
         def col_width(key: str, minimum: int) -> int:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
-
+        
+        # Define minimum widths for each column
         widths = {
             "REC": 3,
             "TEAM": col_width(K_TEAM1, 15),
@@ -711,33 +715,30 @@ def print_h2h_projections_table(projections: list) -> None:
             "ODDS2": 6,
             "WIN%": 6,
             "EDGE": 7,
-            "EV": 6,
-            "BOOK": 12,
+            "BOOK": 10,
         }
-
+        
         # Print header
         header_line = " ".join(h.ljust(widths[h if h != "ODDS2" else "ODDS"]) for h in headers)
         print(header_line)
         print("-" * len(header_line))
-
-        # Print rows
+        
+        # Print data rows
         for row in projections:
-            edge = row.get(K_EDGE)
-            rec = "★" if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG) else " "
-
             prob = row.get(K_PROJECTED_WIN)
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
-
+            
+            edge = row.get(K_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
-
-            ev = row.get(K_EXPECTED_VALUE)
-            ev_str = f"{ev:+.3f}" if ev is not None else "N/A"
-
+            
+            # Recommendation indicator
+            rec = "★" if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG) else " "
+            
             price1 = row.get(K_PRICE1, 0)
             price2 = row.get(K_PRICE2, 0)
             price1_str = f"+{price1}" if price1 > 0 else f"{price1}"
             price2_str = f"+{price2}" if price2 > 0 else f"{price2}"
-
+            
             values = [
                 rec,
                 row.get(K_TEAM1, ""),
@@ -746,19 +747,12 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
-                ev_str,
-                row.get(K_BOOKMAKER, "")[:12],
+                (row.get(K_BOOKMAKER, "") or "")[:10],  # Truncate long bookmaker names
             ]
-
+            
             print(" ".join(str(v).ljust(widths[h if i != 4 else "ODDS2"]) for i, (v, h) in enumerate(zip(values, headers))))
-
-        # Print legend when recommendations exist
-        has_recommendations = any(
-            row.get(K_EDGE, 0) > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG, False)
-            for row in projections
-        )
-        if has_recommendations:
-            print(f"\n★ = Recommended bet (Edge > {EDGE_THRESHOLD*100:.1f}%)")
+        
+        print(f"★ = Recommended bet (Edge > {EDGE_THRESHOLD*100:.1f}%)")
 
 
 def log_bet_recommendations(
