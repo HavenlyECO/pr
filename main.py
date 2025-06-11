@@ -658,7 +658,7 @@ def print_h2h_projections_table(projections: list) -> None:
             if use_color:
                 team1 = f"{Fore.CYAN}{team1}{Style.RESET_ALL}"
                 
-            # Format odds with colors
+            # Format odds with colors based on favorites/underdogs
             price1 = row.get(K_PRICE1, 0)
             price2 = row.get(K_PRICE2, 0)
             
@@ -681,14 +681,13 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
-                row.get(K_BOOKMAKER, "")[:10]  # Truncate long bookmaker names
+                row.get(K_BOOKMAKER, "")
             ])
 
         # Print the table with nice formatting
-        headers = ["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "Book"]
         print(tabulate(
             table_data,
-            headers=headers,
+            headers=["Rec", "Team", "Odds", "Opponent", "Odds", "Win%", "Edge", "Book"],
             tablefmt="pretty",
             stralign="left",
         ))
@@ -701,7 +700,7 @@ def print_h2h_projections_table(projections: list) -> None:
             
     else:
         # Fallback for environments without tabulate
-        headers = ["REC", "TEAM", "ODDS", "OPP", "ODDS", "WIN%", "EDGE", "BOOK"]
+        headers = ["REC", "TEAM1", "ODDS", "TEAM2", "ODDS", "WIN%", "EDGE", "BOOK"]
         
         def col_width(key: str, minimum: int) -> int:
             return max(minimum, max(len(str(row.get(key, ""))) for row in projections))
@@ -709,13 +708,13 @@ def print_h2h_projections_table(projections: list) -> None:
         # Define minimum widths for each column
         widths = {
             "REC": 3,
-            "TEAM": col_width(K_TEAM1, 15),
+            "TEAM1": col_width(K_TEAM1, 15),
             "ODDS": 6,
-            "OPP": col_width(K_TEAM2, 15),
+            "TEAM2": col_width(K_TEAM2, 15),
             "ODDS2": 6,
             "WIN%": 6,
             "EDGE": 7,
-            "BOOK": 10,
+            "BOOK": col_width(K_BOOKMAKER, 10),
         }
         
         # Print header
@@ -731,7 +730,6 @@ def print_h2h_projections_table(projections: list) -> None:
             edge = row.get(K_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
             
-            # Recommendation indicator
             rec = "★" if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG) else " "
             
             price1 = row.get(K_PRICE1, 0)
@@ -747,14 +745,12 @@ def print_h2h_projections_table(projections: list) -> None:
                 price2_str,
                 prob_str,
                 edge_str,
-                (row.get(K_BOOKMAKER, "") or "")[:10],  # Truncate long bookmaker names
+                row.get(K_BOOKMAKER, ""),
             ]
             
             print(" ".join(str(v).ljust(widths[h if i != 4 else "ODDS2"]) for i, (v, h) in enumerate(zip(values, headers))))
         
         print(f"★ = Recommended bet (Edge > {EDGE_THRESHOLD*100:.1f}%)")
-
-
 def log_bet_recommendations(
     projections: list,
     *,
