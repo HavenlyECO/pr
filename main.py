@@ -71,6 +71,7 @@ from ml import (
     extract_advanced_ml_features,
     extract_market_signals,
 )
+import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
 from scores import fetch_scores, append_scores_history, SCORES_HISTORY_FILE
@@ -509,26 +510,35 @@ def evaluate_h2h_all_tomorrow(
                         f"payout={payout:.3f} EV={ev:.4f}"
                     )
 
-                event_rows.append(
-                    {
-                        K_GAME: f"{team1} vs {team2}",
-                        K_BOOKMAKER: book_name,
-                        K_TEAM1: team1,
-                        K_TEAM2: team2,
-                        K_PRICE1: price1,
-                        K_PRICE2: price2,
-                        K_IMPLIED_WIN: implied,
-                        K_EVENT_ID: event_id,
-                        K_PROJECTED_WIN: prob,
-                        K_EDGE: edge,
-                        K_PAYOUT: payout,
-                        K_EXPECTED_VALUE: ev,
-                        K_TICKET_PCT_TEAM1: team1_pct,
-                        K_TICKET_PCT_TEAM2: team2_pct,
-                        K_PUBLIC_FADE: fade,
-                        K_STALE_FLAG: stale,
-                    }
-                )
+                row = {
+                    K_GAME: f"{team1} vs {team2}",
+                    K_BOOKMAKER: book_name,
+                    K_TEAM1: team1,
+                    K_TEAM2: team2,
+                    K_PRICE1: price1,
+                    K_PRICE2: price2,
+                    K_IMPLIED_WIN: implied,
+                    K_EVENT_ID: event_id,
+                    K_PROJECTED_WIN: prob,
+                    K_EDGE: edge,
+                    K_PAYOUT: payout,
+                    K_EXPECTED_VALUE: ev,
+                    K_TICKET_PCT_TEAM1: team1_pct,
+                    K_TICKET_PCT_TEAM2: team2_pct,
+                    K_PUBLIC_FADE: fade,
+                    K_STALE_FLAG: stale,
+                }
+
+                # Add social media data if available
+                if hasattr(ml, "llm_sharp_social_score") and team1:
+                    try:
+                        row["reddit_sentiment"] = ml.llm_sharp_social_score(team1)
+                        row["hype_trend"] = ml.llm_hype_trend_social_score(team1)
+                        row["lineup_risk"] = ml.llm_lineup_risk_social_score(team1)
+                    except Exception as e:
+                        print(f"Social feature error: {e}")
+
+                event_rows.append(row)
                 implied_probs.append(implied)
 
         if not event_rows:
