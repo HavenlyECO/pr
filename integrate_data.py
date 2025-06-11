@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import numpy as np
 import json
+from difflib import SequenceMatcher
 
 # Configuration
 RETROSHEET_DIR = Path("retrosheet_data")
@@ -294,6 +295,17 @@ def _normalize_team_name(name: str) -> str:
     return str(name).strip().lower()
 
 
+def _is_close_match(a: str, b: str, threshold: float = 0.8) -> bool:
+    """Return True when strings are an approximate match."""
+    if not a or not b:
+        return False
+    a = a.lower().strip()
+    b = b.lower().strip()
+    if a == b or a in b or b in a:
+        return True
+    return SequenceMatcher(None, a, b).ratio() >= threshold
+
+
 def match_odds_with_results(odds_df, results_df):
     """Match odds data with game results by team and date"""
     print("\nMatching odds data with game results...")
@@ -309,32 +321,34 @@ def match_odds_with_results(odds_df, results_df):
     results_df["home_team_norm"] = results_df["home_team"].apply(_normalize_team_name)
     results_df["away_team_norm"] = results_df["away_team"].apply(_normalize_team_name)
 
+    print(f"Odds date range: {odds_df['date'].min()} to {odds_df['date'].max()}")
+    print(f"Results date range: {results_df['date'].min()} to {results_df['date'].max()}")
+    print(
+        f"Sample odds teams: {odds_df[['home_team_norm', 'away_team_norm']].head(3).values}"
+    )
+    print(
+        f"Sample results teams: {results_df[['home_team_norm', 'away_team_norm']].head(3).values}"
+    )
+
+    odds_df['date_dt'] = pd.to_datetime(odds_df['date'])
+    results_df['date_dt'] = pd.to_datetime(results_df['date'])
+
     matched_records = []
     matched_count = 0
     total_odds = len(odds_df)
     for _, odds_row in odds_df.iterrows():
-        odds_date = odds_row["date"]
+        odds_date = odds_row["date_dt"]
         odds_home = odds_row["home_team_norm"]
         odds_away = odds_row["away_team_norm"]
-        matches = results_df[
-            (results_df["date"] == odds_date)
-            & (
-                (results_df["home_team_norm"] == odds_home)
-                | (
-                    results_df["home_team_norm"].str.contains(
-                        odds_home, na=False, regex=False
-                    )
-                )
-            )
-            & (
-                (results_df["away_team_norm"] == odds_away)
-                | (
-                    results_df["away_team_norm"].str.contains(
-                        odds_away, na=False, regex=False
-                    )
-                )
-            )
-        ]
+
+        date_mask = (
+            (results_df["date_dt"] >= odds_date - pd.Timedelta(days=1))
+            & (results_df["date_dt"] <= odds_date + pd.Timedelta(days=1))
+        )
+        tmp = results_df[date_mask]
+        tmp = tmp[tmp["home_team_norm"].apply(lambda x: _is_close_match(x, odds_home))]
+        tmp = tmp[tmp["away_team_norm"].apply(lambda x: _is_close_match(x, odds_away))]
+        matches = tmp
         if len(matches) > 0:
             result_row = matches.iloc[0]
             record = {
