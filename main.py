@@ -5,6 +5,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 from datetime import datetime, timedelta
+import pandas as pd
 import time
 import argparse
 import sys
@@ -48,6 +49,11 @@ EDGE_THRESHOLD = 0.06
 # Risk filter parameters
 RISK_EDGE_THRESHOLD = 0.05
 RISK_ODDS_LIMIT = -170
+
+
+def should_highlight_row(edge: float | None) -> bool:
+    """Return ``True`` when ``edge`` exceeds the recommendation threshold."""
+    return edge is not None and edge > EDGE_THRESHOLD
 
 # Sportsbooks considered "soft" for pricing comparisons. These lines often
 # lag sharper markets, creating short-lived arbitrage opportunities when they
@@ -647,12 +653,14 @@ def print_h2h_projections_table(projections: list) -> None:
 
     if tabulate is not None:
         # Define columns for a more compact and readable table
+        df = pd.DataFrame(projections)
+        df['highlight'] = df['edge'].apply(lambda e: should_highlight_row(e))
         table_data = []
-        
+
         # Set up colorization if available
         use_color = Fore is not None
-        
-        for row in projections:
+
+        for row in df.to_dict('records'):
             prob = row.get(K_PROJECTED_WIN)
             prob_str = f"{prob*100:.1f}%" if prob is not None else "N/A"
 
@@ -688,7 +696,7 @@ def print_h2h_projections_table(projections: list) -> None:
             
             # Recommendation indicator
             rec = ""
-            if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG):
+            if should_highlight_row(edge) and not row.get(K_RISK_BLOCK_FLAG):
                 rec = f"{Fore.GREEN}★{Style.RESET_ALL}" if use_color else "★"
                 
             # Add the row to table data
@@ -749,7 +757,7 @@ def print_h2h_projections_table(projections: list) -> None:
             edge = row.get(K_EDGE)
             edge_str = f"{edge*100:+.1f}%" if edge is not None else "N/A"
             
-            rec = "★" if edge is not None and edge > EDGE_THRESHOLD and not row.get(K_RISK_BLOCK_FLAG) else " "
+            rec = "★" if should_highlight_row(edge) and not row.get(K_RISK_BLOCK_FLAG) else " "
             
             price1 = row.get(K_PRICE1, 0)
             price2 = row.get(K_PRICE2, 0)
