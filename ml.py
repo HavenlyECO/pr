@@ -1688,8 +1688,12 @@ def predict_moneyline_probability(
 ) -> float:
     """Predict win probability using a trained moneyline classifier."""
     model_path = sanitize_path(model_path)
-    with open(model_path, "rb") as f:
-        model_info = pickle.load(f)
+    try:
+        with open(model_path, "rb") as f:
+            model_info = pickle.load(f)
+    except Exception as e:
+        print(f"ERROR: Could not load ML model from {model_path}: {e}")  # PATCH: Loudly warn
+        raise  # Let the fallback logic handle this
 
     if isinstance(model_info, tuple):
         model, cols = model_info
