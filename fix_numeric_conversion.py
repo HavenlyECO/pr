@@ -68,18 +68,19 @@ def extract_advanced_ml_features(
             prob = predict_moneyline_probability(model_path, features)
         except Exception as e:
             # Fallback to simple implied probability if model fails
-            print(f"Using fallback probability calculation")
+            print(f"Using fallback probability calculation: {e}")  # PATCH: Log error for easier debugging
             prob = implied + 0.02  # Slight edge over implied
 
         edge = prob - implied
         ev = edge * american_odds_to_payout(price1)
+        print(f"Model prob: {prob:.4f}, Implied: {implied:.4f}, Edge: {edge:.4f}")  # PATCH: Log edge calculation
 
         return {
             "ml_confidence": prob,
             "lineup_strength": 0.5,  # Default value
             "market_efficiency": implied,
             "sharp_action": edge,
-            "advanced_ml_prob": prob, 
+            "advanced_ml_prob": prob,
             "advanced_ml_edge": edge,
             "advanced_ml_ev": ev,
         }
