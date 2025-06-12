@@ -84,7 +84,7 @@ def should_highlight_row(edge: float | None) -> bool:
 SOFT_BOOKS = ("bovada", "mybookie", "betus")
 
 # Import here to avoid circular imports
-from ml import H2H_MODEL_PATH
+from ml import H2H_MODEL_PATH, train_market_maker_mirror_model
 import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
@@ -1284,6 +1284,21 @@ def continuous_train_moneyline_cli(argv: list[str]) -> None:
         time.sleep(30)
 
 
+def train_mirror_cli(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Train market maker mirror model")
+    parser.add_argument("--dataset", required=True, help="CSV file with training data")
+    parser.add_argument("--model-out", default=str(MARKET_MAKER_MIRROR_MODEL_PATH))
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args(argv)
+
+    train_market_maker_mirror_model(
+        args.dataset,
+        model_out=args.model_out,
+        verbose=args.verbose,
+    )
+
+
+
 def continuous_train_mirror_cli(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(
         description="Continuously train market maker mirror model"
@@ -1340,6 +1355,9 @@ def main(argv: list[str] | None = None) -> None:
         return
     if argv and argv[0] == "continuous_train_moneyline":
         continuous_train_moneyline_cli(argv[1:])
+        return
+    if argv and argv[0] == "train_mirror":
+        train_mirror_cli(argv[1:])
         return
     if argv and argv[0] == "continuous_train_mirror":
         continuous_train_mirror_cli(argv[1:])

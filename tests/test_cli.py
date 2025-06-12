@@ -40,3 +40,14 @@ def test_missing_model_file(monkeypatch, capsys):
     main.main(['--run'])
     captured = capsys.readouterr().out
     assert 'missing model' in captured
+
+
+def test_train_mirror_cli_invocation(monkeypatch):
+    called = {}
+
+    def fake_train(dataset, model_out=None, verbose=False):
+        called['dataset'] = dataset
+
+    monkeypatch.setattr(main, 'train_market_maker_mirror_model', fake_train)
+    main.main(['train_mirror', '--dataset', 'd.csv'])
+    assert called.get('dataset') == 'd.csv'
