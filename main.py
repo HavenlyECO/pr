@@ -72,7 +72,11 @@ def should_highlight_row(edge: float | None) -> bool:
 SOFT_BOOKS = ("bovada", "mybookie", "betus")
 
 # Import here to avoid circular imports
-from ml import train_market_maker_mirror_model
+from ml import (
+    train_market_maker_mirror_model,
+    extract_market_signals,
+    market_maker_mirror_score,
+)
 import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
@@ -633,18 +637,25 @@ def evaluate_h2h_all_tomorrow(
             row[K_MARKET_DISAGREEMENT_SCORE] = diff
             row[K_SOFT_BOOK_SPREAD] = soft_spread
             row[K_MULTI_BOOK_EDGE_SCORE] = multi_book_edge
-            mm_features = {
-                "opening_odds": row.get(K_PRICE1),
-                "handle_percent": row.get(K_HANDLE_PCT_TEAM1),
-                "ticket_percent": row.get(K_TICKET_PCT_TEAM1),
+            mm_event = {
+                "opening_price": row.get(K_PRICE1),
+                "price": row.get(K_PRICE1),
                 "volatility": diff * 100,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
-                row[K_MARKET_MAKER_MIRROR_SCORE] = market_maker_mirror_score(
-                    str(MARKET_MAKER_MIRROR_MODEL_PATH),
-                    mm_features,
-                    row.get(K_PRICE1),
-                )
+                try:
+                    sig = extract_market_signals(mm_event)
+                except Exception:
+                    sig = {}
+                row.update(sig)
+                if sig:
+                    row[K_MARKET_MAKER_MIRROR_SCORE] = market_maker_mirror_score(
+                        str(MARKET_MAKER_MIRROR_MODEL_PATH),
+                        sig,
+                        row.get(K_PRICE1),
+                    )
+                else:
+                    row[K_MARKET_MAKER_MIRROR_SCORE] = None
             else:
                 row[K_MARKET_MAKER_MIRROR_SCORE] = None
 
@@ -661,10 +672,6 @@ def evaluate_h2h_all_tomorrow(
                 )
                 row.update(adv)
 
-            # Add market maker mirror signals
-            if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
-                sig = extract_market_signals(row)
-                row.update(sig)
             weight = 1 + diff + (soft_spread or 0)
             if row.get(K_STALE_FLAG):
                 weight *= 1.1
