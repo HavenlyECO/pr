@@ -52,17 +52,6 @@ try:
 except ImportError:
     raise ImportError("python-dotenv is required. Install it with 'pip install python-dotenv'")
 
-# Define this class here so it can be unpickled
-class SimpleOddsModel:
-    """A model that converts American odds to implied probability."""
-
-    def predict_proba(self, X):
-        price1 = X["price1"].values[0]
-        if price1 > 0:
-            prob = 100 / (price1 + 100)
-        else:
-            prob = abs(price1) / (abs(price1) + 100)
-        return np.array([[1 - prob, prob]])
 
 def american_odds_to_prob(odds: float) -> float:
     """Convert American odds to an implied win probability."""
