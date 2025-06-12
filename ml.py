@@ -116,6 +116,34 @@ def extract_market_signals(event):
     }
 
 
+def market_maker_mirror_score(model_path: str, features: dict, current_odds: float) -> float:
+    """Return the difference between a mirrored closing price and ``current_odds``.
+
+    Parameters
+    ----------
+    model_path : str
+        Path to the trained regression model produced by
+        :func:`train_market_maker_mirror_model`.
+    features : dict
+        Mapping with at least ``opening_odds`` and ``volatility`` keys as
+        produced by :func:`extract_market_signals`.
+    current_odds : float
+        The team's current moneyline odds.
+
+    Returns
+    -------
+    float
+        The mirrored score. Positive when the projected closing price is longer
+        than ``current_odds`` and negative when shaded.
+    """
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+
+    X = [[features["opening_odds"], features["volatility"]]]
+    projected = model.predict(X)[0]
+    return float(projected - current_odds)
+
+
 def train_market_maker_mirror_model(dataset, model_out, verbose=False):
     """
     Train a regression model for the market maker mirror and save it to model_out.
