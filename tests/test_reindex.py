@@ -2,11 +2,23 @@ import pickle
 import warnings
 from pathlib import Path
 
+import numpy as np
 import ml
 
 
+class DummyModel:
+    def predict_proba(self, X):
+        price1 = X["price1"].values[0]
+        if price1 > 0:
+            implied = 100 / (price1 + 100)
+        else:
+            implied = abs(price1) / (abs(price1) + 100)
+        prob = max(0.0, min(1.0, implied + 0.02))
+        return np.array([[1 - prob, prob]])
+
+
 def _save_dummy_model(path: Path) -> None:
-    model = ml.SimpleOddsModel()
+    model = DummyModel()
     cols = ["price1", "foo"]
     with open(path, "wb") as f:
         pickle.dump((model, cols), f)
@@ -19,7 +31,7 @@ def test_predict_moneyline_matching(tmp_path):
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("error")
         prob = ml.predict_moneyline_probability(str(path), features)
-    assert prob == 100 / (150 + 100)
+    assert prob == 100 / (150 + 100) + 0.02
     assert not w
 
 
@@ -31,7 +43,7 @@ def test_predict_moneyline_missing(tmp_path):
         warnings.simplefilter("always")
         prob = ml.predict_moneyline_probability(str(path), features)
     assert any("Missing feature columns" in str(msg.message) for msg in w)
-    assert abs(prob - (110 / 210)) < 1e-6
+    assert abs(prob - (110 / 210 + 0.02)) < 1e-6
 
 
 class DummyMirrorModel:
