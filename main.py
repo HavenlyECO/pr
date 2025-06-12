@@ -37,6 +37,9 @@ DOTENV_PATH = ROOT_DIR / '.env'
 if DOTENV_PATH.exists():
     load_dotenv(DOTENV_PATH)
 
+# Default location for the trained moneyline classifier
+MONEYLINE_MODEL_PATH = "/root/pr/h2h_data/h2h_classifier.pkl"
+
 API_KEY = os.getenv('THE_ODDS_API_KEY')
 TEST_MODE = False
 if not API_KEY:
