@@ -28,6 +28,7 @@ import requests
 
 # Import odds helpers from ml
 from ml import fetch_historical_h2h_odds, to_fixed_utc
+from odds_utils import american_odds_to_prob
 
 DATA_DIR = Path("retrosheet_data")
 ODDS_CACHE_DIR = DATA_DIR / "odds_cache"
@@ -67,12 +68,6 @@ def find_gamelog_file(year: int) -> Path | None:
             return p
     return None
 
-
-def american_odds_to_prob(odds: float) -> float:
-    """Convert American odds to implied probability."""
-    if odds > 0:
-        return 100 / (odds + 100)
-    return abs(odds) / (abs(odds) + 100)
 
 
 def fetch_odds_for_date(date: str) -> list:

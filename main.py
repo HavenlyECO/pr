@@ -12,6 +12,7 @@ import sys
 import numpy as np
 import pickle
 from typing import Dict, TypedDict, Any
+from odds_utils import american_odds_to_prob, american_odds_to_payout
 
 # For improved table and color output
 try:
@@ -58,22 +59,6 @@ EDGE_THRESHOLD = 0.06
 # Risk filter parameters
 RISK_EDGE_THRESHOLD = 0.05
 RISK_ODDS_LIMIT = -170
-
-
-def american_odds_to_prob(odds):
-    """Convert American odds to implied probability."""
-    if odds > 0:
-        return 100 / (odds + 100)
-    else:
-        return -odds / (-odds + 100)
-
-
-def american_odds_to_payout(odds):
-    """Convert American odds to payout multiplier (1 unit staked)."""
-    if odds > 0:
-        return odds / 100
-    else:
-        return 100 / -odds
 
 
 def should_highlight_row(edge: float | None) -> bool:

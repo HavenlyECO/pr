@@ -1,5 +1,5 @@
 import pytest
-from odd_utils import american_odds_to_prob, american_odds_to_payout
+from odds_utils import american_odds_to_prob, american_odds_to_payout
 
 
 def test_american_odds_to_prob_positive():

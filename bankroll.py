@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal
-
-def american_odds_to_payout(odds: float) -> float:
-    """Return the profit on a $1 bet for the given American odds."""
-    if odds > 0:
-        return odds / 100.0
-    return 100.0 / abs(odds)
+from odds_utils import american_odds_to_payout
 
 
 def kelly_bet_fraction(prob: float, odds: float) -> float:
