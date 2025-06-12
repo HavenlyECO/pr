@@ -4,7 +4,7 @@ import pickle
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from ml import CACHE_DIR
+from data_prep import DEFAULT_CACHE_DIR as CACHE_DIR
 from scores import fetch_scores, append_scores_history
 
 
