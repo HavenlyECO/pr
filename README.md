@@ -244,9 +244,10 @@ can be exploited before the books adjust.
 ``market_maker_mirror_score`` goes a step further by modeling how sharp
 bookmakers move their lines when money flow, volatility and public sentiment
 shift. Train the model with ``train_market_maker_mirror_model`` on a dataset
-containing opening/closing odds plus handle and ticket percentages. The model
-predicts a synthetic closing price representing what a highly efficient book
-would offer. Comparing that price to the current line yields the
+containing opening/closing odds plus handle and ticket percentages. The trainer
+uses **linear regression** to predict a synthetic closing price representing
+what a highly efficient book would offer. Comparing that price to the current
+line yields the
 
 ``market_maker_mirror_score``—positive values suggest the market line is longer
 than the mirrored price while negative values indicate shading.
@@ -260,18 +261,19 @@ To train the mirror model provide a CSV with these columns:
 | handle_percent | Percentage of money wagered on the team (0-100 float)     | 62.5    |
 | ticket_percent | Percentage of tickets/wagers on the team (0-100 float)    | 70.0    |
 | volatility     | (Optional) Line movement or volatility metric             | 15.0    |
-| mirror_target  | Target variable for mirror model (e.g., 0 or 1)           | 1       |
+| mirror_target  | Target closing odds for mirror model (float)             | -125    |
 
 Example:
 
 ```csv
 opening_odds,closing_odds,handle_percent,ticket_percent,volatility,mirror_target
--110,-130,62.5,70.0,15.0,1
-+120,+105,38.0,29.0,8.0,0
+-110,-130,62.5,70.0,15.0,-125
++120,+105,38.0,29.0,8.0,110
 ```
 
 All columns except ``volatility`` are required. ``mirror_target`` serves as the
-training target and percentages must be floats between 0 and 100. When columns
+target closing odds for the regression and percentages must be floats between 0
+and 100. When columns
 are missing the trainer raises ``ValueError: Missing required columns...``.
 
 When monitoring betting exchanges directly, the ``volume_surge.py`` module
