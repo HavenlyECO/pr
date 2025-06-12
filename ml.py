@@ -1761,8 +1761,9 @@ def extract_advanced_ml_features(
         "commence_time": -1,
         "bookmaker": -1,
         "date": -1,
-        "home_team": get_team_id(team1) if team1 else -1,
-        "away_team": get_team_id(team2) if team2 else -1,
+        # Ensure numeric IDs are used for team-related features
+        "home_team": get_team_id(team1),
+        "away_team": get_team_id(team2),
         "home_score": 0,
         "visiting_score": 0,
         "day_night": -1,
@@ -1770,8 +1771,8 @@ def extract_advanced_ml_features(
         "implied_prob": american_odds_to_prob(price1),
         "game_day": now.weekday(),
         "is_weekend": int(now.weekday() >= 5),
-        "team1": get_team_id(team1) if team1 else -1,
-        "team2": get_team_id(team2) if team2 else -1,
+        "team1": get_team_id(team1),
+        "team2": get_team_id(team2),
     }
 
     try:
