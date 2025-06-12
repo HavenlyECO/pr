@@ -303,35 +303,35 @@ def predict_h2h_probability(model_path: str, price1: float, price2: float) -> fl
 
     if isinstance(model, dict):
         pre_pipe, pregame_cols = model["pregame"]
-        # STRICT: Build a DataFrame with all required columns
-        features = {}
-        for col in pregame_cols:
-            if col == "price1":
-                features[col] = price1
-            elif col == "price2":
-                features[col] = price2
-            else:
-                raise ValueError(
-                    f"Missing required feature '{col}' for prediction! "
-                    "You must provide all features used in training."
-                )
-        df = pd.DataFrame([features])
+        # STRICT: Print expected and actual features for debugging
+        print("DEBUG: Model expects features:", pregame_cols)
+        provided = {"price1": price1, "price2": price2}
+        print("DEBUG: Features provided:", list(provided.keys()))
+        # Check for missing features
+        missing = [col for col in pregame_cols if col not in provided]
+        if missing:
+            print("DEBUG: Missing features for prediction:", missing)
+            raise ValueError(
+                f"Missing required features for prediction: {missing}. "
+                "You must provide all features used in training."
+            )
+        # Build df with exactly required columns
+        df = pd.DataFrame([{col: provided[col] for col in pregame_cols}])
         proba = pre_pipe.predict_proba(df)[0][1]
         return float(proba)
     else:
-        # Single-head model: same logic
-        features = {}
-        for col in model.feature_names_in_:
-            if col == "price1":
-                features[col] = price1
-            elif col == "price2":
-                features[col] = price2
-            else:
-                raise ValueError(
-                    f"Missing required feature '{col}' for prediction! "
-                    "You must provide all features used in training."
-                )
-        df = pd.DataFrame([features])
+        provided = {"price1": price1, "price2": price2}
+        required = list(model.feature_names_in_)
+        print("DEBUG: Model expects features:", required)
+        print("DEBUG: Features provided:", list(provided.keys()))
+        missing = [col for col in required if col not in provided]
+        if missing:
+            print("DEBUG: Missing features for prediction:", missing)
+            raise ValueError(
+                f"Missing required features for prediction: {missing}. "
+                "You must provide all features used in training."
+            )
+        df = pd.DataFrame([{col: provided[col] for col in required}])
         proba = model.predict_proba(df)[0][1]
         return float(proba)
 
