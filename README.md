@@ -287,6 +287,16 @@ Train the model or keep it updated with:
 python3 main.py continuous_train_mirror --dataset=mirror_training_data.csv --verbose
 ```
 
+## Line Movement Modeling
+
+The ``line_movement_model`` module provides utilities to predict how a moneyline
+will shift from open to close. Call
+``load_and_engineer_features`` to create implied probability and timing
+features from a CSV. ``train_regression_model`` fits a random forest to predict
+the exact shift while ``train_classification_model`` categorizes the movement
+into direction bins. Running ``line_movement_model.py`` directly trains both
+models on ``line_movement_data.csv`` and prints validation metrics.
+
 When monitoring betting exchanges directly, the ``volume_surge.py`` module
 offers a ``VolumeSurgeDetector`` utility. Provide it with a callback that
 returns the latest matched volume from Betfair or Matchbook and it maintains a
