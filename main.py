@@ -1300,31 +1300,41 @@ def train_mirror_cli(argv: list[str]) -> None:
 
 
 def continuous_train_mirror_cli(argv: list[str]) -> None:
-    parser = argparse.ArgumentParser(
-        description="Continuously train market maker mirror model"
-    )
+    import argparse
+    import pandas as pd
+
+    parser = argparse.ArgumentParser(description="Continuously train market maker mirror model")
     parser.add_argument("--dataset", required=True, help="CSV file with training data")
-    parser.add_argument("--sport", default="baseball_mlb")
-    parser.add_argument("--interval-hours", type=int, default=24)
     parser.add_argument("--model-out", default=str(MARKET_MAKER_MIRROR_MODEL_PATH))
+    parser.add_argument("--interval", type=float, default=24.0, help="Retrain interval in hours")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    next_run = datetime.utcnow()
+    required_columns = ["opening_odds", "handle_percent", "ticket_percent", "mirror_target"]
+    try:
+        df = pd.read_csv(args.dataset, nrows=1)
+    except Exception as e:
+        raise RuntimeError(f"Failed to read {args.dataset}: {e}")
+
+    missing = [col for col in required_columns if col not in df.columns]
+    if missing:
+        raise ValueError(
+            f"Dataset '{args.dataset}' is missing required columns for mirror model: {missing}"
+        )
+
+    import time
     while True:
-        if datetime.utcnow() >= next_run:
+        try:
             train_market_maker_mirror_model(
-                args.dataset,
-                model_out=args.model_out,
-                verbose=args.verbose,
+                args.dataset, model_out=args.model_out, verbose=args.verbose
             )
-            try:
-                scores = fetch_scores(args.sport, days_from=3)
-                append_scores_history(scores)
-            except Exception as exc:  # pragma: no cover - keep running on error
-                print(f"Failed to fetch scores: {exc}")
-            next_run = datetime.utcnow() + timedelta(hours=args.interval_hours)
-        time.sleep(30)
+        except Exception as e:
+            print(f"Training failed: {e}")
+        if args.interval <= 0:
+            break
+        if args.verbose:
+            print(f"Sleeping for {args.interval} hours before next retrain...")
+        time.sleep(args.interval * 3600)
 
 
 def scores_cli(argv: list[str]) -> None:
