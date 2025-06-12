@@ -296,6 +296,15 @@ def fetch_event_odds(
         return []
 
 
+def predict_h2h_probability(model_path: str, price1: float, price2: float) -> float:
+    """Return the predicted probability of the first team winning."""
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+    df = pd.DataFrame([{"price1": price1, "price2": price2}])
+    proba = model.predict_proba(df)[0][1]
+    return float(proba)
+
+
 def fetch_consensus_ticket_percentages(
     sport_key: str, regions: str = "us"
 ) -> Dict[str, Dict[str, float]]:
