@@ -99,15 +99,27 @@ def extract_market_signals(
     model_path: str,
     *,
     price1: float,
-    ticket_percent: float,
+    handle_percent: float | None,
+    ticket_percent: float | None,
 ) -> dict:
     """Return simple market maker mirror metrics for the given line."""
+    if handle_percent is None:
+        raise ValueError(
+            "handle_percent is missing in event data. "
+            "Do not use ticket_percent as a fallback. "
+            "The dataset must contain independent handle and ticket percentages."
+        )
+    if ticket_percent is None:
+        raise ValueError(
+            "ticket_percent is missing in event data. "
+            "Both handle_percent and ticket_percent must be present."
+        )
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([
         {
             "opening_odds": price1,
-            "handle_percent": ticket_percent,
+            "handle_percent": handle_percent,
             "ticket_percent": ticket_percent,
             "volatility": 0.0,
         }
