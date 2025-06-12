@@ -62,22 +62,7 @@ def should_highlight_row(edge: float | None) -> bool:
 SOFT_BOOKS = ("bovada", "mybookie", "betus")
 
 # Import here to avoid circular imports
-from ml import (
-    H2H_MODEL_PATH,
-    MONEYLINE_MODEL_PATH,
-    train_h2h_classifier,
-    train_dual_head_classifier,
-    predict_h2h_probability,
-    train_moneyline_classifier,
-    predict_moneyline_probability,
-    american_odds_to_prob,
-    american_odds_to_payout,
-    MARKET_MAKER_MIRROR_MODEL_PATH,
-    train_market_maker_mirror_model,
-    market_maker_mirror_score,
-    extract_advanced_ml_features,
-    extract_market_signals,
-)
+from ml import H2H_MODEL_PATH
 import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
