@@ -70,7 +70,7 @@ def test_extract_market_signals(tmp_path):
     model_path = tmp_path / "mirror.pkl"
     _save_dummy_mirror_model(model_path)
     feats = ml.extract_market_signals(
-        str(model_path), price1=150, ticket_percent=60.0
+        str(model_path), price1=150, handle_percent=55.0, ticket_percent=60.0
     )
     assert "predicted_mirror_price" in feats
     assert "mirror_score" in feats

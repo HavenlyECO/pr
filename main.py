@@ -103,6 +103,8 @@ K_PROJECTED_WIN = "projected_team1_win_probability"
 K_EDGE = "edge"
 K_PAYOUT = "payout"
 K_EXPECTED_VALUE = "expected_value"
+K_HANDLE_PCT_TEAM1 = "handle_percent_team1"
+K_HANDLE_PCT_TEAM2 = "handle_percent_team2"
 K_TICKET_PCT_TEAM1 = "ticket_percent_team1"
 K_TICKET_PCT_TEAM2 = "ticket_percent_team2"
 K_PUBLIC_FADE = "public_fade"
@@ -130,6 +132,8 @@ class ProjectionRow(TypedDict, total=False):
     edge: float
     payout: float
     expected_value: float
+    handle_percent_team1: float | None
+    handle_percent_team2: float | None
     ticket_percent_team1: float
     ticket_percent_team2: float
     public_fade: bool
@@ -548,6 +552,8 @@ def evaluate_h2h_all_tomorrow(
                 team2 = outcome2.get("name")
                 price1 = outcome1.get("price")
                 price2 = outcome2.get("price")
+                handle1 = outcome1.get("handle_percentage")
+                handle2 = outcome2.get("handle_percentage")
 
                 if team1 is None or team2 is None or price1 is None or price2 is None:
                     if verbose:
@@ -602,6 +608,8 @@ def evaluate_h2h_all_tomorrow(
                     K_EDGE: edge,
                     K_PAYOUT: payout,
                     K_EXPECTED_VALUE: ev,
+                    K_HANDLE_PCT_TEAM1: handle1,
+                    K_HANDLE_PCT_TEAM2: handle2,
                     K_TICKET_PCT_TEAM1: team1_pct,
                     K_TICKET_PCT_TEAM2: team2_pct,
                     K_PUBLIC_FADE: fade,
@@ -639,8 +647,8 @@ def evaluate_h2h_all_tomorrow(
             row[K_MULTI_BOOK_EDGE_SCORE] = multi_book_edge
             mm_features = {
                 "opening_odds": row.get(K_PRICE1),
-                "handle_percent": row.get(K_TICKET_PCT_TEAM1, 0.0),
-                "ticket_percent": row.get(K_TICKET_PCT_TEAM1, 0.0),
+                "handle_percent": row.get(K_HANDLE_PCT_TEAM1),
+                "ticket_percent": row.get(K_TICKET_PCT_TEAM1),
                 "volatility": diff * 100,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
@@ -670,7 +678,8 @@ def evaluate_h2h_all_tomorrow(
                 sig = extract_market_signals(
                     model_path=str(MARKET_MAKER_MIRROR_MODEL_PATH),
                     price1=row.get(K_PRICE1),
-                    ticket_percent=row.get(K_TICKET_PCT_TEAM1, 0.0),
+                    handle_percent=row.get(K_HANDLE_PCT_TEAM1),
+                    ticket_percent=row.get(K_TICKET_PCT_TEAM1),
                 )
                 row.update(sig)
             weight = 1 + diff + (soft_spread or 0)
