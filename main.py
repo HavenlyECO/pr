@@ -54,6 +54,22 @@ RISK_EDGE_THRESHOLD = 0.05
 RISK_ODDS_LIMIT = -170
 
 
+def american_odds_to_prob(odds):
+    """Convert American odds to implied probability."""
+    if odds > 0:
+        return 100 / (odds + 100)
+    else:
+        return -odds / (-odds + 100)
+
+
+def american_odds_to_payout(odds):
+    """Convert American odds to payout multiplier (1 unit staked)."""
+    if odds > 0:
+        return odds / 100
+    else:
+        return 100 / -odds
+
+
 def should_highlight_row(edge: float | None) -> bool:
     """Return ``True`` when ``edge`` exceeds the recommendation threshold."""
     print(f"[DEBUG] Highlight check for edge: {edge}")
