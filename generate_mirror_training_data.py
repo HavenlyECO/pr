@@ -2,15 +2,15 @@
 """
 Generate a CSV for market maker mirror model training.
 
-Scans h2h_data/api_cache/*.pkl for events with handle/ticket percentages,
-opening odds, and volatility. Outputs a strict dataset for mirror model training.
+Scans h2h_data/api_cache/*.pkl for events with opening/closing odds and volatility.
+Outputs a dataset for mirror model training.
 
-Required columns:
+Columns:
 - opening_odds
-- handle_percent
-- ticket_percent
+- closing_odds
+- line_move (opening_odds - closing_odds)
 - volatility
-- mirror_target   # must be defined by your logic (see below)
+- mirror_target   # closing_odds or line_move
 """
 
 import pickle
@@ -23,7 +23,6 @@ OUTPUT_FILE = "mirror_training_data.csv"
 
 def extract_row(event, book, market, home_team, away_team):
     """Extract a row for the mirror model from a single market/book."""
-    # Only h2h market supported
     if market.get("key") != "h2h":
         return None
 
@@ -32,35 +31,26 @@ def extract_row(event, book, market, home_team, away_team):
         return None
 
     for outcome in outcomes:
-        if outcome.get("name") == home_team:
-            team = "home"
-        elif outcome.get("name") == away_team:
-            team = "away"
-        else:
-            continue
+        if outcome.get("name") == home_team or outcome.get("name") == away_team:
+            opening_odds = outcome.get("opening_price", outcome.get("price"))
+            closing_odds = outcome.get("closing_price")
+            volatility = outcome.get("volatility")
 
-        opening_odds = outcome.get("opening_price", outcome.get("price"))
-        handle_percent = outcome.get("handle_percentage")
-        ticket_percent = outcome.get("ticket_percentage")
-        volatility = outcome.get("volatility")
+            if opening_odds is None or closing_odds is None:
+                continue
 
-        if opening_odds is None or handle_percent is None or ticket_percent is None:
-            continue
+            # You may use line_move as the target or closing_odds as the target
+            line_move = opening_odds - closing_odds
+            # Choose one of the following as your target (mirror_target)
+            mirror_target = closing_odds  # Or use line_move if preferred
 
-        team_result = outcome.get("result")
-        if team_result is None:
-            continue
-
-        # Interpret string results ("win"/"loss") as mirror_target
-        mirror_target = 1 if str(team_result).lower() == "win" else 0
-
-        return {
-            "opening_odds": opening_odds,
-            "handle_percent": handle_percent,
-            "ticket_percent": ticket_percent,
-            "volatility": volatility,
-            "mirror_target": mirror_target,
-        }
+            return {
+                "opening_odds": opening_odds,
+                "closing_odds": closing_odds,
+                "line_move": line_move,
+                "volatility": volatility,
+                "mirror_target": mirror_target,
+            }
     return None
 
 
@@ -93,11 +83,11 @@ def main():
                         rows.append(row)
 
     if not rows:
-        print("No eligible rows found. Are handle/ticket percentages populated in your cache?")
+        print("No eligible rows found. Are opening/closing odds populated in your cache?")
         return
 
     df = pd.DataFrame(rows)
-    df = df.dropna(subset=["opening_odds", "handle_percent", "ticket_percent", "mirror_target"])
+    df = df.dropna(subset=["opening_odds", "closing_odds", "volatility", "mirror_target"])
     df.to_csv(OUTPUT_FILE, index=False)
     print(f"Wrote {len(df)} rows to {OUTPUT_FILE}")
 
