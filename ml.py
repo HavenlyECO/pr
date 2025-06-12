@@ -97,70 +97,41 @@ def extract_advanced_ml_features(
     }
 
 
-def extract_market_signals(
-    model_path: Optional[str] = None,
-    *,
-    price1: float,
-    handle_percent: float | None,
-    ticket_percent: float | None,
-) -> dict:
-    """Return simple market maker mirror metrics for the given line."""
-    if handle_percent is None:
+def extract_market_signals(event):
+    """
+    Given a single event (dict), return features for the mirror model:
+    - opening_odds
+    - volatility
+    (closing_odds is only available after event completion)
+    """
+    opening_odds = event.get("opening_price", event.get("price"))
+    volatility = event.get("volatility")
+    if opening_odds is None or volatility is None:
         raise ValueError(
-            "handle_percent is missing in event data. "
-            "Do not use ticket_percent as a fallback. "
-            "The dataset must contain independent handle and ticket percentages."
+            "Missing required features for market maker mirror model (opening_odds or volatility)."
         )
-    if ticket_percent is None:
-        raise ValueError(
-            "ticket_percent is missing in event data. "
-            "Both handle_percent and ticket_percent must be present."
-        )
-    from main import MARKET_MAKER_MIRROR_MODEL_PATH
-    model_path = model_path or str(MARKET_MAKER_MIRROR_MODEL_PATH)
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-    df = pd.DataFrame([
-        {
-            "opening_odds": price1,
-            "handle_percent": handle_percent,
-            "ticket_percent": ticket_percent,
-            "volatility": 0.0,
-        }
-    ])
-    mirror_price = float(model.predict(df)[0])
-    mirror_score = mirror_price - price1
     return {
-        "predicted_mirror_price": mirror_price,
-        "mirror_score": mirror_score,
+        "opening_odds": opening_odds,
+        "volatility": volatility,
     }
 
 
-def train_market_maker_mirror_model(
-    dataset: str, model_out: Optional[str] = None, verbose: bool = False
-) -> None:
-    """Train a regression model for the market maker mirror and persist it."""
-    from main import MARKET_MAKER_MIRROR_MODEL_PATH
-    model_out = model_out or str(MARKET_MAKER_MIRROR_MODEL_PATH)
+def train_market_maker_mirror_model(dataset, model_out, verbose=False):
+    """
+    Train a regression model for the market maker mirror and save it to model_out.
+    """
     df = pd.read_csv(dataset)
-    required_cols = [
-        "opening_odds",
-        "handle_percent",
-        "ticket_percent",
-        "volatility",
-        "mirror_target",
-    ]
-    missing = set(required_cols) - set(df.columns)
+    # Either use line_move as the target or closing_odds; adjust as needed
+    required_cols = ["opening_odds", "closing_odds", "volatility", "mirror_target"]
+    missing = [col for col in required_cols if col not in df.columns]
     if missing:
-        raise ValueError(f"Missing required columns: {missing}")
+        raise ValueError(f"Dataset {dataset} missing required columns: {missing}")
 
-    X = df[["opening_odds", "handle_percent", "ticket_percent", "volatility"]]
+    X = df[["opening_odds", "volatility"]]
     y = df["mirror_target"]
 
     if verbose:
-        print(
-            f"Training regression model on {len(df)} rows with features {X.columns.tolist()}"
-        )
+        print(f"Training regression model on {len(df)} rows with features {X.columns.tolist()}")
 
     model = LinearRegression()
     model.fit(X, y)

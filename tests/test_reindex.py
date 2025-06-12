@@ -46,14 +46,6 @@ def test_predict_moneyline_missing(tmp_path):
     assert abs(prob - (110 / 210 + 0.02)) < 1e-6
 
 
-class DummyMirrorModel:
-    def predict(self, X):
-        return X["opening_odds"].values + 10
-
-
-def _save_dummy_mirror_model(path: Path) -> None:
-    with open(path, "wb") as f:
-        pickle.dump(DummyMirrorModel(), f)
 
 
 def test_extract_advanced_ml_features(tmp_path):
@@ -67,11 +59,8 @@ def test_extract_advanced_ml_features(tmp_path):
 
 
 def test_extract_market_signals(tmp_path):
-    model_path = tmp_path / "mirror.pkl"
-    _save_dummy_mirror_model(model_path)
-    feats = ml.extract_market_signals(
-        str(model_path), price1=150, handle_percent=55.0, ticket_percent=60.0
-    )
-    assert "predicted_mirror_price" in feats
-    assert "mirror_score" in feats
+    event = {"opening_price": 150, "volatility": 5.0}
+    feats = ml.extract_market_signals(event)
+    assert feats["opening_odds"] == 150
+    assert feats["volatility"] == 5.0
 
