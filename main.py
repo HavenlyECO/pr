@@ -300,14 +300,38 @@ def predict_h2h_probability(model_path: str, price1: float, price2: float) -> fl
     """Return the predicted probability of the first team winning."""
     with open(model_path, "rb") as f:
         model = pickle.load(f)
-    df = pd.DataFrame([{"price1": price1, "price2": price2}])
+
     if isinstance(model, dict):
-        # STRICT: Only use the "pregame" head
         pre_pipe, pregame_cols = model["pregame"]
-        df = df[[c for c in pregame_cols if c in df.columns]]
+        # STRICT: Build a DataFrame with all required columns
+        features = {}
+        for col in pregame_cols:
+            if col == "price1":
+                features[col] = price1
+            elif col == "price2":
+                features[col] = price2
+            else:
+                raise ValueError(
+                    f"Missing required feature '{col}' for prediction! "
+                    "You must provide all features used in training."
+                )
+        df = pd.DataFrame([features])
         proba = pre_pipe.predict_proba(df)[0][1]
         return float(proba)
     else:
+        # Single-head model: same logic
+        features = {}
+        for col in model.feature_names_in_:
+            if col == "price1":
+                features[col] = price1
+            elif col == "price2":
+                features[col] = price2
+            else:
+                raise ValueError(
+                    f"Missing required feature '{col}' for prediction! "
+                    "You must provide all features used in training."
+                )
+        df = pd.DataFrame([features])
         proba = model.predict_proba(df)[0][1]
         return float(proba)
 
