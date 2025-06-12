@@ -663,12 +663,7 @@ def evaluate_h2h_all_tomorrow(
 
             # Add market maker mirror signals
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
-                sig = extract_market_signals(
-                    model_path=str(MARKET_MAKER_MIRROR_MODEL_PATH),
-                    price1=row.get(K_PRICE1),
-                    handle_percent=row.get(K_HANDLE_PCT_TEAM1),
-                    ticket_percent=row.get(K_TICKET_PCT_TEAM1),
-                )
+                sig = extract_market_signals(row)
                 row.update(sig)
             weight = 1 + diff + (soft_spread or 0)
             if row.get(K_STALE_FLAG):
@@ -1307,7 +1302,7 @@ def continuous_train_mirror_cli(argv: list[str]) -> None:
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
 
-    required_columns = ["opening_odds", "handle_percent", "ticket_percent", "mirror_target"]
+    required_columns = ["opening_odds", "closing_odds", "volatility", "mirror_target"]
     try:
         df = pd.read_csv(args.dataset, nrows=1)
     except Exception as e:
