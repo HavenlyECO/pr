@@ -81,6 +81,7 @@ import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
 from scores import fetch_scores, append_scores_history, SCORES_HISTORY_FILE
+from line_movement_features import compute_odds_volatility
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -637,10 +638,18 @@ def evaluate_h2h_all_tomorrow(
             row[K_MARKET_DISAGREEMENT_SCORE] = diff
             row[K_SOFT_BOOK_SPREAD] = soft_spread
             row[K_MULTI_BOOK_EDGE_SCORE] = multi_book_edge
+            vol_df = compute_odds_volatility(
+                odds_timeline, price_cols=["price"], window_seconds=3 * 3600
+            )
+            volatility = (
+                vol_df["volatility_price"].iloc[-1]
+                if not vol_df["volatility_price"].isna().all()
+                else 0.0
+            )
             mm_event = {
                 "opening_price": row.get(K_PRICE1),
                 "price": row.get(K_PRICE1),
-                "volatility": diff * 100,
+                "volatility": volatility,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 try:
