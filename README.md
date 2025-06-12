@@ -460,7 +460,7 @@ Likewise the market maker mirror model can be refreshed automatically:
 
 ```bash
 python3 main.py continuous_train_mirror --dataset=mirror_training_data.csv \
-    --interval-hours=24 --sport=baseball_mlb --verbose
+    --interval=24 --verbose
 ```
 
 ## Bet Logging
