@@ -244,7 +244,7 @@ can be exploited before the books adjust.
 ``market_maker_mirror_score`` goes a step further by modeling how sharp
 bookmakers move their lines when money flow, volatility and public sentiment
 shift. Train the model with ``train_market_maker_mirror_model`` on a dataset
-containing opening/closing odds plus handle and ticket percentages. The trainer
+containing opening/closing odds and basic line movement details. The trainer
 uses **linear regression** to predict a synthetic closing price representing
 what a highly efficient book would offer. Comparing that price to the current
 line yields the
@@ -258,23 +258,34 @@ To train the mirror model provide a CSV with these columns:
 | -------------- | ---------------------------------------------------------- | ------- |
 | opening_odds   | The opening moneyline odds for the team                   | -110    |
 | closing_odds   | The closing moneyline odds for the team                   | -130    |
-| handle_percent | Percentage of money wagered on the team (0-100 float)     | 62.5    |
-| ticket_percent | Percentage of tickets/wagers on the team (0-100 float)    | 70.0    |
-| volatility     | (Optional) Line movement or volatility metric             | 15.0    |
-| mirror_target  | Target closing odds for mirror model (float)             | -125    |
+| line_move      | opening_odds - closing_odds                              | 20      |
+| volatility     | Line movement/volatility metric                          | 15.0    |
+| mirror_target  | Target value: closing_odds or line_move (see code)       | -130    |
 
 Example:
 
 ```csv
-opening_odds,closing_odds,handle_percent,ticket_percent,volatility,mirror_target
--110,-130,62.5,70.0,15.0,-125
-+120,+105,38.0,29.0,8.0,110
+opening_odds,closing_odds,line_move,volatility,mirror_target
+-110,-130,20,15.0,-130
++120,+105,15,8.0,105
 ```
 
-All columns except ``volatility`` are required. ``mirror_target`` serves as the
-target closing odds for the regression and percentages must be floats between 0
-and 100. When columns
-are missing the trainer raises ``ValueError: Missing required columns...``.
+All columns except ``volatility`` are required. ``line_move`` represents
+``opening_odds - closing_odds`` and ``mirror_target`` should match the value
+your training routine predicts—either ``closing_odds`` or ``line_move``. When
+columns are missing the trainer raises ``ValueError: Missing required columns...``.
+
+To generate mirror model training data run:
+
+```bash
+python3 generate_mirror_training_data.py
+```
+
+Train the model or keep it updated with:
+
+```bash
+python3 main.py continuous_train_mirror --dataset=mirror_training_data.csv --verbose
+```
 
 When monitoring betting exchanges directly, the ``volume_surge.py`` module
 offers a ``VolumeSurgeDetector`` utility. Provide it with a callback that
@@ -461,8 +472,7 @@ python3 main.py continuous_train_moneyline --dataset=training_data.csv \
 Likewise the market maker mirror model can be refreshed automatically:
 
 ```bash
-python3 main.py continuous_train_mirror --dataset=mirror_training_data.csv \
-    --interval=24 --verbose
+python3 main.py continuous_train_mirror --dataset=mirror_training_data.csv --verbose
 ```
 
 ## Bet Logging
