@@ -3,8 +3,6 @@ from sklearn.linear_model import LogisticRegression
 import pickle
 import warnings
 
-H2H_MODEL_PATH = "h2h_classifier.pkl"  # strict, explicit, no fallback
-
 # Functions only; no code at global scope except imports and definitions.
 
 def american_odds_to_prob(odds: float) -> float:

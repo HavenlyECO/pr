@@ -37,11 +37,14 @@ DOTENV_PATH = ROOT_DIR / '.env'
 if DOTENV_PATH.exists():
     load_dotenv(DOTENV_PATH)
 
-# Default location for the trained moneyline classifier
-MONEYLINE_MODEL_PATH = "/root/pr/h2h_data/h2h_classifier.pkl"
+# Define portable, relative model paths (single source of truth)
+MODEL_DIR = Path("h2h_data")
+MODEL_DIR.mkdir(exist_ok=True)
 
-# Default location for the trained market maker mirror model
-MARKET_MAKER_MIRROR_MODEL_PATH = "/root/pr/h2h_data/market_maker_mirror.pkl"
+MONEYLINE_MODEL_PATH = MODEL_DIR / "moneyline_classifier.pkl"
+DUAL_HEAD_MODEL_PATH = MODEL_DIR / "dual_head_classifier.pkl"
+MARKET_MAKER_MIRROR_MODEL_PATH = MODEL_DIR / "market_maker_mirror.pkl"
+H2H_MODEL_PATH = MODEL_DIR / "h2h_classifier.pkl"
 
 API_KEY = os.getenv('THE_ODDS_API_KEY')
 TEST_MODE = False
@@ -84,7 +87,7 @@ def should_highlight_row(edge: float | None) -> bool:
 SOFT_BOOKS = ("bovada", "mybookie", "betus")
 
 # Import here to avoid circular imports
-from ml import H2H_MODEL_PATH, train_market_maker_mirror_model
+from ml import train_market_maker_mirror_model
 import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
