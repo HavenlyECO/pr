@@ -1696,10 +1696,7 @@ def market_maker_mirror_score(
     current_odds: float,
 ) -> float:
     """Return difference between mirrored implied probability and current odds."""
-    try:
-        mirror_price = predict_market_maker_price(model_path, features)
-    except Exception:
-        return 0.0
+    mirror_price = predict_market_maker_price(model_path, features)
     implied_mirror = american_odds_to_prob(mirror_price)
     implied_current = american_odds_to_prob(current_odds)
     return implied_mirror - implied_current
@@ -1710,15 +1707,8 @@ def calculate_edge_and_ev(model_path: str, features: dict, price1: float) -> dic
 
     implied = american_odds_to_prob(price1)
 
-    try:
-        prob = predict_moneyline_probability(model_path, features)
-        print(f"[INFO] Model probability returned: {prob} (implied: {implied})")
-    except Exception as e:  # pragma: no cover - model may be missing in tests
-        print(
-            f"[WARN] Using fallback probability calculation: {e}",
-            file=sys.stderr,
-        )
-        prob = implied + 0.02  # Slight edge over implied
+    prob = predict_moneyline_probability(model_path, features)
+    print(f"[INFO] Model probability returned: {prob} (implied: {implied})")
 
     edge = prob - implied
     ev = edge * american_odds_to_payout(price1)
@@ -1753,7 +1743,7 @@ def predict_moneyline_probability(
             model_info = pickle.load(f)
     except Exception as e:
         print(f"[ERROR] Could not load ML model from {model_path}: {e}")
-        raise  # Let the fallback in fix_numeric_conversion.py handle it
+        raise
 
     if isinstance(model_info, tuple):
         model, cols = model_info
@@ -1795,11 +1785,10 @@ def extract_advanced_ml_features(
         "price2": price2,
         "pregame_price": price1,
         "pregame_line": price1,
-        "event_id": -1,  # placeholder for prediction
+        "event_id": -1,
         "commence_time": -1,
         "bookmaker": -1,
         "date": -1,
-        # Ensure numeric IDs are used for team-related features
         "home_team": get_team_id(team1),
         "away_team": get_team_id(team2),
         "home_score": 0,
@@ -1813,11 +1802,7 @@ def extract_advanced_ml_features(
         "team2": get_team_id(team2),
     }
 
-    try:
-        prob = predict_moneyline_probability(model_path, features)
-    except Exception as e:
-        print(f"Failed to predict with advanced model: {e}")
-        return {}
+    prob = predict_moneyline_probability(model_path, features)
 
     implied = american_odds_to_prob(price1)
     edge = prob - implied
@@ -1832,6 +1817,8 @@ def extract_advanced_ml_features(
         "advanced_ml_edge": edge,
         "advanced_ml_ev": ev,
     }
+
+
 
 
 def extract_market_signals(
@@ -1849,11 +1836,8 @@ def extract_market_signals(
         "volatility": 0.0,
     }
 
-    try:
-        mirror_price = predict_market_maker_price(model_path, features)
-        mirror_score = market_maker_mirror_score(model_path, features, price1)
-    except Exception:
-        return {}
+    mirror_price = predict_market_maker_price(model_path, features)
+    mirror_score = market_maker_mirror_score(model_path, features, price1)
 
     return {
         "predicted_mirror_price": mirror_price,

@@ -62,3 +62,4 @@ def test_extract_market_signals(tmp_path):
     )
     assert "predicted_mirror_price" in feats
     assert "mirror_score" in feats
+

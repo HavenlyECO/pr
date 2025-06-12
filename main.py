@@ -617,6 +617,7 @@ def evaluate_h2h_all_tomorrow(
                 )
                 row.update(adv)
 
+            # Add market maker mirror signals
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 sig = extract_market_signals(
                     model_path=str(MARKET_MAKER_MIRROR_MODEL_PATH),
