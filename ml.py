@@ -1,8 +1,24 @@
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 import pickle
+import warnings
+
+H2H_MODEL_PATH = "h2h_classifier.pkl"  # strict, explicit, no fallback
 
 # Functions only; no code at global scope except imports and definitions.
+
+def american_odds_to_prob(odds: float) -> float:
+    """Convert American odds to an implied win probability."""
+    if odds > 0:
+        return 100 / (odds + 100)
+    return abs(odds) / (abs(odds) + 100)
+
+
+def american_odds_to_payout(odds: float) -> float:
+    """Return the profit on a $1 bet for the given American odds."""
+    if odds > 0:
+        return odds / 100.0
+    return 100.0 / abs(odds)
 
 def train_mvp_model(csv_path: str, model_path: str) -> None:
     """Train a logistic regression model and persist it to ``model_path``."""
@@ -30,7 +46,80 @@ def predict_mvp(model_path: str, price1: float, price2: float) -> float:
     X_pred = pd.DataFrame([{"price1": price1, "price2": price2}])
     return model.predict_proba(X_pred)[:, 1][0]
 
+
+def predict_moneyline_probability(model_path: str, features: dict) -> float:
+    """Predict win probability using a trained moneyline classifier."""
+    with open(model_path, "rb") as f:
+        model_info = pickle.load(f)
+    if isinstance(model_info, tuple):
+        model, cols = model_info
+    else:
+        model = model_info
+        cols = None
+    df = pd.DataFrame([features])
+    if cols is not None:
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            warnings.warn(
+                f"Missing feature columns: {', '.join(missing)}",
+                RuntimeWarning,
+            )
+        df = df.reindex(cols, axis=1, fill_value=0)
+    return float(model.predict_proba(df)[0][1])
+
+
+def extract_advanced_ml_features(
+    model_path: str,
+    *,
+    price1: float,
+    price2: float,
+    team1: str | None = None,
+    team2: str | None = None,
+) -> dict:
+    """Return basic advanced metrics for given prices."""
+    prob = predict_moneyline_probability(
+        model_path,
+        {"price1": price1, "price2": price2},
+    )
+    implied = american_odds_to_prob(price1)
+    edge = prob - implied
+    ev = edge * american_odds_to_payout(price1)
+    return {
+        "advanced_ml_prob": prob,
+        "advanced_ml_edge": edge,
+        "advanced_ml_ev": ev,
+        "market_efficiency": implied,
+        "sharp_action": edge,
+        "ml_confidence": prob,
+        "lineup_strength": 0.5,
+    }
+
+
+def extract_market_signals(
+    model_path: str,
+    *,
+    price1: float,
+    ticket_percent: float,
+) -> dict:
+    """Return simple market maker mirror metrics for the given line."""
+    with open(model_path, "rb") as f:
+        model = pickle.load(f)
+    df = pd.DataFrame([
+        {
+            "opening_odds": price1,
+            "handle_percent": ticket_percent,
+            "ticket_percent": ticket_percent,
+            "volatility": 0.0,
+        }
+    ])
+    mirror_price = float(model.predict(df)[0])
+    mirror_score = mirror_price - price1
+    return {
+        "predicted_mirror_price": mirror_price,
+        "mirror_score": mirror_score,
+    }
+
 # Usage example (commented out; use in your CLI or pipeline)
-# train_mvp_model("retrosheet_training_data.csv", "mvp_model.pkl")
-# prob = predict_mvp("mvp_model.pkl", -120, 110)
+# train_mvp_model("retrosheet_training_data.csv", H2H_MODEL_PATH)
+# prob = predict_mvp(H2H_MODEL_PATH, -120, 110)
 # print("Win probability:", prob)
