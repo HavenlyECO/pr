@@ -301,8 +301,15 @@ def predict_h2h_probability(model_path: str, price1: float, price2: float) -> fl
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([{"price1": price1, "price2": price2}])
-    proba = model.predict_proba(df)[0][1]
-    return float(proba)
+    if isinstance(model, dict):
+        # STRICT: Only use the "pregame" head
+        pre_pipe, pregame_cols = model["pregame"]
+        df = df[[c for c in pregame_cols if c in df.columns]]
+        proba = pre_pipe.predict_proba(df)[0][1]
+        return float(proba)
+    else:
+        proba = model.predict_proba(df)[0][1]
+        return float(proba)
 
 
 def fetch_consensus_ticket_percentages(
