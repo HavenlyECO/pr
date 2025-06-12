@@ -51,7 +51,8 @@ def extract_row(event, book, market, home_team, away_team):
         if team_result is None:
             continue
 
-        mirror_target = 1 if team_result == 1 else 0
+        # Interpret string results ("win"/"loss") as mirror_target
+        mirror_target = 1 if str(team_result).lower() == "win" else 0
 
         return {
             "opening_odds": opening_odds,
