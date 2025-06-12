@@ -119,6 +119,37 @@ def extract_market_signals(
         "mirror_score": mirror_score,
     }
 
+
+def train_market_maker_mirror_model(
+    dataset: str, model_out: str, verbose: bool = False
+) -> None:
+    """Train a logistic regression mirror model and persist it."""
+    df = pd.read_csv(dataset)
+    required_cols = [
+        "opening_odds",
+        "handle_percent",
+        "ticket_percent",
+        "volatility",
+        "mirror_target",
+    ]
+    missing = set(required_cols) - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    X = df[["opening_odds", "handle_percent", "ticket_percent", "volatility"]]
+    y = df["mirror_target"]
+
+    if verbose:
+        print(f"Training on {len(df)} rows with features {X.columns.tolist()}")
+
+    model = LogisticRegression()
+    model.fit(X, y)
+
+    with open(model_out, "wb") as f:
+        pickle.dump(model, f)
+    if verbose:
+        print(f"Market maker mirror model saved to {model_out}")
+
 # Usage example (commented out; use in your CLI or pipeline)
 # train_mvp_model("retrosheet_training_data.csv", H2H_MODEL_PATH)
 # prob = predict_mvp(H2H_MODEL_PATH, -120, 110)
