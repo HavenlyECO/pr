@@ -380,6 +380,10 @@ To train both heads at once:
 python3 main.py train_classifier --dataset=training_data.csv --features-type=dual
 ```
 
+An experimental PyTorch implementation of this dual-head setup is available in
+``dual_head_nn.py``. It trains a small neural network to mirror closing lines
+while also predicting game outcomes.
+
 Pass ``--recent-half-life`` to weight newer rows more heavily based on a date column
 (defaults to the first column containing ``date`` in its name). Use ``--date-column``
 to specify the exact column if needed.
