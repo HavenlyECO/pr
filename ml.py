@@ -75,6 +75,25 @@ def american_odds_to_payout(odds: float) -> float:
         return odds / 100.0
     return 100.0 / abs(odds)
 
+# Mapping of team names to stable numeric identifiers
+TEAM_NAME_TO_ID = {
+    "Chicago White Sox": 1,
+    "Colorado Rockies": 2,
+    "Minnesota Twins": 3,
+    "New York Mets": 4,
+    "Baltimore Orioles": 5,
+    "Kansas City Royals": 6,
+    "Milwaukee Brewers": 7,
+    "Chicago Cubs": 8,
+    # ... add all teams used during model training ...
+}
+
+
+def get_team_id(team_name: str) -> int:
+    """Return numeric team ID or ``-1`` when unknown."""
+
+    return TEAM_NAME_TO_ID.get(team_name, -1)
+
 
 LINE_MOVEMENT_THRESHOLD = 15
 
@@ -1742,8 +1761,8 @@ def extract_advanced_ml_features(
         "commence_time": -1,
         "bookmaker": -1,
         "date": -1,
-        "home_team": team1 or "Team1",
-        "away_team": team2 or "Team2",
+        "home_team": get_team_id(team1) if team1 else -1,
+        "away_team": get_team_id(team2) if team2 else -1,
         "home_score": 0,
         "visiting_score": 0,
         "day_night": -1,
@@ -1751,8 +1770,8 @@ def extract_advanced_ml_features(
         "implied_prob": american_odds_to_prob(price1),
         "game_day": now.weekday(),
         "is_weekend": int(now.weekday() >= 5),
-        "team1": team1 or "Team1",
-        "team2": team2 or "Team2",
+        "team1": get_team_id(team1) if team1 else -1,
+        "team2": get_team_id(team2) if team2 else -1,
     }
 
     try:
