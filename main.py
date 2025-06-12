@@ -537,7 +537,10 @@ def evaluate_h2h_all_tomorrow(
 
                 prob = predict_h2h_probability(
                     model_path,
-                    {"price1": price1, "price2": price2},
+                    {
+                        "pregame_price": price1,
+                        "pregame_line": price2,
+                    },
                 )
 
                 implied = american_odds_to_prob(price1)
