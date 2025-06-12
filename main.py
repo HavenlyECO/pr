@@ -40,6 +40,9 @@ if DOTENV_PATH.exists():
 # Default location for the trained moneyline classifier
 MONEYLINE_MODEL_PATH = "/root/pr/h2h_data/h2h_classifier.pkl"
 
+# Default location for the trained market maker mirror model
+MARKET_MAKER_MIRROR_MODEL_PATH = "/root/pr/h2h_data/market_maker_mirror.pkl"
+
 API_KEY = os.getenv('THE_ODDS_API_KEY')
 TEST_MODE = False
 if not API_KEY:
