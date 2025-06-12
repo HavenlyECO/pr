@@ -3,6 +3,9 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 import pickle
 import warnings
 
+# Access model path constants from main without creating a circular import
+from typing import Optional
+
 # Functions only; no code at global scope except imports and definitions.
 
 def american_odds_to_prob(odds: float) -> float:
@@ -18,8 +21,10 @@ def american_odds_to_payout(odds: float) -> float:
         return odds / 100.0
     return 100.0 / abs(odds)
 
-def train_mvp_model(csv_path: str, model_path: str) -> None:
-    """Train a logistic regression model and persist it to ``model_path``."""
+def train_mvp_model(csv_path: str, model_path: Optional[str] = None) -> None:
+    """Train a logistic regression model and persist it."""
+    from main import H2H_MODEL_PATH
+    model_path = model_path or str(H2H_MODEL_PATH)
     df = pd.read_csv(csv_path)
     required_cols = ["price1", "price2", "home_team_win"]
 
@@ -37,16 +42,25 @@ def train_mvp_model(csv_path: str, model_path: str) -> None:
     with open(model_path, "wb") as f:
         pickle.dump(model, f)
 
-def predict_mvp(model_path: str, price1: float, price2: float) -> float:
+def predict_mvp(
+    model_path: Optional[str] = None, price1: float | int = 0, price2: float | int = 0
+) -> float:
     """Return the predicted home win probability for the given prices."""
+    from main import H2H_MODEL_PATH
+    model_path = model_path or str(H2H_MODEL_PATH)
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     X_pred = pd.DataFrame([{"price1": price1, "price2": price2}])
     return model.predict_proba(X_pred)[:, 1][0]
 
 
-def predict_moneyline_probability(model_path: str, features: dict) -> float:
+def predict_moneyline_probability(
+    model_path: Optional[str] = None, features: dict | None = None
+) -> float:
     """Predict win probability using a trained moneyline classifier."""
+    from main import MONEYLINE_MODEL_PATH
+    model_path = model_path or str(MONEYLINE_MODEL_PATH)
+    features = features or {}
     with open(model_path, "rb") as f:
         model_info = pickle.load(f)
     if isinstance(model_info, tuple):
@@ -67,7 +81,7 @@ def predict_moneyline_probability(model_path: str, features: dict) -> float:
 
 
 def extract_advanced_ml_features(
-    model_path: str,
+    model_path: Optional[str] = None,
     *,
     price1: float,
     price2: float,
@@ -75,6 +89,8 @@ def extract_advanced_ml_features(
     team2: str | None = None,
 ) -> dict:
     """Return basic advanced metrics for given prices."""
+    from main import MONEYLINE_MODEL_PATH
+    model_path = model_path or str(MONEYLINE_MODEL_PATH)
     prob = predict_moneyline_probability(
         model_path,
         {"price1": price1, "price2": price2},
@@ -94,7 +110,7 @@ def extract_advanced_ml_features(
 
 
 def extract_market_signals(
-    model_path: str,
+    model_path: Optional[str] = None,
     *,
     price1: float,
     handle_percent: float | None,
@@ -112,6 +128,8 @@ def extract_market_signals(
             "ticket_percent is missing in event data. "
             "Both handle_percent and ticket_percent must be present."
         )
+    from main import MARKET_MAKER_MIRROR_MODEL_PATH
+    model_path = model_path or str(MARKET_MAKER_MIRROR_MODEL_PATH)
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     df = pd.DataFrame([
@@ -131,9 +149,11 @@ def extract_market_signals(
 
 
 def train_market_maker_mirror_model(
-    dataset: str, model_out: str, verbose: bool = False
+    dataset: str, model_out: Optional[str] = None, verbose: bool = False
 ) -> None:
     """Train a regression model for the market maker mirror and persist it."""
+    from main import MARKET_MAKER_MIRROR_MODEL_PATH
+    model_out = model_out or str(MARKET_MAKER_MIRROR_MODEL_PATH)
     df = pd.read_csv(dataset)
     required_cols = [
         "opening_odds",
