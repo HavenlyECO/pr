@@ -929,6 +929,109 @@ def _summarize_projections(projections: list[ProjectionRow]) -> list[ProjectionR
     return ordered
 
 
+def compute_recency_weights(dates: pd.Series, *, half_life_days: float) -> pd.Series:
+    """Return exponentially-decayed weights based on ``dates``."""
+    parsed = pd.to_datetime(dates, errors="coerce")
+    if parsed.isnull().all():
+        return pd.Series(1.0, index=dates.index)
+    latest = parsed.max()
+    age = (latest - parsed).dt.days.fillna(0)
+    weights = 0.5 ** (age / float(half_life_days))
+    return weights
+
+
+def attach_recency_weighted_features(
+    df: pd.DataFrame,
+    *,
+    multiplier: float = 0.7,
+    verbose: bool = False,
+) -> None:
+    """Add columns blending recent metrics with season-long stats."""
+    import re
+
+    pattern = re.compile(r"(.+)_last_\d+(?:_games?|_starts?)?")
+    added: list[str] = []
+    for col in list(df.columns):
+        m = pattern.match(col)
+        if not m:
+            continue
+        base = m.group(1)
+        if base in df.columns:
+            out_col = f"{base}_weighted_recent"
+            df[out_col] = df[col] * multiplier + df[base] * (1.0 - multiplier)
+            added.append(out_col)
+    if verbose and added:
+        print(f"Computed recency weighted features: {', '.join(added)}")
+
+
+def train_dual_head_classifier(
+    dataset_path: str,
+    *,
+    model_out: str = str(MONEYLINE_MODEL_PATH),
+    verbose: bool = False,
+    recent_half_life: float | None = None,
+    date_column: str | None = None,
+    recency_multiplier: float = 0.7,
+) -> None:
+    """Train separate pregame and live logistic models and save them."""
+
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.pipeline import make_pipeline
+
+    df = pd.read_csv(dataset_path)
+
+    target = None
+    if "home_team_win" in df.columns:
+        target = "home_team_win"
+    elif "team1_win" in df.columns:
+        target = "team1_win"
+    if target is None:
+        raise ValueError("Dataset must include 'home_team_win' or 'team1_win' column")
+
+    attach_recency_weighted_features(df, multiplier=recency_multiplier, verbose=verbose)
+
+    X = df.drop(columns=[target])
+    X = X.select_dtypes(include=[np.number, bool]).fillna(0)
+    y = df[target]
+
+    pregame_cols = [c for c in X.columns if c.startswith("pregame_")]
+    live_cols = [c for c in X.columns if c.startswith("live_")]
+
+    pregame_X = X[pregame_cols]
+    live_X = X[live_cols]
+
+    weights = None
+    if recent_half_life is not None:
+        col = date_column if date_column and date_column in df.columns else next((c for c in df.columns if "date" in c.lower()), None)
+        if col is not None:
+            weights = compute_recency_weights(df[col], half_life_days=recent_half_life)
+            if verbose:
+                print(f"Using column '{col}' for recency weighting")
+
+    pre_pipe = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
+    live_pipe = make_pipeline(StandardScaler(), LogisticRegression(max_iter=1000))
+
+    if weights is not None:
+        pre_pipe.fit(pregame_X, y, logisticregression__sample_weight=weights)
+        live_pipe.fit(live_X, y, logisticregression__sample_weight=weights)
+    else:
+        pre_pipe.fit(pregame_X, y)
+        live_pipe.fit(live_X, y)
+
+    model = {
+        "pregame": (pre_pipe, pregame_cols),
+        "live": (live_pipe, live_cols),
+    }
+
+    Path(model_out).parent.mkdir(parents=True, exist_ok=True)
+    with open(model_out, "wb") as f:
+        pickle.dump(model, f)
+
+    if verbose:
+        print(f"Dual-head model saved to {model_out}")
+
+
 def run_pipeline(
     *, sport: str = "baseball_mlb", regions: str = "us", model_path: str = str(H2H_MODEL_PATH), verbose: bool = False
 ) -> None:
