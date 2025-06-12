@@ -68,3 +68,42 @@ def add_line_movement_context_features(
     df["num_books_moved"] = recent_moves
     df["magnitude_recent_moves"] = df[sportsbook_cols].diff().abs().sum(axis=1)
     return df
+
+
+def compute_odds_volatility(
+    df: pd.DataFrame,
+    price_cols: list[str] | None = None,
+    *,
+    window_seconds: int = 3 * 3600,
+    min_periods: int = 2,
+    count_changes: bool = False,
+) -> pd.DataFrame:
+    """Return rolling volatility (and optional change counts) for ``price_cols``."""
+
+    if price_cols is None:
+        price_cols = [c for c in df.columns if c != "timestamp"]
+
+    df = df.sort_values("timestamp").reset_index(drop=True)
+    out = pd.DataFrame(index=df.index)
+
+    for col in price_cols:
+        roll = (
+            df.set_index("timestamp")[col]
+            .rolling(f"{window_seconds}s", min_periods=min_periods)
+            .std()
+            .reset_index(drop=True)
+        )
+        out[f"volatility_{col}"] = roll
+
+        if count_changes:
+            change = (
+                df.set_index("timestamp")[col]
+                .diff()
+                .ne(0)
+                .rolling(f"{window_seconds}s", min_periods=1)
+                .sum()
+                .reset_index(drop=True)
+            )
+            out[f"changes_{col}"] = change
+
+    return out
