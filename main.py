@@ -296,42 +296,37 @@ def fetch_event_odds(
         return []
 
 
-def predict_h2h_probability(model_path: str, price1: float, price2: float) -> float:
+def predict_h2h_probability(model_path: str, features: dict) -> float:
     """Return the predicted probability of the first team winning."""
     with open(model_path, "rb") as f:
         model = pickle.load(f)
 
     if isinstance(model, dict):
         pre_pipe, pregame_cols = model["pregame"]
-        # STRICT: Print expected and actual features for debugging
         print("DEBUG: Model expects features:", pregame_cols)
-        provided = {"price1": price1, "price2": price2}
-        print("DEBUG: Features provided:", list(provided.keys()))
-        # Check for missing features
-        missing = [col for col in pregame_cols if col not in provided]
+        print("DEBUG: Features provided:", list(features.keys()))
+        missing = [col for col in pregame_cols if col not in features]
         if missing:
             print("DEBUG: Missing features for prediction:", missing)
             raise ValueError(
                 f"Missing required features for prediction: {missing}. "
                 "You must provide all features used in training."
             )
-        # Build df with exactly required columns
-        df = pd.DataFrame([{col: provided[col] for col in pregame_cols}])
+        df = pd.DataFrame([{col: features[col] for col in pregame_cols}])
         proba = pre_pipe.predict_proba(df)[0][1]
         return float(proba)
     else:
-        provided = {"price1": price1, "price2": price2}
         required = list(model.feature_names_in_)
         print("DEBUG: Model expects features:", required)
-        print("DEBUG: Features provided:", list(provided.keys()))
-        missing = [col for col in required if col not in provided]
+        print("DEBUG: Features provided:", list(features.keys()))
+        missing = [col for col in required if col not in features]
         if missing:
             print("DEBUG: Missing features for prediction:", missing)
             raise ValueError(
                 f"Missing required features for prediction: {missing}. "
                 "You must provide all features used in training."
             )
-        df = pd.DataFrame([{col: provided[col] for col in required}])
+        df = pd.DataFrame([{col: features[col] for col in required}])
         proba = model.predict_proba(df)[0][1]
         return float(proba)
 
@@ -540,7 +535,10 @@ def evaluate_h2h_all_tomorrow(
                         print("        Skipped: missing team name or price")
                     continue
 
-                prob = predict_h2h_probability(model_path, price1, price2)
+                prob = predict_h2h_probability(
+                    model_path,
+                    {"price1": price1, "price2": price2},
+                )
 
                 implied = american_odds_to_prob(price1)
                 edge = prob - implied
