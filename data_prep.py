@@ -3,13 +3,7 @@ import json
 import pprint
 from pathlib import Path
 import pandas as pd
-
-
-def american_odds_to_prob(odds: float) -> float:
-    """Convert American odds to implied probability."""
-    if odds > 0:
-        return 100 / (odds + 100)
-    return abs(odds) / (abs(odds) + 100)
+from odds_utils import american_odds_to_prob
 
 
 DEFAULT_CACHE_DIR = Path("h2h_data") / "api_cache"

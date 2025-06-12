@@ -5,21 +5,9 @@ import warnings
 
 # Access model path constants from main without creating a circular import
 from typing import Optional
+from odds_utils import american_odds_to_prob, american_odds_to_payout
 
 # Functions only; no code at global scope except imports and definitions.
-
-def american_odds_to_prob(odds: float) -> float:
-    """Convert American odds to an implied win probability."""
-    if odds > 0:
-        return 100 / (odds + 100)
-    return abs(odds) / (abs(odds) + 100)
-
-
-def american_odds_to_payout(odds: float) -> float:
-    """Return the profit on a $1 bet for the given American odds."""
-    if odds > 0:
-        return odds / 100.0
-    return 100.0 / abs(odds)
 
 def train_mvp_model(csv_path: str, model_path: Optional[str] = None) -> None:
     """Train a logistic regression model and persist it."""

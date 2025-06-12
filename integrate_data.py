@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import json
 from difflib import SequenceMatcher
+from odds_utils import american_odds_to_prob
 
 # Configuration
 RETROSHEET_DIR = Path("retrosheet_data")
@@ -406,15 +407,6 @@ def match_odds_with_results(odds_df, results_df):
         return pd.DataFrame()
 
 
-def american_odds_to_prob(odds):
-    """Convert American odds to implied probability"""
-    try:
-        odds = float(odds)
-        if odds > 0:
-            return 100 / (odds + 100)
-        return abs(odds) / (abs(odds) + 100)
-    except:
-        return 0.5
 
 
 def add_ml_features(df):
