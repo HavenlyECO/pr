@@ -49,6 +49,7 @@ DUAL_HEAD_MODEL_PATH = MODEL_DIR / "dual_head_classifier.pkl"
 MARKET_MAKER_MIRROR_MODEL_PATH = MODEL_DIR / "market_maker_mirror.pkl"
 H2H_MODEL_PATH = MODEL_DIR / "h2h_classifier.pkl"
 MARKET_REGIME_MODEL_PATH = MODEL_DIR / "market_regime_model.pkl"
+MARKET_MAKER_RL_MODEL_PATH = MODEL_DIR / "market_maker_rl.pt"
 
 API_KEY = os.getenv('THE_ODDS_API_KEY')
 TEST_MODE = False
@@ -95,6 +96,7 @@ from liquidity_metrics import (
     oscillation_frequency,
     order_book_imbalance,
 )
+from market_maker_rl import rl_adjust_price
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -711,6 +713,19 @@ def evaluate_h2h_all_tomorrow(
             else:
                 disparity_val = 0.0
 
+            time_to_game = (commence_dt - datetime.utcnow()).total_seconds()
+            time_to_game = max(time_to_game, 0.0)
+            rl_state = np.array(
+                [
+                    time_to_game / 3600.0,
+                    row.get(K_PRICE1) / 100.0,
+                    volatility,
+                    momentum_val,
+                ],
+                dtype=np.float32,
+            )
+            rl_line_adj = rl_adjust_price(rl_state, model_path=str(MARKET_MAKER_RL_MODEL_PATH))
+
             regime_feats = derive_regime_features(odds_timeline, "price")
             if MARKET_REGIME_MODEL_PATH.exists():
                 regime_model = joblib.load(str(MARKET_REGIME_MODEL_PATH))
@@ -732,6 +747,7 @@ def evaluate_h2h_all_tomorrow(
                 "order_book_imbalance": ob_imbalance,
                 "sharp_disparity": disparity_val,
                 "market_regime": regime_id,
+                "rl_line_adjustment": rl_line_adj,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 try:
@@ -1490,6 +1506,9 @@ def main(argv: list[str] | None = None) -> None:
         action='store_true',
         help='List upcoming events for the given sport and exit'
     )
+    parser.add_argument('--train_rl_market_maker', action='store_true', help='Train RL market maker model and exit')
+    parser.add_argument('--rl_dataset_path', type=str, help='Path to RL training dataset')
+    parser.add_argument('--rl_model_out', type=str, default=str(MARKET_MAKER_RL_MODEL_PATH), help='Output path for RL model')
     args, remaining = parser.parse_known_args(argv)
 
     if remaining:
@@ -1500,6 +1519,11 @@ def main(argv: list[str] | None = None) -> None:
             (Fore.YELLOW if Fore else '') +
             '--game-period-markets has no effect without --event-odds or --list-market-keys'
         )
+
+    if args.train_rl_market_maker:
+        from market_maker_rl import train_market_maker_rl
+        train_market_maker_rl(args.rl_dataset_path, args.rl_model_out)
+        return
 
     if args.run:
         try:

@@ -362,6 +362,22 @@ This regime analysis lets the system recognize and adapt to diverse market
 behaviors, augmenting raw volatility and pricing-pressure features for richer
 modeling of line movement dynamics.
 
+### Reinforcement Learning Market Maker
+
+The ``market_maker_rl`` module trains a small DQN agent to mimic how books shade
+their lines over time. The agent observes the time remaining until game start,
+the current price, recent volatility and momentum, and outputs an adjustment of
+``-2`` to ``+2`` price points. Train the policy from cached odds timelines:
+
+```bash
+python3 main.py --train_rl_market_maker --rl_dataset_path=/path/to/cache \
+    --rl_model_out=market_maker_rl.pt
+```
+
+During evaluation ``main.py`` loads ``market_maker_rl.pt`` and appends
+``rl_line_adjustment`` to each event snapshot so other models can anticipate
+sharp moves.
+
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the
