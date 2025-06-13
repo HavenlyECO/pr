@@ -341,6 +341,27 @@ enable these integrations. All of these variables are optional—the script will
 fall back to the available services when any token is missing. ``OPENAI_API_KEY``
 must still be configured for language model features.
 
+#### Market Reaction Regimes
+
+The toolkit clusters historical odds timelines into **market reaction regimes**
+using unsupervised learning. Each event is assigned a regime cluster ID, which
+reflects its pattern of line movement (e.g., flat, early sharp move, or late
+steam). This regime feature is included in all model training and inference.
+
+- **Feature Extraction:** For each event, indicators such as total line change,
+  timing of the largest move and volatility are calculated.
+- **Clustering:** These features feed a KMeans model to identify common market
+  behaviors. The model trains unsupervised on historical data.
+- **Usage:** The resulting ``market_regime`` cluster is appended to every event
+  row so models can leverage it directly or train specialized sub-models for
+  each regime.
+- **Anomaly Detection:** When a new event does not fit any cluster well, it may
+  signal unusual market activity.
+
+This regime analysis lets the system recognize and adapt to diverse market
+behaviors, augmenting raw volatility and pricing-pressure features for richer
+modeling of line movement dynamics.
+
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
 ``--features-type`` option of ``train_classifier`` to train on one set or the
