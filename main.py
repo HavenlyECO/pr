@@ -13,6 +13,8 @@ import numpy as np
 import pickle
 from typing import Dict, TypedDict, Any
 from odds_utils import american_odds_to_prob, american_odds_to_payout
+from market_regime_clustering import derive_regime_features, assign_regime
+import joblib
 
 # For improved table and color output
 try:
@@ -46,6 +48,7 @@ MONEYLINE_MODEL_PATH = MODEL_DIR / "moneyline_classifier.pkl"
 DUAL_HEAD_MODEL_PATH = MODEL_DIR / "dual_head_classifier.pkl"
 MARKET_MAKER_MIRROR_MODEL_PATH = MODEL_DIR / "market_maker_mirror.pkl"
 H2H_MODEL_PATH = MODEL_DIR / "h2h_classifier.pkl"
+MARKET_REGIME_MODEL_PATH = MODEL_DIR / "market_regime_model.pkl"
 
 API_KEY = os.getenv('THE_ODDS_API_KEY')
 TEST_MODE = False
@@ -708,6 +711,16 @@ def evaluate_h2h_all_tomorrow(
             else:
                 disparity_val = 0.0
 
+            regime_feats = derive_regime_features(odds_timeline, "price")
+            if MARKET_REGIME_MODEL_PATH.exists():
+                regime_model = joblib.load(str(MARKET_REGIME_MODEL_PATH))
+                feature_cols = [col for col in regime_feats.columns]
+                regime_id = assign_regime(
+                    regime_feats, regime_model, feature_cols
+                ).iloc[0]
+            else:
+                regime_id = -1
+
             mm_event = {
                 "opening_price": row.get(K_PRICE1),
                 "price": row.get(K_PRICE1),
@@ -718,6 +731,7 @@ def evaluate_h2h_all_tomorrow(
                 "oscillation_frequency": osc_freq,
                 "order_book_imbalance": ob_imbalance,
                 "sharp_disparity": disparity_val,
+                "market_regime": regime_id,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 try:
