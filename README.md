@@ -362,6 +362,21 @@ This regime analysis lets the system recognize and adapt to diverse market
 behaviors, augmenting raw volatility and pricing-pressure features for richer
 modeling of line movement dynamics.
 
+#### Unsupervised Representation Learning
+
+The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
+An LSTM-based autoencoder is trained to reconstruct normalized odds timelines; the hidden state ("latent vector") summarizes the dynamic pattern of each event’s line moves.
+These embeddings (autoencoder_feature_1, autoencoder_feature_2, ...) are added to every example for model training and live inference.
+
+**How it works:**
+- Each odds timeline is normalized and encoded to a fixed-length vector.
+- The autoencoder is trained unsupervised, capturing subtle behaviors such as steady drift, sharp jumps, or oscillatory moves.
+- Downstream models use the latent vector as input, improving their ability to recognize complex and novel market patterns without relying solely on hand-engineered features.
+
+This approach provides a deeper, data-driven summary of market dynamics for each game.
+
+_No fallback or bandage models are included; the autoencoder is trained directly from market data._
+
 ### Reinforcement Learning Market Maker
 
 The toolkit includes a reinforcement-learning agent that mimics bookmaker line
