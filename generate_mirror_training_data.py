@@ -17,6 +17,7 @@ Columns:
 - line_adjustment_rate
 - oscillation_frequency
 - order_book_imbalance
+- market_regime
 """
 
 import pickle
@@ -35,6 +36,9 @@ from liquidity_metrics import (
     oscillation_frequency,
     order_book_imbalance,
 )
+from market_regime_clustering import derive_regime_features, assign_regime
+import joblib
+import os
 
 CACHE_DIR = Path("h2h_data/api_cache")
 OUTPUT_FILE = "mirror_training_data.csv"
@@ -74,6 +78,15 @@ def extract_row(event, book, market, home_team, away_team):
                     odds_timeline, "price", threshold=0.1, window_seconds=3600
                 )
 
+                regime_feats = derive_regime_features(odds_timeline, "price")
+                model_path = "market_regime_model.pkl"
+                if os.path.exists(model_path):
+                    regime_model = joblib.load(model_path)
+                    feature_cols = [col for col in regime_feats.columns]
+                    regime_id = assign_regime(regime_feats, regime_model, feature_cols).iloc[0]
+                else:
+                    regime_id = -1
+
                 if {
                     "sharp_price",
                     "book1_price",
@@ -103,6 +116,7 @@ def extract_row(event, book, market, home_team, away_team):
                 volatility = np.nan
                 momentum_val = acceleration_val = disparity_val = 0.0
                 adj_rate = osc_freq = ob_imbalance = np.nan
+                regime_id = -1
 
             if opening_odds is None or closing_odds is None:
                 continue
@@ -124,6 +138,7 @@ def extract_row(event, book, market, home_team, away_team):
                 "oscillation_frequency": osc_freq,
                 "order_book_imbalance": ob_imbalance,
                 "mirror_target": mirror_target,
+                "market_regime": regime_id,
             }
     return None
 
