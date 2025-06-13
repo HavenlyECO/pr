@@ -305,6 +305,17 @@ exceeds the window average by several standard deviations, the detector outputs
 a ``volume_surge_score`` between 0 and 1. Sudden liquidity spikes often hint at
 syndicates entering the market before prices move.
 
+### Pricing Pressure Indices
+
+In addition to volatility, the toolkit computes "pricing pressure" features to mimic insights typically derived from handle data:
+
+- **Momentum:** Measures how much the price (odds) has changed over a recent window, capturing the direction and speed of market moves.
+- **Acceleration:** Captures the change in momentum, highlighting periods when line movement is intensifying or slowing.
+- **Cross-book Disparity:** Quantifies how much a sharp book's price diverges from the average of other books, surfacing potential leading signals.
+
+These indices help models infer where and how quickly betting pressure is building, providing a synthetic view of market sentiment without direct access to ticket/handle data.
+
+Each metric is computed from historical price timelines and automatically included in all model training and inference workflows.
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` (and optionally ``REDDIT_USER_AGENT``)
 for Reddit, ``TWITTER_BEARER_TOKEN`` for Twitter and
 ``TG_API_ID``/``TG_API_HASH`` along with ``TG_CHANNEL`` for Telegram if you wish to
