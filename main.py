@@ -87,6 +87,11 @@ from pricing_pressure import (
     price_acceleration,
     cross_book_disparity,
 )
+from liquidity_metrics import (
+    line_adjustment_rate,
+    oscillation_frequency,
+    order_book_imbalance,
+)
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -662,6 +667,31 @@ def evaluate_h2h_all_tomorrow(
                 acceleration.iloc[-1] if not acceleration.isna().all() else 0.0
             )
 
+            adj_rate_series = line_adjustment_rate(
+                odds_timeline, "price", window_seconds=3600
+            )
+            osc_freq_series = oscillation_frequency(
+                odds_timeline, "price", threshold=0.1, window_seconds=3600
+            )
+            adj_rate = (
+                adj_rate_series.iloc[-1] if not adj_rate_series.isna().all() else 0.0
+            )
+            osc_freq = (
+                osc_freq_series.iloc[-1] if not osc_freq_series.isna().all() else 0.0
+            )
+
+            if {"back_size", "lay_size"}.issubset(odds_timeline.columns):
+                ob_imbalance_series = order_book_imbalance(
+                    odds_timeline, "back_size", "lay_size"
+                )
+                ob_imbalance = (
+                    ob_imbalance_series.iloc[-1]
+                    if not ob_imbalance_series.isna().all()
+                    else 0.0
+                )
+            else:
+                ob_imbalance = 0.0
+
             if {
                 "sharp_price",
                 "book1_price",
@@ -684,6 +714,9 @@ def evaluate_h2h_all_tomorrow(
                 "volatility": volatility,
                 "momentum_price": momentum_val,
                 "acceleration_price": acceleration_val,
+                "line_adjustment_rate": adj_rate,
+                "oscillation_frequency": osc_freq,
+                "order_book_imbalance": ob_imbalance,
                 "sharp_disparity": disparity_val,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
