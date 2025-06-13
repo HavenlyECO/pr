@@ -14,6 +14,9 @@ Columns:
 - acceleration_price
 - sharp_disparity
 - mirror_target   # closing_odds or line_move
+- line_adjustment_rate
+- oscillation_frequency
+- order_book_imbalance
 """
 
 import pickle
@@ -26,6 +29,11 @@ from pricing_pressure import (
     price_momentum,
     price_acceleration,
     cross_book_disparity,
+)
+from liquidity_metrics import (
+    line_adjustment_rate,
+    oscillation_frequency,
+    order_book_imbalance,
 )
 
 CACHE_DIR = Path("h2h_data/api_cache")
@@ -59,6 +67,12 @@ def extract_row(event, book, market, home_team, away_team):
                 acceleration = price_acceleration(
                     odds_timeline, "price", window_seconds=3600
                 )
+                adj_rate_series = line_adjustment_rate(
+                    odds_timeline, "price", window_seconds=3600
+                )
+                osc_freq_series = oscillation_frequency(
+                    odds_timeline, "price", threshold=0.1, window_seconds=3600
+                )
 
                 if {
                     "sharp_price",
@@ -76,9 +90,19 @@ def extract_row(event, book, market, home_team, away_team):
 
                 momentum_val = momentum.iloc[-1]
                 acceleration_val = acceleration.iloc[-1]
+                adj_rate = adj_rate_series.iloc[-1]
+                osc_freq = osc_freq_series.iloc[-1]
+                if {"back_size", "lay_size"}.issubset(odds_timeline.columns):
+                    ob_imbalance_series = order_book_imbalance(
+                        odds_timeline, "back_size", "lay_size"
+                    )
+                    ob_imbalance = ob_imbalance_series.iloc[-1]
+                else:
+                    ob_imbalance = np.nan
             else:
                 volatility = np.nan
                 momentum_val = acceleration_val = disparity_val = 0.0
+                adj_rate = osc_freq = ob_imbalance = np.nan
 
             if opening_odds is None or closing_odds is None:
                 continue
@@ -96,6 +120,9 @@ def extract_row(event, book, market, home_team, away_team):
                 "momentum_price": momentum_val,
                 "acceleration_price": acceleration_val,
                 "sharp_disparity": disparity_val,
+                "line_adjustment_rate": adj_rate,
+                "oscillation_frequency": osc_freq,
+                "order_book_imbalance": ob_imbalance,
                 "mirror_target": mirror_target,
             }
     return None
