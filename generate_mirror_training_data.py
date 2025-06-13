@@ -39,6 +39,7 @@ from liquidity_metrics import (
 from market_regime_clustering import derive_regime_features, assign_regime
 import joblib
 import os
+from sequence_autoencoder import encode_odds_sequence
 
 CACHE_DIR = Path("h2h_data/api_cache")
 OUTPUT_FILE = "mirror_training_data.csv"
@@ -126,7 +127,7 @@ def extract_row(event, book, market, home_team, away_team):
             # Choose one of the following as your target (mirror_target)
             mirror_target = closing_odds  # Or use line_move if preferred
 
-            return {
+            row_dict = {
                 "opening_odds": opening_odds,
                 "closing_odds": closing_odds,
                 "line_move": line_move,
@@ -140,6 +141,15 @@ def extract_row(event, book, market, home_team, away_team):
                 "mirror_target": mirror_target,
                 "market_regime": regime_id,
             }
+
+            if odds_timeline is not None and len(odds_timeline) > 1:
+                autoencoder_latent = encode_odds_sequence(
+                    odds_timeline, "price", model_path="odds_autoencoder.pt"
+                )
+                for i, val in enumerate(autoencoder_latent):
+                    row_dict[f"autoencoder_feature_{i+1}"] = float(val)
+
+            return row_dict
     return None
 
 
