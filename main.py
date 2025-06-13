@@ -82,6 +82,11 @@ from bankroll import calculate_bet_size
 from bet_logger import log_bets
 from scores import fetch_scores, append_scores_history, SCORES_HISTORY_FILE
 from line_movement_features import compute_odds_volatility
+from pricing_pressure import (
+    price_momentum,
+    price_acceleration,
+    cross_book_disparity,
+)
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -646,10 +651,40 @@ def evaluate_h2h_all_tomorrow(
                 if not vol_df["volatility_price"].isna().all()
                 else 0.0
             )
+
+            momentum = price_momentum(odds_timeline, "price", window_seconds=3600)
+            momentum_val = momentum.iloc[-1] if not momentum.isna().all() else 0.0
+
+            acceleration = price_acceleration(
+                odds_timeline, "price", window_seconds=3600
+            )
+            acceleration_val = (
+                acceleration.iloc[-1] if not acceleration.isna().all() else 0.0
+            )
+
+            if {
+                "sharp_price",
+                "book1_price",
+                "book2_price",
+            }.issubset(odds_timeline.columns):
+                disparity = cross_book_disparity(
+                    odds_timeline,
+                    "sharp_price",
+                    ["book1_price", "book2_price"],
+                )
+                disparity_val = (
+                    disparity.iloc[-1] if not disparity.isna().all() else 0.0
+                )
+            else:
+                disparity_val = 0.0
+
             mm_event = {
                 "opening_price": row.get(K_PRICE1),
                 "price": row.get(K_PRICE1),
                 "volatility": volatility,
+                "momentum_price": momentum_val,
+                "acceleration_price": acceleration_val,
+                "sharp_disparity": disparity_val,
             }
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 try:
