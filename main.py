@@ -97,6 +97,7 @@ from liquidity_metrics import (
     order_book_imbalance,
 )
 from market_maker_rl import rl_adjust_price
+from sequence_autoencoder import encode_odds_sequence
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -749,6 +750,11 @@ def evaluate_h2h_all_tomorrow(
                 "market_regime": regime_id,
                 "rl_line_adjustment": rl_line_adj,
             }
+            autoencoder_latent = encode_odds_sequence(
+                odds_timeline, "price", model_path="odds_autoencoder.pt"
+            )
+            for i, val in enumerate(autoencoder_latent):
+                mm_event[f"autoencoder_feature_{i+1}"] = float(val)
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 try:
                     sig = extract_market_signals(mm_event)
