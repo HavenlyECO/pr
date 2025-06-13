@@ -324,6 +324,16 @@ In addition to volatility, the toolkit computes "pricing pressure" features to m
 These indices help models infer where and how quickly betting pressure is building, providing a synthetic view of market sentiment without direct access to ticket/handle data.
 
 Each metric is computed from historical price timelines and automatically included in all model training and inference workflows.
+
+### Liquidity & Market Depth Proxies
+
+The toolkit estimates market liquidity and depth using price-based metrics:
+
+- **Line Adjustment Rate:** Counts how many times the price changes per hour. High rates imply thin liquidity (lines move easily).
+- **Oscillation Frequency:** Measures how often prices alternate direction (e.g., up-down-up) within a short window. Flickery lines often signal shallow markets or algorithmic adjustment.
+- **Order Book Imbalance:** (For exchanges with depth data) Compares back and lay sizes to show which side dominates at a given moment.
+
+These features help the model infer how much “resistance” a line faces, complementing volatility and pricing pressure. They serve as proxies for handle-driven movement—allowing sharp action, thin books, or liquidity vacuums to be recognized directly from public data.
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` (and optionally ``REDDIT_USER_AGENT``)
 for Reddit, ``TWITTER_BEARER_TOKEN`` for Twitter and
 ``TG_API_ID``/``TG_API_HASH`` along with ``TG_CHANNEL`` for Telegram if you wish to
