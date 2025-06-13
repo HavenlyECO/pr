@@ -14,8 +14,11 @@ Columns:
 """
 
 import pickle
-import pandas as pd
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from line_movement_features import compute_odds_volatility
 
 CACHE_DIR = Path("h2h_data/api_cache")
 OUTPUT_FILE = "mirror_training_data.csv"
@@ -34,7 +37,17 @@ def extract_row(event, book, market, home_team, away_team):
         if outcome.get("name") == home_team or outcome.get("name") == away_team:
             opening_odds = outcome.get("opening_price", outcome.get("price"))
             closing_odds = outcome.get("closing_price")
-            volatility = outcome.get("volatility")
+
+            odds_timeline = outcome.get("odds_timeline")
+            if odds_timeline is not None and len(odds_timeline) > 1:
+                vol_df = compute_odds_volatility(
+                    odds_timeline,
+                    price_cols=["price"],
+                    window_seconds=3 * 3600,
+                )
+                volatility = vol_df["volatility_price"].iloc[-1]
+            else:
+                volatility = np.nan
 
             if opening_odds is None or closing_odds is None:
                 continue
