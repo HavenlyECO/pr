@@ -60,64 +60,56 @@ def extract_row(event, book, market, home_team, away_team):
             closing_odds = outcome.get("closing_price")
 
             odds_timeline = outcome.get("odds_timeline")
-            if odds_timeline is not None and len(odds_timeline) > 1:
-                vol_df = compute_odds_volatility(
-                    odds_timeline,
-                    price_cols=["price"],
-                    window_seconds=3 * 3600,
-                )
-                volatility = vol_df["volatility_price"].iloc[-1]
+            if odds_timeline is None or len(odds_timeline) <= 1:
+                return None
 
-                momentum = price_momentum(odds_timeline, "price", window_seconds=3600)
-                acceleration = price_acceleration(
-                    odds_timeline, "price", window_seconds=3600
-                )
-                adj_rate_series = line_adjustment_rate(
-                    odds_timeline, "price", window_seconds=3600
-                )
-                osc_freq_series = oscillation_frequency(
-                    odds_timeline, "price", threshold=0.1, window_seconds=3600
-                )
+            vol_df = compute_odds_volatility(
+                odds_timeline,
+                price_cols=["price"],
+                window_seconds=3 * 3600,
+            )
+            volatility = vol_df["volatility_price"].iloc[-1]
 
-                regime_feats = derive_regime_features(odds_timeline, "price")
-                model_path = "market_regime_model.pkl"
-                if os.path.exists(model_path):
-                    regime_model = joblib.load(model_path)
-                    feature_cols = [col for col in regime_feats.columns]
-                    regime_id = assign_regime(regime_feats, regime_model, feature_cols).iloc[0]
-                else:
-                    regime_id = -1
+            momentum = price_momentum(odds_timeline, "price", window_seconds=3600)
+            acceleration = price_acceleration(
+                odds_timeline, "price", window_seconds=3600
+            )
+            adj_rate_series = line_adjustment_rate(
+                odds_timeline, "price", window_seconds=3600
+            )
+            osc_freq_series = oscillation_frequency(
+                odds_timeline, "price", threshold=0.1, window_seconds=3600
+            )
 
-                if {
-                    "sharp_price",
-                    "book1_price",
-                    "book2_price",
-                }.issubset(odds_timeline.columns):
-                    disparity = cross_book_disparity(
-                        odds_timeline,
-                        "sharp_price",
-                        ["book1_price", "book2_price"],
-                    )
-                    disparity_val = disparity.iloc[-1]
-                else:
-                    disparity_val = 0.0
+            regime_feats = derive_regime_features(odds_timeline, "price")
+            model_path = "market_regime_model.pkl"
+            if not os.path.exists(model_path):
+                return None
+            regime_model = joblib.load(model_path)
+            feature_cols = [col for col in regime_feats.columns]
+            regime_id = assign_regime(regime_feats, regime_model, feature_cols).iloc[0]
 
-                momentum_val = momentum.iloc[-1]
-                acceleration_val = acceleration.iloc[-1]
-                adj_rate = adj_rate_series.iloc[-1]
-                osc_freq = osc_freq_series.iloc[-1]
-                if {"back_size", "lay_size"}.issubset(odds_timeline.columns):
-                    ob_imbalance_series = order_book_imbalance(
-                        odds_timeline, "back_size", "lay_size"
-                    )
-                    ob_imbalance = ob_imbalance_series.iloc[-1]
-                else:
-                    ob_imbalance = np.nan
-            else:
-                volatility = np.nan
-                momentum_val = acceleration_val = disparity_val = 0.0
-                adj_rate = osc_freq = ob_imbalance = np.nan
-                regime_id = -1
+            required_disparity_cols = {"sharp_price", "book1_price", "book2_price"}
+            if not required_disparity_cols.issubset(odds_timeline.columns):
+                return None
+            disparity = cross_book_disparity(
+                odds_timeline,
+                "sharp_price",
+                ["book1_price", "book2_price"],
+            )
+            disparity_val = disparity.iloc[-1]
+
+            momentum_val = momentum.iloc[-1]
+            acceleration_val = acceleration.iloc[-1]
+            adj_rate = adj_rate_series.iloc[-1]
+            osc_freq = osc_freq_series.iloc[-1]
+
+            if not {"back_size", "lay_size"}.issubset(odds_timeline.columns):
+                return None
+            ob_imbalance_series = order_book_imbalance(
+                odds_timeline, "back_size", "lay_size"
+            )
+            ob_imbalance = ob_imbalance_series.iloc[-1]
 
             if opening_odds is None or closing_odds is None:
                 continue
