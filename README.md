@@ -260,20 +260,28 @@ To train the mirror model provide a CSV with these columns:
 | closing_odds   | The closing moneyline odds for the team                   | -130    |
 | line_move      | opening_odds - closing_odds                              | 20      |
 | volatility     | Line movement/volatility metric                          | 15.0    |
+| momentum_price | Recent price change indicating market pressure          | -2      |
+| acceleration_price | Change in momentum, highlighting shifts              | 1       |
+| sharp_disparity | Difference between sharp book and others               | 5       |
+| line_adjustment_rate | Rate of line changes per hour                       | 3       |
+| oscillation_frequency | How often the price direction flips                | 0.5     |
+| order_book_imbalance | Relative depth on the back vs. lay side            | 0.1     |
 | mirror_target  | Target value: closing_odds or line_move (see code)       | -130    |
 
 Example:
 
 ```csv
-opening_odds,closing_odds,line_move,volatility,mirror_target
--110,-130,20,15.0,-130
-+120,+105,15,8.0,105
+opening_odds,closing_odds,line_move,volatility,momentum_price,acceleration_price,sharp_disparity,line_adjustment_rate,oscillation_frequency,order_book_imbalance,mirror_target
+-110,-130,20,15.0,-2,1,5,3,0.5,0.1,-130
++120,+105,15,8.0,0.5,-0.5,2,1,0.25,-0.05,105
 ```
 
-All columns except ``volatility`` are required. ``line_move`` represents
-``opening_odds - closing_odds`` and ``mirror_target`` should match the value
-your training routine predicts—either ``closing_odds`` or ``line_move``. When
-columns are missing the trainer raises ``ValueError: Missing required columns...``.
+All columns except ``volatility`` and the advanced metrics
+(``momentum_price`` through ``order_book_imbalance``) are required.
+``line_move`` represents ``opening_odds - closing_odds`` and ``mirror_target``
+should match the value your training routine predicts—either ``closing_odds``
+or ``line_move``. When required columns are missing the trainer raises
+``ValueError: Missing required columns...``.
 
 To generate mirror model training data run:
 
