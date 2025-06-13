@@ -364,10 +364,24 @@ modeling of line movement dynamics.
 
 ### Reinforcement Learning Market Maker
 
-The ``market_maker_rl`` module trains a small DQN agent to mimic how books shade
-their lines over time. The agent observes the time remaining until game start,
-the current price, recent volatility and momentum, and outputs an adjustment of
-``-2`` to ``+2`` price points. Train the policy from cached odds timelines:
+The toolkit includes a reinforcement-learning agent that mimics bookmaker line
+movement. Given historical odds timelines, the agent learns to move the
+moneyline in response to volatility, pricing pressure and time-to-start. The
+agent operates within an RL environment where actions shift the line and rewards
+depend on how closely its final price matches the actual closing line.
+
+**Key Components:**
+- **MarketMakerEnv** – Simulates bookmaker decision-making with features like
+  time-to-game, price, volatility and momentum.
+- **DQN Agent** – Trained to move the line using discrete actions such as
+  ``+5``, ``-5`` or ``0`` price points, optimizing for minimal closing-line
+  error.
+- **CLI Integration** – Train the RL agent with
+  ``--train_rl_market_maker`` and supply a dataset of odds timelines.
+- **Inference** – The agent's recommended price adjustment is appended to each
+  event's feature dictionary for downstream models.
+
+Train the policy from cached odds timelines:
 
 ```bash
 python3 main.py --train_rl_market_maker --rl_dataset_path=/path/to/cache \
@@ -377,6 +391,19 @@ python3 main.py --train_rl_market_maker --rl_dataset_path=/path/to/cache \
 During evaluation ``main.py`` loads ``market_maker_rl.pt`` and appends
 ``rl_line_adjustment`` to each event snapshot so other models can anticipate
 sharp moves.
+
+**Usage:**
+- The RL-adjusted line acts as a synthetic signal of bookmaker behavior, aiding
+  model training or live forecasting.
+- No explicit handle or ticket data is required; the agent reacts purely to
+  observed market features.
+
+**Reward Structure:**
+The agent receives higher rewards when its closing price closely matches the
+true market close, with optional extensions for simulated profit and loss.
+
+No fallback logic or bandage models are used; the agent operates directly from
+the environment and training data.
 
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
