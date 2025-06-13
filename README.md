@@ -334,6 +334,22 @@ The toolkit estimates market liquidity and depth using price-based metrics:
 - **Order Book Imbalance:** (For exchanges with depth data) Compares back and lay sizes to show which side dominates at a given moment.
 
 These features help the model infer how much “resistance” a line faces, complementing volatility and pricing pressure. They serve as proxies for handle-driven movement—allowing sharp action, thin books, or liquidity vacuums to be recognized directly from public data.
+
+### Synthetic Sentiment & Handle Features
+
+To replace missing handle data, the toolkit generates synthetic sentiment and price-impact features:
+
+- **Public Team Bias:** A static index for each MLB team reflecting "public side" popularity.
+- **Reddit Sentiment:** Automated scores from /r/baseball and team subreddits, including:
+    - *Sharp Social Score* — language resembling sharp bettors.
+    - *Hype Trend Score* — public "can't lose" hype or overconfidence.
+    - *Lineup Risk Score* — discussion of injuries or lineup uncertainty.
+- **Implied Handle:** A numeric proxy for bet volume, derived from the price movement required to shift the line.
+- **Data Augmentation:** Historical samples are synthetically perturbed to simulate extreme betting flows, improving model generalization.
+- **Multi-Scale Features:** Momentum and volatility are computed over multiple time horizons (e.g., 10m, 2h, since open) for richer market context.
+
+No fallback logic or bandages are used; features are computed directly from data and public signals.
+
 Set ``REDDIT_CLIENT_ID``/``REDDIT_CLIENT_SECRET`` (and optionally ``REDDIT_USER_AGENT``)
 for Reddit, ``TWITTER_BEARER_TOKEN`` for Twitter and
 ``TG_API_ID``/``TG_API_HASH`` along with ``TG_CHANNEL`` for Telegram if you wish to
