@@ -417,8 +417,37 @@ sharp moves.
 The agent receives higher rewards when its closing price closely matches the
 true market close, with optional extensions for simulated profit and loss.
 
+
 No fallback logic or bandage models are used; the agent operates directly from
 the environment and training data.
+
+### Ensemble of Specialized Models
+
+The system combines multiple predictors—fundamental models, market-dynamics
+models, recent-form and CLV nets—into a single, robust probability using a
+meta-model ensemble.
+
+- **Base models:**
+  - *Fundamental classifier* (e.g. `h2h_classifier.pkl` or
+    `moneyline_classifier.pkl`)
+  - *Market maker mirror* (volatility-driven score)
+  - *RL market maker* (line adjustment policy)
+  - *Recent-form/CLV* (optional: dual-head, CLV nets)
+
+- **Training:**
+  Use `generate_mirror_training_data.py` to generate a CSV of all base model
+  predictions and true outcomes.
+  Then run `train_ensemble_model` from `ensemble_models.py` to fit a meta-model
+  (e.g. logistic regression) on these features.
+
+- **Inference:**
+  In `main.py`, ensemble probabilities are computed for each event by passing
+  the latest base model outputs to `predict_ensemble_probability`.
+
+This approach leverages the unique strengths of each specialized model,
+yielding a win probability that is more robust than any single model alone.
+No fallback or bandage logic is included; the ensemble is trained and applied
+directly on the underlying predictions.
 
 Columns prefixed with ``pregame_`` are treated as pregame features while those
 starting with ``live_`` are considered live-game inputs. Use the
