@@ -30,6 +30,7 @@ from pricing_pressure import (
     price_momentum,
     price_acceleration,
     cross_book_disparity,
+    implied_handle,
 )
 from liquidity_metrics import (
     line_adjustment_rate,
@@ -42,6 +43,13 @@ import os
 from sequence_autoencoder import encode_odds_sequence
 from ml import predict_moneyline_probability, market_maker_mirror_score
 from market_maker_rl import rl_adjust_price
+# Social sentiment and bias features
+from social_features import (
+    public_bias_score,
+    sharp_social_score,
+    hype_trend_score,
+    lineup_risk_score,
+)
 # If available:
 # from dual_head_nn import predict_dual_head_probability
 # from clv_model import predict_clv_probability
@@ -138,6 +146,21 @@ def extract_row(event, book, market, home_team, away_team):
                 "mirror_target": mirror_target,
                 "market_regime": regime_id,
             }
+
+            # Social sentiment and pricing pressure features
+            row_dict["home_public_bias"] = public_bias_score(home_team)
+            row_dict["away_public_bias"] = public_bias_score(away_team)
+            row_dict["home_sharp_social"] = sharp_social_score(home_team)
+            row_dict["away_sharp_social"] = sharp_social_score(away_team)
+            row_dict["home_hype_trend"] = hype_trend_score(home_team)
+            row_dict["away_hype_trend"] = hype_trend_score(away_team)
+            row_dict["home_lineup_risk"] = lineup_risk_score(home_team)
+            row_dict["away_lineup_risk"] = lineup_risk_score(away_team)
+            row_dict["implied_handle"] = implied_handle(
+                odds_timeline,
+                opening_odds,
+                closing_odds,
+            )
 
             # Add multi-scale momentum and volatility features
             for window in [600, 7200, None]:  # 10min, 2hr, full history
