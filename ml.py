@@ -6,8 +6,24 @@ import warnings
 # Access model path constants from main without creating a circular import
 from typing import Optional
 from odds_utils import american_odds_to_prob, american_odds_to_payout
+from social_features import (
+    public_bias_score,
+    sharp_social_score,
+    hype_trend_score,
+    lineup_risk_score,
+)
 
 # Functions only; no code at global scope except imports and definitions.
+
+# Wrappers for use in main.py
+def llm_sharp_social_score(team_name):
+    return sharp_social_score(team_name)
+
+def llm_hype_trend_score(team_name):
+    return hype_trend_score(team_name)
+
+def llm_lineup_risk_score(team_name):
+    return lineup_risk_score(team_name)
 
 def train_mvp_model(csv_path: str, model_path: Optional[str] = None) -> None:
     """Train a logistic regression model and persist it."""
