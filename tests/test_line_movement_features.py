@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -94,3 +95,55 @@ def test_compute_odds_volatility_count_changes():
     )
     assert "changes_p1" in result
     assert list(result["changes_p1"]) == [1.0, 2.0, 2.0]
+
+
+def test_compute_odds_volatility_basic_simulated_data():
+    # Simulated odds timeline with a clear peak
+    times = pd.date_range("2021-01-01 12:00:00", periods=5, freq="H")
+    prices = [100, 110, 120, 110, 100]
+    df = pd.DataFrame({"timestamp": times, "price": prices})
+    vol = compute_odds_volatility(df, price_cols=["price"], window_seconds=3 * 3600)
+    # The volatility should be NaN for the first value and positive at the end
+    assert np.isnan(vol["volatility_price"].iloc[0])
+    assert vol["volatility_price"].iloc[-1] > 0
+
+
+def test_compute_odds_volatility_multiple_prices():
+    times = pd.date_range("2021-01-01 12:00:00", periods=4, freq="H")
+    df = pd.DataFrame(
+        {
+            "timestamp": times,
+            "price1": [100, 100, 120, 120],
+            "price2": [200, 210, 210, 220],
+        }
+    )
+    vol = compute_odds_volatility(df, price_cols=["price1", "price2"], window_seconds=2 * 3600)
+    assert "volatility_price1" in vol
+    assert "volatility_price2" in vol
+
+
+def test_count_changes():
+    times = pd.date_range("2021-01-01 12:00:00", periods=6, freq="H")
+    prices = [100, 110, 110, 120, 120, 100]
+    df = pd.DataFrame({"timestamp": times, "price": prices})
+    vol = compute_odds_volatility(
+        df, price_cols=["price"], window_seconds=4 * 3600, count_changes=True
+    )
+    assert "changes_price" in vol
+
+
+def test_extract_market_signals_missing_volatility():
+    from ml import extract_market_signals
+
+    event = {"opening_price": 110, "volatility": None}
+    with pytest.raises(ValueError):
+        extract_market_signals(event)
+
+
+def test_extract_market_signals_with_volatility():
+    from ml import extract_market_signals
+
+    event = {"opening_price": 110, "volatility": 12.3}
+    feats = extract_market_signals(event)
+    assert "volatility" in feats
+    assert feats["volatility"] == 12.3
