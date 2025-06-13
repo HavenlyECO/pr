@@ -139,6 +139,25 @@ def extract_row(event, book, market, home_team, away_team):
                 "market_regime": regime_id,
             }
 
+            # Add multi-scale momentum and volatility features
+            for window in [600, 7200, None]:  # 10min, 2hr, full history
+                if window is None:
+                    mom = odds_timeline["price"].iloc[-1] - odds_timeline["price"].iloc[0]
+                    vol = odds_timeline["price"].std()
+                    row_dict["momentum_open"] = mom
+                    row_dict["volatility_open"] = vol
+                else:
+                    mom = price_momentum(odds_timeline, "price", window_seconds=window)
+                    vol_df = compute_odds_volatility(
+                        odds_timeline,
+                        price_cols=["price"],
+                        window_seconds=window,
+                    )
+                    row_dict[f"momentum_{window}s"] = float(mom.iloc[-1])
+                    row_dict[f"volatility_{window}s"] = float(
+                        vol_df["volatility_price"].iloc[-1]
+                    )
+
             if odds_timeline is not None and len(odds_timeline) > 1:
                 autoencoder_latent = encode_odds_sequence(
                     odds_timeline, "price", model_path="odds_autoencoder.pt"
