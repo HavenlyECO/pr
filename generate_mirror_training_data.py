@@ -40,6 +40,11 @@ from market_regime_clustering import derive_regime_features, assign_regime
 import joblib
 import os
 from sequence_autoencoder import encode_odds_sequence
+from ml import predict_moneyline_probability, market_maker_mirror_score
+from market_maker_rl import rl_adjust_price
+# If available:
+# from dual_head_nn import predict_dual_head_probability
+# from clv_model import predict_clv_probability
 
 CACHE_DIR = Path("h2h_data/api_cache")
 OUTPUT_FILE = "mirror_training_data.csv"
@@ -140,6 +145,43 @@ def extract_row(event, book, market, home_team, away_team):
                 )
                 for i, val in enumerate(autoencoder_latent):
                     row_dict[f"autoencoder_feature_{i+1}"] = float(val)
+
+            mm_event = row_dict.copy()
+            rl_state = np.array(
+                [
+                    (
+                        pd.to_datetime(event["commence_time"]) - pd.to_datetime(
+                            odds_timeline["timestamp"].iloc[-1]
+                        )
+                    ).total_seconds()
+                    / 3600.0,
+                    closing_odds / 100.0,
+                    volatility,
+                    momentum_val,
+                ],
+                dtype=np.float32,
+            )
+            fundamental_prob = predict_moneyline_probability(mm_event)
+            mirror_score = market_maker_mirror_score(
+                "market_maker_mirror.pkl",
+                mm_event,
+                closing_odds,
+            )
+            rl_line_adj = rl_adjust_price(rl_state, model_path="market_maker_rl.pt")
+            # Optionally:
+            # recent_form_prob = predict_dual_head_probability(mm_event)
+            # clv_prob = predict_clv_probability(mm_event)
+            outcome = event.get("outcome")
+            row_dict.update(
+                {
+                    "fundamental_prob": fundamental_prob,
+                    "mirror_score": mirror_score,
+                    "rl_line_adjustment": rl_line_adj,
+                    # "recent_form_prob": recent_form_prob,
+                    # "clv_prob": clv_prob,
+                    "home_team_win": 1 if outcome == "home_win" else 0,
+                }
+            )
 
             return row_dict
     return None
