@@ -10,6 +10,9 @@ Columns:
 - closing_odds
 - line_move (opening_odds - closing_odds)
 - volatility
+- momentum_price
+- acceleration_price
+- sharp_disparity
 - mirror_target   # closing_odds or line_move
 """
 
@@ -19,6 +22,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from line_movement_features import compute_odds_volatility
+from pricing_pressure import (
+    price_momentum,
+    price_acceleration,
+    cross_book_disparity,
+)
 
 CACHE_DIR = Path("h2h_data/api_cache")
 OUTPUT_FILE = "mirror_training_data.csv"
@@ -46,8 +54,31 @@ def extract_row(event, book, market, home_team, away_team):
                     window_seconds=3 * 3600,
                 )
                 volatility = vol_df["volatility_price"].iloc[-1]
+
+                momentum = price_momentum(odds_timeline, "price", window_seconds=3600)
+                acceleration = price_acceleration(
+                    odds_timeline, "price", window_seconds=3600
+                )
+
+                if {
+                    "sharp_price",
+                    "book1_price",
+                    "book2_price",
+                }.issubset(odds_timeline.columns):
+                    disparity = cross_book_disparity(
+                        odds_timeline,
+                        "sharp_price",
+                        ["book1_price", "book2_price"],
+                    )
+                    disparity_val = disparity.iloc[-1]
+                else:
+                    disparity_val = 0.0
+
+                momentum_val = momentum.iloc[-1]
+                acceleration_val = acceleration.iloc[-1]
             else:
                 volatility = np.nan
+                momentum_val = acceleration_val = disparity_val = 0.0
 
             if opening_odds is None or closing_odds is None:
                 continue
@@ -62,6 +93,9 @@ def extract_row(event, book, market, home_team, away_team):
                 "closing_odds": closing_odds,
                 "line_move": line_move,
                 "volatility": volatility,
+                "momentum_price": momentum_val,
+                "acceleration_price": acceleration_val,
+                "sharp_disparity": disparity_val,
                 "mirror_target": mirror_target,
             }
     return None
