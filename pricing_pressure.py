@@ -28,7 +28,9 @@ def price_momentum(df: pd.DataFrame, col: str, window_seconds: int = 3600) -> pd
 def price_acceleration(df: pd.DataFrame, col: str, window_seconds: int = 3600) -> pd.Series:
     """Return the difference in momentum over time."""
     momentum = price_momentum(df, col, window_seconds)
-    acceleration = momentum.diff()
+    acceleration = momentum.diff().astype(object)
+    if not acceleration.empty:
+        acceleration.iloc[0] = None
     acceleration.name = f"acceleration_{col}"
     return acceleration
 
