@@ -98,6 +98,7 @@ from liquidity_metrics import (
 )
 from market_maker_rl import rl_adjust_price
 from sequence_autoencoder import encode_odds_sequence
+from ensemble_models import predict_ensemble_probability
 
 # Dictionary key constants used throughout this module
 K_GAME = "game"
@@ -755,6 +756,8 @@ def evaluate_h2h_all_tomorrow(
             )
             for i, val in enumerate(autoencoder_latent):
                 mm_event[f"autoencoder_feature_{i+1}"] = float(val)
+
+            fundamental_prob = ml.predict_moneyline_probability(mm_event)
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
                 try:
                     sig = extract_market_signals(mm_event)
@@ -762,15 +765,30 @@ def evaluate_h2h_all_tomorrow(
                     sig = {}
                 row.update(sig)
                 if sig:
-                    row[K_MARKET_MAKER_MIRROR_SCORE] = market_maker_mirror_score(
+                    mirror_score = market_maker_mirror_score(
                         str(MARKET_MAKER_MIRROR_MODEL_PATH),
                         sig,
                         row.get(K_PRICE1),
                     )
+                    row[K_MARKET_MAKER_MIRROR_SCORE] = mirror_score
                 else:
+                    mirror_score = None
                     row[K_MARKET_MAKER_MIRROR_SCORE] = None
             else:
+                mirror_score = None
                 row[K_MARKET_MAKER_MIRROR_SCORE] = None
+
+            feature_dict = {
+                "fundamental_prob": fundamental_prob,
+                "mirror_score": mirror_score,
+                "rl_line_adjustment": rl_line_adj,
+                # "recent_form_prob": recent_form_prob,
+                # "clv_prob": clv_prob,
+            }
+            ensemble_prob = predict_ensemble_probability(
+                feature_dict, model_path="ensemble_model.pkl"
+            )
+            mm_event["ensemble_prob"] = ensemble_prob
 
             # Add advanced machine learning features
             team1 = row.get(K_TEAM1)
