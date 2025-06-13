@@ -41,3 +41,15 @@ def cross_book_disparity(df: pd.DataFrame, sharp_col: str, other_cols: list[str]
     disparity = df[sharp_col] - others_mean
     disparity.name = f"disparity_{sharp_col}_vs_others"
     return disparity
+
+
+def implied_handle(df: pd.DataFrame, opening_odds: float, current_odds: float, k: float = 1.0) -> float:
+    """Estimate the implied handle percentage from an odds move."""
+    if opening_odds == current_odds or opening_odds <= 0 or current_odds <= 0:
+        return 0.0
+    try:
+        ratio = np.log(opening_odds / current_odds)
+        handle = 1 - np.exp(-k * abs(ratio))
+        return float(np.clip(handle, 0.0, 1.0))
+    except Exception:
+        return 0.0
