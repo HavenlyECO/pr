@@ -1,7 +1,11 @@
+import os
+from datetime import datetime
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, LinearRegression
 import pickle
 import warnings
+import requests
 
 # Access model path constants from main without creating a circular import
 from typing import Optional
@@ -12,6 +16,38 @@ from social_features import (
     hype_trend_score,
     lineup_risk_score,
 )
+
+API_KEY = os.getenv("THE_ODDS_API_KEY")
+
+
+def to_fixed_utc(date_obj: datetime) -> str:
+    """Return ISO date string for ``date_obj`` fixed at noon UTC."""
+    return date_obj.strftime("%Y-%m-%dT12:00:00Z")
+
+
+def fetch_historical_h2h_odds(
+    sport_key: str,
+    date_iso: str,
+    *,
+    regions: str = "us",
+    odds_format: str = "american",
+) -> list:
+    """Return historical head-to-head odds from The Odds API."""
+    if not API_KEY:
+        raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
+
+    url = f"https://api.the-odds-api.com/v4/historical/sports/{sport_key}/odds"
+    params = {
+        "apiKey": API_KEY,
+        "regions": regions,
+        "markets": "h2h",
+        "oddsFormat": odds_format,
+        "date": date_iso,
+    }
+
+    resp = requests.get(url, params=params, timeout=30)
+    resp.raise_for_status()
+    return resp.json()
 
 # Functions only; no code at global scope except imports and definitions.
 
