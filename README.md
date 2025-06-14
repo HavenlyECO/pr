@@ -420,6 +420,15 @@ python3 fetch_odds_cache.py --sport=baseball_mlb \
 ```
 
 Each day's API response is saved under ``h2h_data/api_cache``.
+Next download per-event timelines with ``fetch_odds_timelines.py``:
+
+```bash
+python3 fetch_odds_timelines.py --sport=baseball_mlb \
+    --start-date=2024-04-01 --end-date=2024-04-30
+```
+
+This writes ``h2h_data/api_cache/<event_id>.pkl`` files containing an
+``odds_timeline`` DataFrame for every game.
 Once these cache files exist, run ``prepare_autoencoder_dataset.py`` to build the timeline dataset:
 
 ```bash
