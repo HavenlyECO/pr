@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Stores daily snapshot odds only; timelines require ``fetch_odds_timelines.py``.
 """Fetch historical odds from The Odds API and save them to the cache."""
 
 import argparse
