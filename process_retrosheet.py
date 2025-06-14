@@ -26,8 +26,6 @@ except ImportError:  # pragma: no cover - optional dependency
 import pandas as pd
 import requests
 
-# Import odds helpers from ml
-from ml import fetch_historical_h2h_odds, to_fixed_utc
 from odds_utils import american_odds_to_prob
 
 DATA_DIR = Path("retrosheet_data")
@@ -38,6 +36,9 @@ ROOT_DIR = Path(__file__).resolve().parent
 DOTENV_PATH = ROOT_DIR / ".env"
 if load_dotenv and DOTENV_PATH.exists():
     load_dotenv(DOTENV_PATH)
+
+# Import odds helpers from ml after environment is loaded
+from ml import fetch_historical_h2h_odds, to_fixed_utc
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 OUTPUT_FILE = "retrosheet_training_data.csv"

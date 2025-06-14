@@ -51,3 +51,19 @@ def test_train_mirror_cli_invocation(monkeypatch):
     monkeypatch.setattr(main, 'train_market_maker_mirror_model', fake_train)
     main.main(['train_mirror', '--dataset', 'd.csv'])
     assert called.get('dataset') == 'd.csv'
+
+
+def test_train_pipeline_no_unrecognized_args(monkeypatch):
+    called = {}
+
+    def fake_integrate(argv=None):
+        called['argv'] = argv
+
+    import integrate_data
+
+    monkeypatch.setattr(integrate_data, 'main', fake_integrate)
+    monkeypatch.setattr(main, 'train_dual_head_classifier', lambda *a, **k: None)
+    monkeypatch.setattr(main, 'train_h2h_classifier', lambda *a, **k: None, raising=False)
+
+    main.main(['--train', '--years', '2018-2024'])
+    assert called.get('argv') == []

@@ -25,6 +25,10 @@ pip3 install -r requirements-dev.txt
 export THE_ODDS_API_KEY=<your api key>
 ```
 
+You can alternatively place the key in a `.env` file at the repository root.
+Scripts such as `main.py` and `fetch_odds_cache.py` load this file
+automatically so you don't have to export the variable each time.
+
 If the variable is omitted the script runs in a limited *test mode* without
 making any API requests.
 
@@ -40,14 +44,11 @@ This command pulls the latest odds, computes every feature and prints a
 dashboard with the top edges. Results are also saved to ``bet_log.jsonl`` and
 ``bet_recommendations.log``.
 
-To build datasets and retrain the models in one step (example years shown):
+To build the training dataset and retrain the models in one step (example years shown):
 
 ```bash
 python3 main.py --train --years 2018-2024
 ```
-
-The training pipeline now passes a clean argument list to the data integration
-stage so this command works even when additional flags are present.
 
 The old subcommands remain available for advanced workflows but ``--run`` and
 ``--train`` are the recommended one-click options.
@@ -381,7 +382,30 @@ This regime analysis lets the system recognize and adapt to diverse market
 behaviors, augmenting raw volatility and pricing-pressure features for richer
 modeling of line movement dynamics.
 
+#### Fetching Historical Odds Cache
+
+Historical API responses can be cached with ``fetch_odds_cache.py``:
+
+```bash
+python3 fetch_odds_cache.py --start-date=2024-01-01 --end-date=2024-01-31 --sport=baseball_mlb
+```
+
+Each day's JSON is saved to ``h2h_data/api_cache/YYYY-MM-DD.pkl``. Existing files
+are skipped so the command can be run incrementally.
+
 #### Unsupervised Representation Learning
+
+##### Why Odds Timeline Data Is Needed
+
+Most advanced features depend on the full sequence of moneyline updates, not
+just the final price. The autoencoder and RL modules analyze how each game's
+line evolves over time. Collect timeline data and prepare the dataset with:
+
+```bash
+python3 fetch_odds_timelines.py --sport=baseball_mlb \
+    --start-date=2024-04-01 --end-date=2024-04-30
+python3 prepare_autoencoder_dataset.py
+```
 
 The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
 An LSTM-based autoencoder is trained to reconstruct normalized odds timelines; the hidden state ("latent vector") summarizes the dynamic pattern of each event’s line moves.
@@ -396,20 +420,13 @@ This approach provides a deeper, data-driven summary of market dynamics for each
 
 _No fallback or bandage models are included; the autoencoder is trained directly from market data._
 
-If your ``h2h_data/api_cache`` directory is empty, first fetch historical odds into it:
-
-```bash
-python3 cache_historical_odds.py --sport=baseball_mlb --start-date=2024-04-01 --end-date=2024-04-03
-```
-
-Each day is saved as ``YYYY-MM-DD.pkl``. Then gather odds timelines:
-
 ```bash
 python3 prepare_autoencoder_dataset.py
 ```
 
-This collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and writes
-``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to ``train_sequence_autoencoder``.
+This command collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and
+writes ``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to
+``train_sequence_autoencoder``.
 
 ### Reinforcement Learning Market Maker
 

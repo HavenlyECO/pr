@@ -438,17 +438,6 @@ def add_ml_features(df):
                 df[col] = (df["home_score"] > df["visiting_score"]).astype(int)
     return df
 
-
-def main(argv: list[str] | None = None) -> None:
-    """Main processing function
-
-    Parameters
-    ----------
-    argv : list[str] | None, optional
-        Command line arguments. When ``None`` (default) arguments are parsed
-        from ``sys.argv``. Provide an empty list when calling programmatically
-        to avoid inheriting parent CLI options.
-    """
     # Parse command line arguments
     import argparse
 

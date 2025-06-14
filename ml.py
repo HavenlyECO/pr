@@ -1,9 +1,11 @@
+import os
+from datetime import datetime
+
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, LinearRegression
 import pickle
 import warnings
-import os
-from datetime import datetime, timezone
+
 import requests
 
 # Access model path constants from main without creating a circular import
@@ -15,9 +17,6 @@ from social_features import (
     hype_trend_score,
     lineup_risk_score,
 )
-
-# API key for the historical odds endpoint
-API_KEY = os.getenv("THE_ODDS_API_KEY")
 
 # Functions only; no code at global scope except imports and definitions.
 
