@@ -437,6 +437,26 @@ true market close, with optional extensions for simulated profit and loss.
 No fallback logic or bandage models are used; the agent operates directly from
 the environment and training data.
 
+### Hybrid Neural Network
+
+The hybrid neural network fuses fundamental team stats and market-reaction data in a single architecture.  
+- **Fundamental branch:** Processes team statistics and contextual features via a feed-forward network.
+- **Market branch:** Encodes the odds timeline (and/or multi-book price grid) using an LSTM sequence encoder.
+- The outputs are concatenated and passed to a final layer to predict win probability.
+
+**How it works:**
+- Each event’s dataset row includes both fundamental features and a normalized odds sequence.
+- The model is trained end-to-end, learning to extract complementary signals from team stats and live market movement.
+- Cross-validation and holdout sets are recommended for reliable validation.
+
+**Integration:**
+- Inference calls `predict_hybrid_probability` with the team stats and odds sequence for each event.
+- The output (`hybrid_prob`) is included in all event records and can be used as a base model in the ensemble.
+
+This permanently integrated architecture replaces temporary or ad hoc feature logic, ensuring models always benefit from both fundamental and market perspectives.
+
+_No fallback logic or bandages are used; both branches are always required for training and inference._
+
 ### Ensemble of Specialized Models
 
 The system combines multiple predictors—fundamental models, market-dynamics
