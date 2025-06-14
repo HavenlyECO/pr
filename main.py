@@ -81,6 +81,7 @@ from ml import (
     extract_market_signals,
     market_maker_mirror_score,
 )
+from create_h2h_model import create_new_h2h_model
 import ml
 from bankroll import calculate_bet_size
 from bet_logger import log_bets
@@ -1267,6 +1268,11 @@ def run_pipeline(
     )
 
 
+def train_h2h_classifier(*args, **kwargs) -> bool:
+    """Wrapper for backward compatibility. Uses ``create_new_h2h_model``."""
+    return create_new_h2h_model()
+
+
 def train_pipeline(*, years: str = "2018-2024", sport: str = "baseball_mlb", verbose: bool = False) -> None:
     """Build datasets and train all models for ``sport`` over ``years``."""
 
@@ -1280,14 +1286,8 @@ def train_pipeline(*, years: str = "2018-2024", sport: str = "baseball_mlb", ver
 
     train_dual_head_classifier(dataset_path, verbose=verbose)
 
-    start = min(year_range)
-    end = max(year_range)
-    train_h2h_classifier(
-        sport,
-        f"{start}-01-01",
-        f"{end}-12-31",
-        verbose=verbose,
-    )
+    # Build or retrain the H2H model using the integrated dataset
+    create_new_h2h_model()
     print("Training complete.")
 
 
@@ -1365,13 +1365,8 @@ def continuous_train_classifier_cli(argv: list[str]) -> None:
     while True:
         if datetime.utcnow() >= next_run:
             end_date = datetime.utcnow().strftime("%Y-%m-%d")
-            train_h2h_classifier(
-                args.sport,
-                start.strftime("%Y-%m-%d"),
-                end_date,
-                model_out=args.model_out,
-                verbose=args.verbose,
-            )
+            # Retrain using the latest integrated dataset
+            create_new_h2h_model()
             try:
                 scores = fetch_scores(args.sport, days_from=3)
                 append_scores_history(scores)
