@@ -98,6 +98,7 @@ from liquidity_metrics import (
 )
 from market_maker_rl import rl_adjust_price
 from sequence_autoencoder import encode_odds_sequence
+from hybrid_nn import predict_hybrid_probability
 from ensemble_models import predict_ensemble_probability
 
 # Dictionary key constants used throughout this module
@@ -756,6 +757,18 @@ def evaluate_h2h_all_tomorrow(
             )
             for i, val in enumerate(autoencoder_latent):
                 mm_event[f"autoencoder_feature_{i+1}"] = float(val)
+
+            if "fund_features" in event:
+                fund_features = np.array(event["fund_features"], dtype=np.float32)
+                prices = odds_timeline["price"].to_numpy(dtype=np.float32)
+                prices_norm = (prices - prices.mean()) / (
+                    prices.std() if prices.std() > 1e-5 else 1
+                )
+                odds_sequence = prices_norm[:, None]
+                hybrid_prob = predict_hybrid_probability(
+                    fund_features, odds_sequence, model_path="hybrid_model.pt"
+                )
+                mm_event["hybrid_prob"] = hybrid_prob
 
             fundamental_prob = ml.predict_moneyline_probability(mm_event)
             if Path(MARKET_MAKER_MIRROR_MODEL_PATH).exists():
