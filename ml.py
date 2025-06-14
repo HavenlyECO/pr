@@ -228,13 +228,17 @@ def fetch_historical_h2h_odds(
         print("THE_ODDS_API_KEY not set; cannot fetch historical odds")
         return []
 
-    url = (
-        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds-history"
-        f"?apiKey={API_KEY}&date={date_iso}&regions={regions}&markets=h2h"
-        f"&oddsFormat={odds_format}&dateFormat=iso"
-    )
+    url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds-history"
+    params = {
+        "apiKey": API_KEY,
+        "date": date_iso,
+        "regions": regions,
+        "markets": "h2h",
+        "oddsFormat": odds_format,
+        "dateFormat": "iso",
+    }
     try:
-        resp = requests.get(url, timeout=30)
+        resp = requests.get(url, params=params, timeout=30)
         resp.raise_for_status()
         return resp.json()
     except Exception as exc:

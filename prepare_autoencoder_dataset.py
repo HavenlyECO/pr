@@ -19,6 +19,11 @@ def extract_odds_timelines(cache_dir: Path) -> list[pd.DataFrame]:
             print(f"Error reading {fp}: {e}")
             continue
 
+        if isinstance(cached, dict) and "odds_timeline" in cached:
+            timeline = cached["odds_timeline"]
+            if isinstance(timeline, pd.DataFrame) and {"timestamp", "price"}.issubset(timeline.columns):
+                timelines.append(timeline[["timestamp", "price"]].copy())
+
         events = (
             cached.get("data")
             if isinstance(cached, dict) and "data" in cached

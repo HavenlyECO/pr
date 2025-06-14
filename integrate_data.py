@@ -524,5 +524,10 @@ def add_ml_features(df):
     )
 
 
+def main(argv: list[str] | None = None) -> None:
+    """Placeholder CLI entry point used by tests."""
+    print("integrate_data main stub")
+
+
 if __name__ == "__main__":
     main()
