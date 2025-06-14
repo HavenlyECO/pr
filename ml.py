@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from sklearn.linear_model import LogisticRegression, LinearRegression
@@ -197,12 +197,10 @@ def train_market_maker_mirror_model(dataset, model_out, verbose=False):
 
 
 def to_fixed_utc(dt: datetime) -> str:
-    """Return ``dt`` formatted in UTC without microseconds."""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
+    """Return ISO string for ``dt`` fixed at 12:00 UTC."""
+    if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc)
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.strftime("%Y-%m-%dT12:00:00Z")
 
 
 def fetch_historical_h2h_odds(
