@@ -3,6 +3,8 @@
 
 import pickle
 from pathlib import Path
+from datetime import datetime
+
 import pandas as pd
 
 CACHE_DIR = Path("h2h_data/api_cache")
@@ -12,8 +14,17 @@ OUT_FILE = CACHE_DIR / "odds_timelines.pkl"
 def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[str]]:
     """Return timelines and inspected filenames found under ``cache_dir``."""
 
+    def _parse_timestamp(fp: Path) -> pd.Timestamp | None:
+        try:
+            dt = datetime.fromisoformat(fp.stem)
+        except ValueError:
+            return None
+        return pd.Timestamp(dt)
+
     timelines: list[pd.DataFrame] = []
     inspected: list[str] = []
+    event_rows: dict[str, list[dict]] = {}
+    event_files: dict[str, set[str]] = {}
     for fp in cache_dir.glob("*.pkl"):
         inspected.append(fp.name)
         try:
@@ -52,8 +63,36 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
                                 timelines.append(timeline[["timestamp", "price"]].copy())
                                 found = True
 
+                # Build timeline dynamically from snapshot data
+                if not found:
+                    event_id = event.get("id")
+                    if event_id:
+                        price = None
+                        for book in event.get("bookmakers", []):
+                            for market in book.get("markets", []):
+                                if market.get("key") != "h2h":
+                                    continue
+                                if not market.get("outcomes"):
+                                    continue
+                                outcome = market["outcomes"][0]
+                                price = outcome.get("price")
+                                if price is not None:
+                                    break
+                            if price is not None:
+                                break
+                        ts = _parse_timestamp(fp)
+                        if price is not None and ts is not None:
+                            event_rows.setdefault(event_id, []).append({"timestamp": ts, "price": price})
+                            event_files.setdefault(event_id, set()).add(fp.name)
+
         if not found:
             print(f"No odds_timeline in {fp.name}")
+
+    # Construct timelines from aggregated snapshot rows
+    for event_id, rows in event_rows.items():
+        if len(rows) > 0:
+            df = pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
+            timelines.append(df[["timestamp", "price"]])
 
     return timelines, inspected
 

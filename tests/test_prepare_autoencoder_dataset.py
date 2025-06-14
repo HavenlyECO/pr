@@ -25,6 +25,42 @@ def test_extract_odds_timelines_missing(tmp_path, capsys):
     assert files == ["missing.pkl"]
 
 
+def test_extract_odds_timelines_assemble(tmp_path):
+    events1 = [{
+        "id": "e1",
+        "bookmakers": [{
+            "markets": [{
+                "key": "h2h",
+                "outcomes": [{"price": 120}]
+            }]
+        }]
+    }]
+    events2 = [{
+        "id": "e1",
+        "bookmakers": [{
+            "markets": [{
+                "key": "h2h",
+                "outcomes": [{"price": 130}]
+            }]
+        }]
+    }]
+    with open(tmp_path / "2024-04-01.pkl", "wb") as f:
+        pickle.dump({"data": events1}, f)
+    with open(tmp_path / "2024-04-02.pkl", "wb") as f:
+        pickle.dump({"data": events2}, f)
+
+    timelines, files = extract_odds_timelines(tmp_path)
+    assert sorted(files) == ["2024-04-01.pkl", "2024-04-02.pkl"]
+    assert len(timelines) == 1
+    expected = pd.DataFrame(
+        {
+            "timestamp": [pd.Timestamp("2024-04-01"), pd.Timestamp("2024-04-02")],
+            "price": [120, 130],
+        }
+    )
+    pd.testing.assert_frame_equal(timelines[0].reset_index(drop=True), expected)
+
+
 def test_main_no_timelines(monkeypatch, tmp_path, capsys):
     with open(tmp_path / "x.pkl", "wb") as f:
         pickle.dump({}, f)
