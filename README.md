@@ -397,6 +397,18 @@ are skipped so the command can be run incrementally.
 
 #### Unsupervised Representation Learning
 
+##### Why Odds Timeline Data Is Needed
+
+Most advanced features depend on the full sequence of moneyline updates, not
+just the final price. The autoencoder and RL modules analyze how each game's
+line evolves over time. Collect timeline data and prepare the dataset with:
+
+```bash
+python3 fetch_odds_timelines.py --sport=baseball_mlb \
+    --start-date=2024-04-01 --end-date=2024-04-30
+python3 prepare_autoencoder_dataset.py
+```
+
 The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
 An LSTM-based autoencoder is trained to reconstruct normalized odds timelines; the hidden state ("latent vector") summarizes the dynamic pattern of each event’s line moves.
 These embeddings (autoencoder_feature_1, autoencoder_feature_2, ...) are added to every example for model training and live inference.
