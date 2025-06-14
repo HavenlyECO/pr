@@ -9,7 +9,17 @@ import pickle
 from datetime import datetime, timedelta
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency
+    load_dotenv = None
+
 import requests
+
+ROOT_DIR = Path(__file__).resolve().parent
+DOTENV_PATH = ROOT_DIR / ".env"
+if load_dotenv and DOTENV_PATH.exists():
+    load_dotenv(DOTENV_PATH)
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 CACHE_DIR = Path("h2h_data") / "api_cache"

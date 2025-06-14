@@ -25,6 +25,10 @@ pip3 install -r requirements-dev.txt
 export THE_ODDS_API_KEY=<your api key>
 ```
 
+You can alternatively place the key in a `.env` file at the repository root.
+Scripts such as `main.py` and `fetch_odds_cache.py` load this file
+automatically so you don't have to export the variable each time.
+
 If the variable is omitted the script runs in a limited *test mode* without
 making any API requests.
 
