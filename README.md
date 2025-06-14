@@ -393,6 +393,15 @@ This approach provides a deeper, data-driven summary of market dynamics for each
 
 _No fallback or bandage models are included; the autoencoder is trained directly from market data._
 
+Before training the autoencoder, gather odds timelines from your cached API responses:
+
+```bash
+python3 prepare_autoencoder_dataset.py
+```
+
+This collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and writes
+``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to ``train_sequence_autoencoder``.
+
 ### Reinforcement Learning Market Maker
 
 The toolkit includes a reinforcement-learning agent that mimics bookmaker line
