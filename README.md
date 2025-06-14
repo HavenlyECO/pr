@@ -380,6 +380,17 @@ This regime analysis lets the system recognize and adapt to diverse market
 behaviors, augmenting raw volatility and pricing-pressure features for richer
 modeling of line movement dynamics.
 
+#### Fetching Historical Odds Cache
+
+Historical API responses can be cached with ``fetch_odds_cache.py``:
+
+```bash
+python3 fetch_odds_cache.py --start-date=2024-01-01 --end-date=2024-01-31 --sport=baseball_mlb
+```
+
+Each day's JSON is saved to ``h2h_data/api_cache/YYYY-MM-DD.pkl``. Existing files
+are skipped so the command can be run incrementally.
+
 #### Unsupervised Representation Learning
 
 The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
