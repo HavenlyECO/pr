@@ -439,7 +439,7 @@ def add_ml_features(df):
     return df
 
 
-def main():
+def main(argv: list[str] | None = None):
     """Main processing function"""
     # Parse command line arguments
     import argparse
@@ -459,7 +459,7 @@ def main():
         help=f"Output CSV file path (default: {OUTPUT_FILE})",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     print("Starting data integration process...")
     setup_directories()
