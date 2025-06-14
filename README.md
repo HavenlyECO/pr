@@ -458,7 +458,9 @@ meta-model ensemble.
 
 - **Inference:**
   In `main.py`, ensemble probabilities are computed for each event by passing
-  the latest base model outputs to `predict_ensemble_probability`.
+  the latest base model outputs to `predict_ensemble_probability`. Use
+  `build_feature_dict` from `ensemble_models.py` to assemble these values
+  consistently.
 
 This approach leverages the unique strengths of each specialized model,
 yielding a win probability that is more robust than any single model alone.

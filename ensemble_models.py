@@ -4,6 +4,44 @@ import pickle
 from sklearn.linear_model import LogisticRegression
 
 
+def build_feature_dict(
+    fundamental_prob,
+    mirror_score,
+    rl_line_adjustment,
+    hybrid_prob,
+    **extra_features,
+):
+    """Assemble the base model outputs into a feature dictionary.
+
+    Parameters
+    ----------
+    fundamental_prob : float
+        Probability predicted by the fundamental model.
+    mirror_score : float
+        Market maker mirror score.
+    rl_line_adjustment : float
+        Adjustment suggested by the RL line model.
+    hybrid_prob : float
+        Probability from the hybrid neural network.
+    **extra_features : float
+        Optional additional feature values.
+
+    Returns
+    -------
+    dict
+        Mapping of feature names to values, ready for ensemble inference.
+    """
+
+    feature_dict = {
+        "fundamental_prob": fundamental_prob,
+        "mirror_score": mirror_score,
+        "rl_line_adjustment": rl_line_adjustment,
+        "hybrid_prob": hybrid_prob,
+    }
+    feature_dict.update(extra_features)
+    return feature_dict
+
+
 def train_ensemble_model(dataset_path, model_out="ensemble_model.pkl"):
     """Train a meta-model to blend base model predictions."""
     df = pd.read_csv(dataset_path)
