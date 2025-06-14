@@ -37,17 +37,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def fetch_historical_odds(sport: str, date: str) -> list:
-    """Return odds data for ``sport`` on ``date``."""
+def to_fixed_utc(date_obj: datetime) -> str:
+    """Return ISO string for ``date_obj`` fixed at 12:00 UTC."""
+    return date_obj.strftime("%Y-%m-%dT12:00:00Z")
+
+
+def fetch_historical_odds(sport: str, date_iso: str) -> list:
+    """Return odds data for ``sport`` on ``date_iso``."""
     if not API_KEY:
         raise RuntimeError("THE_ODDS_API_KEY environment variable is not set")
-    url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds-history/"
+    url = f"https://api.the-odds-api.com/v4/historical/sports/{sport}/odds"
     params = {
         "apiKey": API_KEY,
         "regions": "us",
         "markets": "h2h",
         "oddsFormat": "american",
-        "date": date,
+        "date": date_iso,
     }
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()
@@ -75,7 +80,8 @@ def main(argv: list[str] | None = None) -> None:
             print(f"Using existing {cache_path}")
             continue
         try:
-            data = fetch_historical_odds(args.sport, date_str)
+            date_iso = to_fixed_utc(d)
+            data = fetch_historical_odds(args.sport, date_iso)
         except Exception as exc:  # pragma: no cover - network error handling
             print(f"Error fetching {date_str}: {exc}")
             continue
