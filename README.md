@@ -397,6 +397,14 @@ python3 fetch_odds_cache.py --start-date=2024-01-01 --end-date=2024-01-31 --spor
 Each day's JSON is saved to ``h2h_data/api_cache/YYYY-MM-DD.pkl``. Existing files
 are skipped so the command can be run incrementally.
 
+To capture multiple snapshots throughout the day use
+``collect_snapshot_intervals.py``. It repeatedly queries the historical odds API
+on a fixed interval and saves each response with a timestamped filename:
+
+```bash
+python3 collect_snapshot_intervals.py --interval 5 --duration 60
+```
+
 After collecting several daily snapshots you can convert them into per-event
 timelines:
 
