@@ -400,9 +400,14 @@ Before training the autoencoder, gather odds timelines from your cached API resp
 ```bash
 python3 prepare_autoencoder_dataset.py
 ```
+``prepare_autoencoder_dataset.py`` expects ``h2h_data/api_cache`` to already contain
+historical responses from The Odds API. The repository does **not** provide a script
+to download these files—you must fetch the raw API results yourself and store them in
+that directory.
 
-This collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and writes
-``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to ``train_sequence_autoencoder``.
+This command collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and
+writes ``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to
+``train_sequence_autoencoder``.
 
 ### Reinforcement Learning Market Maker
 
