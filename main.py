@@ -1275,7 +1275,9 @@ def train_pipeline(*, years: str = "2018-2024", sport: str = "baseball_mlb", ver
     import integrate_data
 
     integrate_data.YEARS_TO_PROCESS = year_range
-    integrate_data.main()
+    # Call with an empty argument list so the integration step does not
+    # parse this script's command line options
+    integrate_data.main([])
     dataset_path = integrate_data.OUTPUT_FILE
 
     train_dual_head_classifier(dataset_path, verbose=verbose)

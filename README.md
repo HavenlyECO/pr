@@ -46,6 +46,9 @@ To build datasets and retrain the models in one step (example years shown):
 python3 main.py --train --years 2018-2024
 ```
 
+The training pipeline now passes a clean argument list to the data integration
+stage so this command works even when additional flags are present.
+
 The old subcommands remain available for advanced workflows but ``--run`` and
 ``--train`` are the recommended one-click options.
 These flags are mutually exclusive; the CLI will exit with an error if you
@@ -393,7 +396,13 @@ This approach provides a deeper, data-driven summary of market dynamics for each
 
 _No fallback or bandage models are included; the autoencoder is trained directly from market data._
 
-Before training the autoencoder, gather odds timelines from your cached API responses:
+If your ``h2h_data/api_cache`` directory is empty, first fetch historical odds into it:
+
+```bash
+python3 cache_historical_odds.py --sport=baseball_mlb --start-date=2024-04-01 --end-date=2024-04-03
+```
+
+Each day is saved as ``YYYY-MM-DD.pkl``. Then gather odds timelines:
 
 ```bash
 python3 prepare_autoencoder_dataset.py

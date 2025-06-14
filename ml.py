@@ -2,6 +2,9 @@ import pandas as pd
 from sklearn.linear_model import LogisticRegression, LinearRegression
 import pickle
 import warnings
+import os
+from datetime import datetime, timezone
+import requests
 
 # Access model path constants from main without creating a circular import
 from typing import Optional
@@ -12,6 +15,9 @@ from social_features import (
     hype_trend_score,
     lineup_risk_score,
 )
+
+# API key for the historical odds endpoint
+API_KEY = os.getenv("THE_ODDS_API_KEY")
 
 # Functions only; no code at global scope except imports and definitions.
 
@@ -189,3 +195,39 @@ def train_market_maker_mirror_model(dataset, model_out, verbose=False):
 # train_mvp_model("retrosheet_training_data.csv", H2H_MODEL_PATH)
 # prob = predict_mvp(H2H_MODEL_PATH, -120, 110)
 # print("Win probability:", prob)
+
+
+def to_fixed_utc(dt: datetime) -> str:
+    """Return ``dt`` formatted in UTC without microseconds."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def fetch_historical_h2h_odds(
+    sport_key: str,
+    date_iso: str,
+    *,
+    regions: str = "us",
+    odds_format: str = "american",
+) -> list:
+    """Return historical head-to-head odds for ``date_iso``."""
+    if not API_KEY:
+        print("THE_ODDS_API_KEY not set; cannot fetch historical odds")
+        return []
+
+    url = (
+        f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds-history"
+        f"?apiKey={API_KEY}&date={date_iso}&regions={regions}&markets=h2h"
+        f"&oddsFormat={odds_format}&dateFormat=iso"
+    )
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as exc:
+        print(f"Error fetching historical odds: {exc}")
+        return []
+
