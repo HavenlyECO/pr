@@ -438,9 +438,6 @@ def add_ml_features(df):
                 df[col] = (df["home_score"] > df["visiting_score"]).astype(int)
     return df
 
-
-def main(argv: list[str] | None = None):
-    """Main processing function"""
     # Parse command line arguments
     import argparse
 

@@ -50,8 +50,6 @@ To build the training dataset and retrain the models in one step (example years 
 python3 main.py --train --years 2018-2024
 ```
 
-This kicks off dataset creation followed by model training.
-
 The old subcommands remain available for advanced workflows but ``--run`` and
 ``--train`` are the recommended one-click options.
 These flags are mutually exclusive; the CLI will exit with an error if you
@@ -421,27 +419,6 @@ These embeddings (autoencoder_feature_1, autoencoder_feature_2, ...) are added t
 This approach provides a deeper, data-driven summary of market dynamics for each game.
 
 _No fallback or bandage models are included; the autoencoder is trained directly from market data._
-
-### Download Historical Odds
-
-Use ``fetch_odds_cache.py`` to populate ``h2h_data/api_cache`` with past head-to-head odds. Provide a date range and sport key. Example:
-
-```bash
-python3 fetch_odds_cache.py --sport=baseball_mlb \
-    --start-date=2024-04-01 --end-date=2024-04-30
-```
-
-Each day's API response is saved under ``h2h_data/api_cache``.
-Next download per-event timelines with ``fetch_odds_timelines.py``:
-
-```bash
-python3 fetch_odds_timelines.py --sport=baseball_mlb \
-    --start-date=2024-04-01 --end-date=2024-04-30
-```
-
-This writes ``h2h_data/api_cache/<event_id>.pkl`` files containing an
-``odds_timeline`` DataFrame for every game.
-Once these cache files exist, run ``prepare_autoencoder_dataset.py`` to build the timeline dataset:
 
 ```bash
 python3 prepare_autoencoder_dataset.py
