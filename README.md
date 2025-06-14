@@ -380,6 +380,17 @@ This regime analysis lets the system recognize and adapt to diverse market
 behaviors, augmenting raw volatility and pricing-pressure features for richer
 modeling of line movement dynamics.
 
+#### Fetching Historical Odds Cache
+
+Historical API responses can be cached with ``fetch_odds_cache.py``:
+
+```bash
+python3 fetch_odds_cache.py --start-date=2024-01-01 --end-date=2024-01-31 --sport=baseball_mlb
+```
+
+Each day's JSON is saved to ``h2h_data/api_cache/YYYY-MM-DD.pkl``. Existing files
+are skipped so the command can be run incrementally.
+
 #### Unsupervised Representation Learning
 
 The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
@@ -401,9 +412,8 @@ Before training the autoencoder, gather odds timelines from your cached API resp
 python3 prepare_autoencoder_dataset.py
 ```
 ``prepare_autoencoder_dataset.py`` expects ``h2h_data/api_cache`` to already contain
-historical responses from The Odds API. The repository does **not** provide a script
-to download these files—you must fetch the raw API results yourself and store them in
-that directory.
+historical responses from The Odds API. Use ``fetch_odds_cache.py`` to download these
+files and store them in that directory.
 
 This command collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and
 writes ``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to
