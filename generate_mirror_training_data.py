@@ -58,6 +58,11 @@ CACHE_DIR = Path("h2h_data/api_cache")
 OUTPUT_FILE = "mirror_training_data.csv"
 
 
+def extract_fundamental_features(event):
+    """Return a numpy array of fundamental team statistics."""
+    return np.array(event["fund_features"], dtype=np.float32)
+
+
 def extract_row(event, book, market, home_team, away_team):
     """Extract a row for the mirror model from a single market/book."""
     if market.get("key") != "h2h":
@@ -146,6 +151,15 @@ def extract_row(event, book, market, home_team, away_team):
                 "mirror_target": mirror_target,
                 "market_regime": regime_id,
             }
+
+            fund_features = extract_fundamental_features(event)
+            prices = odds_timeline["price"].to_numpy(dtype=np.float32)
+            prices_norm = (prices - prices.mean()) / (
+                prices.std() if prices.std() > 1e-5 else 1
+            )
+            market_array = prices_norm[:, None]
+            row_dict["hybrid_fund_features"] = fund_features.tolist()
+            row_dict["hybrid_market_array"] = market_array.tolist()
 
             # Social sentiment and pricing pressure features
             row_dict["home_public_bias"] = public_bias_score(home_team)
@@ -265,6 +279,13 @@ def main():
     df = df.dropna(subset=["opening_odds", "closing_odds", "volatility", "mirror_target"])
     df.to_csv(OUTPUT_FILE, index=False)
     print(f"Wrote {len(df)} rows to {OUTPUT_FILE}")
+
+    np.savez(
+        "hybrid_training_data.npz",
+        fund_X=np.stack([np.array(r["hybrid_fund_features"]) for r in rows]),
+        market_X=np.stack([np.array(r["hybrid_market_array"]) for r in rows]),
+        y=np.array([r["home_team_win"] for r in rows]),
+    )
 
 
 if __name__ == "__main__":
