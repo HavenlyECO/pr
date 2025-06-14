@@ -3,6 +3,10 @@
 This script fetches odds from [The Odds API](https://the-odds-api.com/).
 It requires **Python 3**.
 
+`cache_historical_odds.py` saves daily snapshot odds but does **not** include
+timeline updates. Run `fetch_odds_timelines.py` first if you need the complete
+sequence of line movements.
+
 ## Installation
 
 Install the core dependencies with:
