@@ -399,13 +399,21 @@ are skipped so the command can be run incrementally.
 
 Most advanced features depend on the full sequence of moneyline updates, not
 just the final price. The autoencoder and RL modules analyze how each game's
-line evolves over time. Collect timeline data and prepare the dataset with:
+line evolves over time. Collect the timeline data **first** and then generate
+the dataset:
 
 ```bash
 python3 fetch_odds_timelines.py --sport=baseball_mlb \
     --start-date=2024-04-01 --end-date=2024-04-30
 python3 prepare_autoencoder_dataset.py
 ```
+
+Run ``fetch_odds_timelines.py`` **before** ``prepare_autoencoder_dataset.py``.
+The dataset builder relies on the ``odds_timeline`` files saved by the first
+command and will be empty if they have not been fetched. The timelines script is
+distinct from ``cache_historical_odds.py``—that helper stores only daily odds
+snapshots and does not provide the ``odds_timeline`` data required for the
+autoencoder.
 
 The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
 An LSTM-based autoencoder is trained to reconstruct normalized odds timelines; the hidden state ("latent vector") summarizes the dynamic pattern of each event’s line moves.
