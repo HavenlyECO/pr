@@ -395,15 +395,21 @@ This approach provides a deeper, data-driven summary of market dynamics for each
 
 _No fallback or bandage models are included; the autoencoder is trained directly from market data._
 
-Before training the autoencoder, gather odds timelines from your cached API responses:
+### Download Historical Odds
+
+Use ``fetch_odds_cache.py`` to populate ``h2h_data/api_cache`` with past head-to-head odds. Provide a date range and sport key. Example:
+
+```bash
+python3 fetch_odds_cache.py --sport=baseball_mlb \
+    --start-date=2024-04-01 --end-date=2024-04-30
+```
+
+Each day's API response is saved under ``h2h_data/api_cache``.
+Once these cache files exist, run ``prepare_autoencoder_dataset.py`` to build the timeline dataset:
 
 ```bash
 python3 prepare_autoencoder_dataset.py
 ```
-``prepare_autoencoder_dataset.py`` expects ``h2h_data/api_cache`` to already contain
-historical responses from The Odds API. The repository does **not** provide a script
-to download these files—you must fetch the raw API results yourself and store them in
-that directory.
 
 This command collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and
 writes ``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to
