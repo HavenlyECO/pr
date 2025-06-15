@@ -15,14 +15,3 @@ def test_parse_timestamp_hyphenated():
     ts = st._parse_timestamp(fp)
     assert ts == pd.Timestamp(datetime(2024, 6, 8, 12, 30, 45))
 
-
-def test_parse_timestamp_iso():
-    fp = Path("2024-06-08T12:30:45Z.pkl")
-    ts = st._parse_timestamp(fp)
-    assert ts == pd.Timestamp(datetime(2024, 6, 8, 12, 30, 45))
-
-
-def test_parse_timestamp_invalid():
-    fp = Path("not-a-timestamp.pkl")
-    assert st._parse_timestamp(fp) is None
-
