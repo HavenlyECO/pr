@@ -22,8 +22,9 @@ def _read_snapshot(fp: Path) -> list[dict]:
 
 
 def _parse_timestamp(fp: Path) -> pd.Timestamp | None:
+    """Parse timestamp from snapshot filename."""
     try:
-        dt = datetime.fromisoformat(fp.stem)
+        dt = datetime.strptime(fp.stem, "%Y-%m-%dT%H-%M-%SZ")
     except ValueError:
         return None
     return pd.Timestamp(dt)
