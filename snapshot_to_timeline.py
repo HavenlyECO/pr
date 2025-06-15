@@ -22,11 +22,16 @@ def _read_snapshot(fp: Path) -> list[dict]:
 
 
 def _parse_timestamp(fp: Path) -> pd.Timestamp | None:
+    """Parse timestamp from snapshot filename."""
+    ts = None
     try:
-        dt = datetime.fromisoformat(fp.stem)
+        ts = datetime.strptime(fp.stem, "%Y-%m-%dT%H-%M-%SZ")
     except ValueError:
-        return None
-    return pd.Timestamp(dt)
+        try:
+            ts = datetime.fromisoformat(fp.stem.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return None
+    return pd.Timestamp(ts)
 
 
 def main() -> None:
