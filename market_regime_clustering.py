@@ -42,11 +42,6 @@ def derive_regime_features(
             "At least two data points are required to derive regime features"
         )
 
-    window_start = df["timestamp"].iloc[-1] - pd.Timedelta(seconds=window_seconds)
-    window_count = (df["timestamp"] >= window_start).sum()
-    if window_count < 2:
-        raise ValueError("Insufficient data within window for volatility calculation")
-
     features[f"total_line_change_{price_col}"] = total_line_change(df, price_col)
     features[f"largest_move_timing_{price_col}"] = largest_move_timing(df, price_col)
     vol = compute_odds_volatility(
