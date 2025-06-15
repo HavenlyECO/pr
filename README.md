@@ -21,6 +21,18 @@ For optional features such as memory profiling and colored table output, also in
 pip3 install -r requirements-dev.txt
 ```
 
+### Testing
+
+Install both requirement files then run the test suite:
+
+```bash
+pip3 install -r requirements.txt -r requirements-dev.txt
+pytest -q
+```
+
+You can alternatively run `make setup` to install the dependencies with a
+single command.
+
 ## Usage
 
 1. Set an environment variable with your API key:

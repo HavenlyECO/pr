@@ -1,6 +1,7 @@
 import os
 import sys
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -45,3 +46,10 @@ def test_regime_clustering_and_assignment():
     labels = assign_regime(cluster_df, model, feature_cols)
     assert len(labels.unique()) == 3
     os.remove("test_market_regime_model.pkl")
+
+
+def test_derive_regime_features_insufficient_window_data():
+    times = [pd.Timestamp("2023-01-01 00:00:00"), pd.Timestamp("2023-01-02 00:00:00")]
+    df = pd.DataFrame({"timestamp": times, "price": [100, 101]})
+    with pytest.raises(ValueError, match="Insufficient data within window"):
+        derive_regime_features(df, "price")
