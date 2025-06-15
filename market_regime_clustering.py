@@ -32,10 +32,29 @@ def derive_regime_features(
 ) -> pd.DataFrame:
     """Return regime features for ``price_col`` using the final row of ``df``."""
     features = pd.DataFrame(index=df.index)
+    df = (
+        df.dropna(subset=["timestamp", price_col])
+        .sort_values("timestamp")
+        .reset_index(drop=True)
+    )
+    if len(df) < 2:
+        raise ValueError(
+            "At least two data points are required to derive regime features"
+        )
+
+    window_start = df["timestamp"].iloc[-1] - pd.Timedelta(seconds=window_seconds)
+    window_count = (df["timestamp"] >= window_start).sum()
+    if window_count < 2:
+        raise ValueError("Insufficient data within window for volatility calculation")
+
     features[f"total_line_change_{price_col}"] = total_line_change(df, price_col)
     features[f"largest_move_timing_{price_col}"] = largest_move_timing(df, price_col)
-    vol = compute_odds_volatility(df, price_cols=[price_col], window_seconds=window_seconds)
+    vol = compute_odds_volatility(
+        df, price_cols=[price_col], window_seconds=window_seconds
+    )
     features[f"volatility_{price_col}"] = vol[f"volatility_{price_col}"]
+    if features.iloc[[-1]].isna().any().any():
+        raise ValueError("NaN values encountered in derived features")
     event_features = features.iloc[[-1]].reset_index(drop=True)
     return event_features
 
@@ -49,7 +68,10 @@ def train_market_regime_model(
     model_path: str = "market_regime_model.pkl",
 ):
     """Train a clustering model and persist it to ``model_path``."""
-    X = df[feature_cols].values
+    features = df[feature_cols]
+    if features.isna().any().any():
+        raise ValueError("Training data contains NaNs")
+    X = features.values
     if method == "kmeans":
         model = KMeans(n_clusters=n_clusters, n_init="auto", random_state=42)
     else:
@@ -61,6 +83,8 @@ def train_market_regime_model(
 
 def assign_regime(df: pd.DataFrame, model, feature_cols: List[str]) -> pd.Series:
     """Assign a regime cluster to each event in ``df`` using ``model``."""
+    if df[feature_cols].isna().any().any():
+        raise ValueError("Input data contains NaNs")
     X = df[feature_cols].values
     cluster_ids = model.predict(X)
     return pd.Series(cluster_ids, index=df.index, name="market_regime")
