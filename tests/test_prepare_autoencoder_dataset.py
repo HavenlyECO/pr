@@ -61,6 +61,19 @@ def test_extract_odds_timelines_assemble(tmp_path):
     pd.testing.assert_frame_equal(timelines[0].reset_index(drop=True), expected)
 
 
+def test_extract_odds_timelines_nested(tmp_path):
+    df = pd.DataFrame({"timestamp": [1], "price": [100]})
+    sub = tmp_path / "nested"
+    sub.mkdir()
+    with open(sub / "b.pkl", "wb") as f:
+        pickle.dump({"odds_timeline": df}, f)
+
+    timelines, files = extract_odds_timelines(tmp_path)
+    assert len(timelines) == 1
+    assert files == ["b.pkl"]
+    pd.testing.assert_frame_equal(timelines[0], df[["timestamp", "price"]])
+
+
 def test_main_no_timelines(monkeypatch, tmp_path, capsys):
     with open(tmp_path / "x.pkl", "wb") as f:
         pickle.dump({}, f)
