@@ -86,15 +86,14 @@ def main(argv: list[str] | None = None) -> None:
     end = datetime.fromisoformat(args.end_date)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-    for ts in daterange(start, end, minutes=args.interval):
-        date_iso = iso_timestamp(ts, minutes=args.interval)
-        events = ml.fetch_historical_h2h_odds(args.sport, date_iso)
+
         for event in events:
             if not isinstance(event, dict):
                 continue
             event_id = event.get("id")
             if not event_id:
                 continue
+
             try:
                 hist = _fetch_odds_history(args.sport, event_id)
             except Exception as exc:  # pragma: no cover - network error handling
@@ -107,6 +106,7 @@ def main(argv: list[str] | None = None) -> None:
                     data = pickle.load(f)
                 if isinstance(data, dict) and isinstance(data.get("odds_timeline"), pd.DataFrame):
                     df = merge_timelines(data["odds_timeline"], df)
+
             data = {"odds_timeline": df}
             with open(cache_path, "wb") as f:
                 pickle.dump(data, f)
