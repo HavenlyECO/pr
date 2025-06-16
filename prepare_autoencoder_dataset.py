@@ -25,7 +25,7 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
     inspected: list[str] = []
     event_rows: dict[str, list[dict]] = {}
     event_files: dict[str, set[str]] = {}
-    for fp in cache_dir.glob("*.pkl"):
+    for fp in cache_dir.rglob("*.pkl"):
         inspected.append(fp.name)
         try:
             with open(fp, "rb") as f:
