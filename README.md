@@ -428,6 +428,14 @@ This aggregates the prices for each ``event_id`` across all snapshot files and
 saves ``h2h_data/api_cache/<event_id>.pkl`` with an ``odds_timeline`` DataFrame
 ready for ``prepare_autoencoder_dataset.py``.
 
+To gather a long-range set of odds timelines in one step run:
+
+```bash
+python3 fetch_historical_timelines.py --sport=baseball_mlb \
+    --start-date=2024-01-01 --end-date=2024-12-31 --interval=60
+```
+
+
 #### Unsupervised Representation Learning
 
 ##### Why Odds Timeline Data Is Needed
