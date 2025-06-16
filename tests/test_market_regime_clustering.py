@@ -51,5 +51,8 @@ def test_regime_clustering_and_assignment():
 def test_derive_regime_features_insufficient_window_data():
     times = [pd.Timestamp("2023-01-01 00:00:00"), pd.Timestamp("2023-01-02 00:00:00")]
     df = pd.DataFrame({"timestamp": times, "price": [100, 101]})
-    with pytest.raises(ValueError, match="Insufficient data within window"):
+    with pytest.raises(
+        ValueError,
+        match="Insufficient data within window: required >=2, found 1",
+    ):
         derive_regime_features(df, "price")

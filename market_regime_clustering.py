@@ -44,8 +44,11 @@ def derive_regime_features(
 
     # Ensure enough samples exist within the rolling volatility window
     window_start = df["timestamp"].iloc[-1] - pd.Timedelta(seconds=window_seconds)
-    if (df["timestamp"] >= window_start).sum() < 2:
-        raise ValueError("Insufficient data within window")
+    count_in_window = (df["timestamp"] >= window_start).sum()
+    if count_in_window < 2:
+        raise ValueError(
+            f"Insufficient data within window: required >=2, found {count_in_window}"
+        )
 
     features[f"total_line_change_{price_col}"] = total_line_change(df, price_col)
     features[f"largest_move_timing_{price_col}"] = largest_move_timing(df, price_col)
