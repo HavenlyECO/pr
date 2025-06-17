@@ -483,6 +483,12 @@ This command collects all ``odds_timeline`` entries under the specified cache
 directory (``h2h_data`` by default) and writes ``odds_timelines.pkl``. Supply
 this file to ``train_sequence_autoencoder``.
 
+To prepare the dataset and train the model in one step run:
+
+```bash
+python3 train_autoencoder.py
+```
+
 ### Reinforcement Learning Market Maker
 
 The toolkit includes a reinforcement-learning agent that mimics bookmaker line
