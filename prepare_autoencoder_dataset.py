@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Collect odds timelines for sequence autoencoder training."""
 
+import argparse
 import pickle
 from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
 
-CACHE_DIR = Path("h2h_data/api_cache")
-OUT_FILE = CACHE_DIR / "odds_timelines.pkl"
+
+DEFAULT_CACHE_DIR = Path("h2h_data")
+DEFAULT_OUT_FILE = DEFAULT_CACHE_DIR / "api_cache" / "odds_timelines.pkl"
 
 
 def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[str]]:
@@ -16,9 +18,13 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
 
     def _parse_timestamp(fp: Path) -> pd.Timestamp | None:
         try:
-            dt = datetime.fromisoformat(fp.stem)
+            dt = datetime.strptime(fp.stem, "%Y-%m-%dT%H-%M-%SZ")
         except ValueError:
-            return None
+            try:
+                dt = datetime.fromisoformat(fp.stem.replace("Z", "+00:00"))
+                dt = dt.replace(tzinfo=None)
+            except ValueError:
+                return None
         return pd.Timestamp(dt)
 
     timelines: list[pd.DataFrame] = []
@@ -37,7 +43,9 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
         found = False
         if isinstance(cached, dict) and "odds_timeline" in cached:
             timeline = cached["odds_timeline"]
-            if isinstance(timeline, pd.DataFrame) and {"timestamp", "price"}.issubset(timeline.columns):
+            if isinstance(timeline, pd.DataFrame) and {"timestamp", "price"}.issubset(
+                timeline.columns
+            ):
                 timelines.append(timeline[["timestamp", "price"]].copy())
                 found = True
 
@@ -60,7 +68,9 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
                                 "price",
                                 "timestamp",
                             }.issubset(timeline.columns):
-                                timelines.append(timeline[["timestamp", "price"]].copy())
+                                timelines.append(
+                                    timeline[["timestamp", "price"]].copy()
+                                )
                                 found = True
 
                 # Build timeline dynamically from snapshot data
@@ -82,7 +92,9 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
                                 break
                         ts = _parse_timestamp(fp)
                         if price is not None and ts is not None:
-                            event_rows.setdefault(event_id, []).append({"timestamp": ts, "price": price})
+                            event_rows.setdefault(event_id, []).append(
+                                {"timestamp": ts, "price": price}
+                            )
                             event_files.setdefault(event_id, set()).add(fp.name)
 
         if not found:
@@ -98,16 +110,31 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
 
 
 def main() -> None:
-    timelines, inspected = extract_odds_timelines(CACHE_DIR)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        default=DEFAULT_CACHE_DIR,
+        help="Directory containing cached odds .pkl files",
+    )
+    parser.add_argument(
+        "--out-file",
+        type=Path,
+        default=DEFAULT_OUT_FILE,
+        help="Where to store the aggregated timeline dataset",
+    )
+    args = parser.parse_args()
+
+    timelines, inspected = extract_odds_timelines(args.cache_dir)
     if not timelines:
         print("No odds timelines found in cache")
         if inspected:
             print("Inspected files: " + ", ".join(sorted(inspected)))
         return
-    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUT_FILE, "wb") as f:
+    args.out_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(args.out_file, "wb") as f:
         pickle.dump(timelines, f)
-    print(f"Saved {len(timelines)} timelines to {OUT_FILE}")
+    print(f"Saved {len(timelines)} timelines to {args.out_file}")
 
 
 if __name__ == "__main__":
