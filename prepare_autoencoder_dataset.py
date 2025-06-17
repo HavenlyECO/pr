@@ -41,6 +41,13 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
             continue
 
         found = False
+        if isinstance(cached, list) and all(isinstance(df, pd.DataFrame) for df in cached):
+            for df in cached:
+                if {"timestamp", "price"}.issubset(df.columns):
+                    timelines.append(df[["timestamp", "price"]].copy())
+                    found = True
+            if found:
+                continue
         if isinstance(cached, dict) and "odds_timeline" in cached:
             timeline = cached["odds_timeline"]
             if isinstance(timeline, pd.DataFrame) and {"timestamp", "price"}.issubset(
