@@ -435,7 +435,7 @@ python3 fetch_historical_timelines.py --sport=baseball_mlb \
     --start-date=2024-01-01 --end-date=2024-12-31 --interval=60
 ```
 By default every timeline is aggregated into
-``h2h_data/api_cache/snapshot_data.pkl`` which can be fed directly to the
+``snapshot_data.pkl`` which can be fed directly to the
 autoencoder. Use ``--out-file`` to override the location.
 
 
