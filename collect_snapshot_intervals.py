@@ -12,6 +12,7 @@ from pathlib import Path
 from ml import fetch_historical_h2h_odds
 
 CACHE_DIR = Path("h2h_data/api_cache")
+CENTRAL_FILE = CACHE_DIR / "snapshot_data.pkl"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -46,15 +47,24 @@ def main(argv: list[str] | None = None) -> None:
     interval_sec = args.interval * 60
     end_time = time.time() + args.duration * 60
 
+    snapshots = []
+    if CENTRAL_FILE.exists():
+        try:
+            with open(CENTRAL_FILE, "rb") as f:
+                cached = pickle.load(f)
+            if isinstance(cached, dict) and isinstance(cached.get("snapshots"), list):
+                snapshots = cached["snapshots"]
+        except Exception as exc:  # pragma: no cover - file read error
+            print(f"Error loading {CENTRAL_FILE}: {exc}")
+
     while time.time() < end_time:
         date_iso = utc_now_iso()
         events = fetch_historical_h2h_odds(args.sport, date_iso)
         if events:
-            ts_str = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%SZ")
-            out_file = CACHE_DIR / f"{ts_str}.pkl"
-            with open(out_file, "wb") as f:
-                pickle.dump({"data": events}, f)
-            print(f"Saved {len(events)} events to {out_file}")
+            snapshots.append({"timestamp": date_iso, "events": events})
+            with open(CENTRAL_FILE, "wb") as f:
+                pickle.dump({"snapshots": snapshots}, f)
+            print(f"Saved {len(events)} events to {CENTRAL_FILE}")
         else:
             print("No events found")
 
