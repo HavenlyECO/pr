@@ -411,7 +411,7 @@ are skipped so the command can be run incrementally.
 
 To capture multiple snapshots throughout the day use
 ``collect_snapshot_intervals.py``. It repeatedly queries the historical odds API
-on a fixed interval and saves each response with a timestamped filename:
+on a fixed interval and appends each response to ``h2h_data/api_cache/snapshot_data.pkl``:
 
 ```bash
 python3 collect_snapshot_intervals.py --interval 5 --duration 60
@@ -424,8 +424,8 @@ timelines:
 python3 snapshot_to_timeline.py
 ```
 
-This aggregates the prices for each ``event_id`` across all snapshot files and
-saves ``h2h_data/api_cache/<event_id>.pkl`` with an ``odds_timeline`` DataFrame
+This aggregates the prices for each ``event_id`` across the snapshots stored in
+``snapshot_data.pkl`` and saves ``h2h_data/api_cache/<event_id>.pkl`` with an ``odds_timeline`` DataFrame
 ready for ``prepare_autoencoder_dataset.py``.
 
 To gather a long-range set of odds timelines in one step run:
