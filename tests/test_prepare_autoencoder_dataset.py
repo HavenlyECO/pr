@@ -1,4 +1,5 @@
 import pickle
+import sys
 import pandas as pd
 from prepare_autoencoder_dataset import extract_odds_timelines, main
 
@@ -26,24 +27,18 @@ def test_extract_odds_timelines_missing(tmp_path, capsys):
 
 
 def test_extract_odds_timelines_assemble(tmp_path):
-    events1 = [{
-        "id": "e1",
-        "bookmakers": [{
-            "markets": [{
-                "key": "h2h",
-                "outcomes": [{"price": 120}]
-            }]
-        }]
-    }]
-    events2 = [{
-        "id": "e1",
-        "bookmakers": [{
-            "markets": [{
-                "key": "h2h",
-                "outcomes": [{"price": 130}]
-            }]
-        }]
-    }]
+    events1 = [
+        {
+            "id": "e1",
+            "bookmakers": [{"markets": [{"key": "h2h", "outcomes": [{"price": 120}]}]}],
+        }
+    ]
+    events2 = [
+        {
+            "id": "e1",
+            "bookmakers": [{"markets": [{"key": "h2h", "outcomes": [{"price": 130}]}]}],
+        }
+    ]
     with open(tmp_path / "2024-04-01.pkl", "wb") as f:
         pickle.dump({"data": events1}, f)
     with open(tmp_path / "2024-04-02.pkl", "wb") as f:
@@ -74,12 +69,41 @@ def test_extract_odds_timelines_nested(tmp_path):
     pd.testing.assert_frame_equal(timelines[0], df[["timestamp", "price"]])
 
 
+def test_extract_odds_timelines_hyphen_timestamp(tmp_path):
+    events = [
+        {
+            "id": "e1",
+            "bookmakers": [{"markets": [{"key": "h2h", "outcomes": [{"price": 110}]}]}],
+        }
+    ]
+    with open(tmp_path / "2024-06-01T10-20-00Z.pkl", "wb") as f:
+        pickle.dump({"data": events}, f)
+    with open(tmp_path / "2024-06-01T10-25-00Z.pkl", "wb") as f:
+        pickle.dump({"data": events}, f)
+
+    timelines, files = extract_odds_timelines(tmp_path)
+    assert sorted(files) == ["2024-06-01T10-20-00Z.pkl", "2024-06-01T10-25-00Z.pkl"]
+    expected = pd.DataFrame(
+        {
+            "timestamp": [
+                pd.Timestamp("2024-06-01T10:20:00"),
+                pd.Timestamp("2024-06-01T10:25:00"),
+            ],
+            "price": [110, 110],
+        }
+    )
+    pd.testing.assert_frame_equal(timelines[0].reset_index(drop=True), expected)
+
+
 def test_main_no_timelines(monkeypatch, tmp_path, capsys):
     with open(tmp_path / "x.pkl", "wb") as f:
         pickle.dump({}, f)
 
-    monkeypatch.setattr("prepare_autoencoder_dataset.CACHE_DIR", tmp_path)
-    monkeypatch.setattr("prepare_autoencoder_dataset.OUT_FILE", tmp_path / "out.pkl")
+    monkeypatch.setattr("prepare_autoencoder_dataset.DEFAULT_CACHE_DIR", tmp_path)
+    monkeypatch.setattr(
+        "prepare_autoencoder_dataset.DEFAULT_OUT_FILE", tmp_path / "out.pkl"
+    )
+    monkeypatch.setattr(sys, "argv", ["prepare_autoencoder_dataset.py"])
     main()
     out = capsys.readouterr().out
     assert "No odds timelines found in cache" in out

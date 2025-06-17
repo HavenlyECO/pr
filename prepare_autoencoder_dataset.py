@@ -18,9 +18,13 @@ def extract_odds_timelines(cache_dir: Path) -> tuple[list[pd.DataFrame], list[st
 
     def _parse_timestamp(fp: Path) -> pd.Timestamp | None:
         try:
-            dt = datetime.fromisoformat(fp.stem)
+            dt = datetime.strptime(fp.stem, "%Y-%m-%dT%H-%M-%SZ")
         except ValueError:
-            return None
+            try:
+                dt = datetime.fromisoformat(fp.stem.replace("Z", "+00:00"))
+                dt = dt.replace(tzinfo=None)
+            except ValueError:
+                return None
         return pd.Timestamp(dt)
 
     timelines: list[pd.DataFrame] = []
