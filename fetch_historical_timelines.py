@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> None:
         "Collecting odds timelines for",
         f" {args.sport} from {args.start_date} to {args.end_date}"
     )
+    print(f"Saving data to {CACHE_DIR.resolve()}")
 
     for ts in daterange(start, end, minutes=args.interval):
         date_iso = iso_timestamp(ts, minutes=args.interval)
@@ -120,7 +121,7 @@ def main(argv: list[str] | None = None) -> None:
             data = {"odds_timeline": df}
             with open(cache_path, "wb") as f:
                 pickle.dump(data, f)
-            print(f"Saved timeline for {event_id}")
+            print(f"Saved timeline for {event_id} to {cache_path.resolve()}")
 
 
 if __name__ == "__main__":
