@@ -458,6 +458,10 @@ distinct from ``cache_historical_odds.py``—that helper stores only daily odds
 snapshots and does not provide the ``odds_timeline`` data required for the
 autoencoder.
 
+``prepare_autoencoder_dataset.py`` now searches every ``.pkl`` file under
+``h2h_data`` by default. Specify ``--cache-dir`` if your files live elsewhere,
+and ``--out-file`` to customize where the aggregated timelines are written.
+
 The toolkit uses a sequence autoencoder to learn latent embeddings of moneyline movement.
 An LSTM-based autoencoder is trained to reconstruct normalized odds timelines; the hidden state ("latent vector") summarizes the dynamic pattern of each event’s line moves.
 These embeddings (autoencoder_feature_1, autoencoder_feature_2, ...) are added to every example for model training and live inference.
@@ -475,9 +479,9 @@ _No fallback or bandage models are included; the autoencoder is trained directly
 python3 prepare_autoencoder_dataset.py
 ```
 
-This command collects all ``odds_timeline`` entries under ``h2h_data/api_cache`` and
-writes ``h2h_data/api_cache/odds_timelines.pkl``. Supply this file to
-``train_sequence_autoencoder``.
+This command collects all ``odds_timeline`` entries under the specified cache
+directory (``h2h_data`` by default) and writes ``odds_timelines.pkl``. Supply
+this file to ``train_sequence_autoencoder``.
 
 ### Reinforcement Learning Market Maker
 
