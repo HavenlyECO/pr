@@ -26,7 +26,7 @@ if load_dotenv and DOTENV_PATH.exists():
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 CACHE_DIR = Path("h2h_data") / "api_cache"
-DEFAULT_OUT_FILE = CACHE_DIR / "snapshot_data.pkl"
+DEFAULT_OUT_FILE = Path("snapshot_data.pkl")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -97,9 +97,19 @@ def main(argv: list[str] | None = None) -> None:
         "Collecting odds timelines for",
         f" {args.sport} from {args.start_date} to {args.end_date}"
     )
-    print(f"Saving data to {CACHE_DIR.resolve()}")
+    print(f"Event files will be saved to {CACHE_DIR.resolve()}")
+    print(f"Aggregated timelines will be written to {args.out_file}")
 
     aggregated: dict[str, pd.DataFrame] = {}
+    existing: list[pd.DataFrame] = []
+    if args.out_file.exists():
+        try:
+            with open(args.out_file, "rb") as f:
+                data = pickle.load(f)
+            if isinstance(data, list):
+                existing = [df for df in data if isinstance(df, pd.DataFrame)]
+        except Exception as exc:  # pragma: no cover - file read error
+            print(f"Error loading {args.out_file}: {exc}")
 
     for ts in daterange(start, end, minutes=args.interval):
         date_iso = iso_timestamp(ts, minutes=args.interval)
@@ -136,11 +146,12 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 aggregated[event_id] = df
 
-    if aggregated:
+    if aggregated or existing:
+        combined = existing + list(aggregated.values())
         args.out_file.parent.mkdir(parents=True, exist_ok=True)
         with open(args.out_file, "wb") as f:
-            pickle.dump(list(aggregated.values()), f)
-        print(f"Saved {len(aggregated)} timelines to {args.out_file}")
+            pickle.dump(combined, f)
+        print(f"Saved {len(combined)} timelines to {args.out_file}")
 
 
 if __name__ == "__main__":
