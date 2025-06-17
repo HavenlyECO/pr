@@ -35,6 +35,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="baseball_mlb",
         help="Sport key used by The Odds API",
     )
+    parser.add_argument(
+        "--out-file",
+        type=Path,
+        help="Optional aggregated output file for all timelines",
+    )
     return parser.parse_args(argv)
 
 
@@ -89,6 +94,11 @@ def main(argv: list[str] | None = None) -> None:
     start = datetime.fromisoformat(args.start_date)
     end = datetime.fromisoformat(args.end_date)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Individual event files will be saved to {CACHE_DIR}")
+    if args.out_file is not None:
+        print(f"Aggregated timelines will be written to {args.out_file}")
+
+    aggregated: list[pd.DataFrame] = []
 
     for d in daterange(start, end):
         date_iso = to_fixed_utc(d)
@@ -117,7 +127,15 @@ def main(argv: list[str] | None = None) -> None:
             data = {"odds_timeline": df}
             with open(cache_path, "wb") as f:
                 pickle.dump(data, f)
-            print(f"Saved timeline for {event_id}")
+            print(f"Saved timeline for {event_id} to {cache_path}")
+            if args.out_file is not None:
+                aggregated.append(df)
+
+    if args.out_file is not None:
+        args.out_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.out_file, "wb") as f:
+            pickle.dump(aggregated, f)
+        print(f"Saved {len(aggregated)} timelines to {args.out_file}")
 
 
 if __name__ == "__main__":
