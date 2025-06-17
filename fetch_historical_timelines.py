@@ -26,6 +26,7 @@ if load_dotenv and DOTENV_PATH.exists():
 
 API_KEY = os.getenv("THE_ODDS_API_KEY")
 CACHE_DIR = Path("h2h_data") / "api_cache"
+DEFAULT_OUT_FILE = CACHE_DIR / "snapshot_data.pkl"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -39,6 +40,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--interval",
         type=int,
         help="Minute interval for repeated snapshots within the range",
+    )
+    parser.add_argument(
+        "--out-file",
+        type=Path,
+        default=DEFAULT_OUT_FILE,
+        help="Aggregated output file for all timelines",
     )
     return parser.parse_args(argv)
 
@@ -92,6 +99,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     print(f"Saving data to {CACHE_DIR.resolve()}")
 
+    aggregated: dict[str, pd.DataFrame] = {}
+
     for ts in daterange(start, end, minutes=args.interval):
         date_iso = iso_timestamp(ts, minutes=args.interval)
         print(f"Fetching snapshot for {date_iso}")
@@ -122,6 +131,16 @@ def main(argv: list[str] | None = None) -> None:
             with open(cache_path, "wb") as f:
                 pickle.dump(data, f)
             print(f"Saved timeline for {event_id} to {cache_path.resolve()}")
+            if event_id in aggregated:
+                aggregated[event_id] = merge_timelines(aggregated[event_id], df)
+            else:
+                aggregated[event_id] = df
+
+    if aggregated:
+        args.out_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(args.out_file, "wb") as f:
+            pickle.dump(list(aggregated.values()), f)
+        print(f"Saved {len(aggregated)} timelines to {args.out_file}")
 
 
 if __name__ == "__main__":
